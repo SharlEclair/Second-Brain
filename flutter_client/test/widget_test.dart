@@ -13,11 +13,11 @@ import 'package:second_brain/main.dart';
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const SecondBrainApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Verify that the app starts (finds the chat screen title or similar)
+    expect(find.text('Second Brain'), findsOneWidget);
+    expect(find.text('0'), findsNothing);
 
     // Tap the '+' icon and trigger a frame.
     await tester.tap(find.byIcon(Icons.add));
