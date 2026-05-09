@@ -21,6 +21,16 @@ body {
   color: #cbd5e1; /* Slate 300 */
   margin: 0;
   overflow: hidden;
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.05) 0%, transparent 50%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 100% 100%, 40px 40px, 40px 40px;
+}
+
+.bg-circuit {
+  background-image: radial-gradient(circle at center, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 .hardware-border {
@@ -37,6 +47,10 @@ body {
   height: 2px;
   background: var(--accent);
   opacity: 0.5;
+}
+
+.glow-text {
+  text-shadow: 0 0 10px rgba(249, 115, 22, 0.5);
 }
 
 /* Scrollbar styling */
@@ -58,9 +72,14 @@ body {
   @apply font-sans leading-relaxed text-slate-300;
 }
 .markdown-body h1 { @apply text-2xl font-display italic font-light mb-4 text-white; }
-.markdown-body h2 { @apply text-xl font-display italic font-light mb-3 mt-6 text-white; }
+ moss.markdown-body h2 { @apply text-xl font-display italic font-light mb-3 mt-6 text-white; }
+.markdown-body h3 { @apply text-lg font-display font-light mb-3 mt-4 text-slate-200; }
 .markdown-body p { @apply mb-4; }
 .markdown-body ul { @apply list-disc ml-6 mb-4; }
-.markdown-body li { @apply mb-1; }
+.markdown-body li { @apply mb-1 marker:text-orange-500/50; }
 .markdown-body strong { @apply text-white font-bold; }
-
+.markdown-body a { @apply text-orange-400 hover:text-orange-300 underline decoration-orange-500/30 underline-offset-4; }
+.markdown-body blockquote { @apply border-l-2 border-orange-500/50 pl-4 italic text-slate-400 my-4; }
+.markdown-body code { @apply font-mono text-[0.85em] bg-slate-900/50 text-orange-200 px-1.5 py-0.5 rounded-sm border border-slate-800; }
+.markdown-body pre { @apply bg-black border border-slate-800 p-4 rounded-sm overflow-x-auto my-6; }
+.markdown-body pre code { @apply bg-transparent border-none p-0 text-slate-300; }

@@ -237,7 +237,7 @@ export default function App() {
             <div className="w-8 h-8 rounded-sm bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
               <Brain className="w-5 h-5 text-orange-500" />
             </div>
-            <h1 className="font-display font-light italic text-xl tracking-tight text-white">BRAIN_VAULT</h1>
+            <h1 className="font-display font-light italic text-xl tracking-tight text-white glow-text">BRAIN_VAULT</h1>
           </div>
           <button 
             onClick={handleSync}
@@ -289,7 +289,7 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col bg-[#050505] relative overflow-hidden">
         {/* Top Header - Ingestion Bar */}
-        <header className="h-16 border-b border-slate-800 bg-[#050505] flex items-center px-8 justify-between z-10">
+        <header className="h-16 border-b border-slate-800 bg-black/60 backdrop-blur-md flex items-center px-8 justify-between z-10">
           <div className="flex-1 max-w-2xl flex flex-col relative">
             <form onSubmit={handleIngest} className="flex items-center relative group">
               <Zap className="absolute left-4 w-4 h-4 text-orange-500 opacity-50 group-focus-within:opacity-100 transition-opacity" />
@@ -346,7 +346,7 @@ export default function App() {
 
         <div className="flex-1 flex overflow-hidden p-6 gap-6">
           {/* Note Viewer */}
-          <div className="flex-1 overflow-y-auto bg-[#111] border border-slate-800 rounded-sm p-0 scroll-smooth relative">
+          <div className="flex-1 overflow-y-auto bg-[#0a0a0a]/90 backdrop-blur-md bg-circuit border border-slate-800 shadow-2xl rounded-sm p-0 scroll-smooth relative">
             <AnimatePresence mode="wait">
               {selectedNote ? (
                 <motion.div
@@ -409,7 +409,7 @@ export default function App() {
                     </AnimatePresence>
 
                     {noteContent ? (
-                      <div className="prose prose-invert prose-slate max-w-none prose-headings:font-display prose-headings:font-light prose-headings:italic">
+                      <div className="prose prose-invert prose-slate max-w-none prose-headings:font-display prose-headings:font-light prose-headings:italic markdown-body">
                         <ReactMarkdown>{noteContent}</ReactMarkdown>
                       </div>
                     ) : (
@@ -452,7 +452,7 @@ export default function App() {
           </div>
 
           {/* AI Chat Sidebar */}
-          <section className="w-[400px] border border-slate-800 bg-black rounded-sm flex flex-col">
+          <section className="w-[400px] border border-slate-800 bg-black/80 backdrop-blur-md rounded-sm flex flex-col hardware-border shadow-2xl">
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <h2 className="text-xs uppercase text-slate-500 tracking-widest font-bold">Terminal / Chat</h2>
               <span className="text-[10px] font-mono bg-slate-800 px-2 py-1 text-slate-400 rounded-sm">RAG_ENABLED</span>
