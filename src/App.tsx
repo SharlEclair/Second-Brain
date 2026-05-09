@@ -44,6 +44,8 @@ export default function App() {
   const [chatInput, setChatInput] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +74,9 @@ export default function App() {
     if (!url) return;
     
     setLoadingNote(true);
+    setError(null);
+    setSuccess(null);
+
     try {
       const res = await fetch('/api/ingest', {
         method: 'POST',
@@ -83,11 +88,14 @@ export default function App() {
         await fetchNotes();
         handleSelectNote(data.note);
         setUrl('');
+        setSuccess(data.status === 'existing' ? 'Note already exists' : 'Note successfully ingested');
+        setTimeout(() => setSuccess(null), 3000);
       } else if (data.error) {
-        alert(data.error);
+        setError(data.error);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Ingestion failed", e);
+      setError("Network error or server is down");
     } finally {
       setLoadingNote(false);
     }
@@ -119,6 +127,7 @@ export default function App() {
     setMessages(prev => [...prev, userMsg]);
     setChatInput('');
     setIsTyping(true);
+    setError(null);
 
     try {
       const res = await fetch('/api/chat', {
@@ -128,15 +137,20 @@ export default function App() {
       });
       const data = await res.json();
       
-      const aiMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        text: data.response,
-        isAi: true,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, aiMsg]);
-    } catch (e) {
+      if (data.response) {
+        const aiMsg: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          text: data.response,
+          isAi: true,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, aiMsg]);
+      } else {
+        throw new Error(data.error || "Unknown AI error");
+      }
+    } catch (e: any) {
       console.error("Chat failed", e);
+      setError(`Chat failed: ${e.message}`);
     } finally {
       setIsTyping(false);
     }
@@ -216,30 +230,49 @@ export default function App() {
       <main className="flex-1 flex flex-col bg-[#050505] relative overflow-hidden">
         {/* Top Header - Ingestion Bar */}
         <header className="h-16 border-b border-slate-800 bg-[#050505] flex items-center px-8 justify-between z-10">
-          <form onSubmit={handleIngest} className="flex-1 max-w-2xl flex items-center relative group">
-            <Zap className="absolute left-4 w-4 h-4 text-orange-500 opacity-50 group-focus-within:opacity-100 transition-opacity" />
-            <input 
-              type="text" 
-              placeholder="Paste URL (YouTube, TikTok, Instagram) to ingest knowledge..."
-              className="w-full bg-black border border-slate-800 rounded-sm py-2 pl-12 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-orange-500/50 transition-all font-mono placeholder-slate-700"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              disabled={loadingNote}
-            />
-            {loadingNote && (
-              <div className="absolute right-4 flex items-center gap-2">
-                <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
-              </div>
-            )}
-            {!loadingNote && url && (
-              <button 
-                type="submit"
-                className="absolute right-2 px-3 py-1 rounded-sm bg-orange-500 text-black text-[10px] font-bold uppercase tracking-wider hover:bg-orange-400 transition-colors"
-              >
-                Ingest
-              </button>
-            )}
-          </form>
+          <div className="flex-1 max-w-2xl flex flex-col relative">
+            <form onSubmit={handleIngest} className="flex items-center relative group">
+              <Zap className="absolute left-4 w-4 h-4 text-orange-500 opacity-50 group-focus-within:opacity-100 transition-opacity" />
+              <input 
+                type="text" 
+                placeholder="Paste URL (YouTube, TikTok, Instagram) to ingest knowledge..."
+                className="w-full bg-black border border-slate-800 rounded-sm py-2 pl-12 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-orange-500/50 transition-all font-mono placeholder-slate-700"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                disabled={loadingNote}
+              />
+              {loadingNote && (
+                <div className="absolute right-4 flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
+                </div>
+              )}
+              {!loadingNote && url && (
+                <button 
+                  type="submit"
+                  className="absolute right-2 px-3 py-1 rounded-sm bg-orange-500 text-black text-[10px] font-bold uppercase tracking-wider hover:bg-orange-400 transition-colors"
+                >
+                  Ingest
+                </button>
+              )}
+            </form>
+            
+            <AnimatePresence>
+              {(error || success) && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className={cn(
+                    "absolute top-full left-0 right-0 mt-2 p-2 rounded-sm text-[10px] uppercase tracking-wider font-bold flex items-center gap-2 border",
+                    error ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+                  )}
+                >
+                  {error ? <Shield className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+                  {error || success}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           <div className="flex items-center gap-4 ml-8">
             <div className="h-4 w-px bg-slate-800" />
