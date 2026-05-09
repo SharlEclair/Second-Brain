@@ -6,3 +6,17 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+temp/
+temp_*/
+
+# Database
+chroma_db/
+vector_db.json
+url_index.json

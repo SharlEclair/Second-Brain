@@ -13,7 +13,11 @@ import {
   Shield,
   Zap,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles,
+  Copy,
+  Check,
+  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -46,6 +50,10 @@ export default function App() {
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [ingestStatus, setIngestStatus] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<{ type: string, content: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -76,29 +84,78 @@ export default function App() {
     setLoadingNote(true);
     setError(null);
     setSuccess(null);
+    setIngestStatus('Initiating session...');
 
     try {
-      const res = await fetch('/api/ingest', {
+      const response = await fetch('/api/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
       });
-      const data = await res.json();
-      if (data.note) {
-        await fetchNotes();
-        handleSelectNote(data.note);
-        setUrl('');
-        setSuccess(data.status === 'existing' ? 'Note already exists' : 'Note successfully ingested');
-        setTimeout(() => setSuccess(null), 3000);
-      } else if (data.error) {
-        setError(data.error);
+
+      if (!response.body) throw new Error('No response body');
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const data = JSON.parse(line);
+          
+          if (data.status === 'status') {
+            setIngestStatus(data.message);
+          } else if (data.status === 'success' || data.status === 'existing') {
+            await fetchNotes();
+            handleSelectNote(data.note);
+            setUrl('');
+            setSuccess(data.status === 'existing' ? 'Note already exists' : 'Note successfully ingested');
+            setTimeout(() => setSuccess(null), 3000);
+          } else if (data.status === 'error') {
+            setError(data.message);
+          }
+        }
       }
     } catch (e: any) {
       console.error("Ingestion failed", e);
       setError("Network error or server is down");
     } finally {
       setLoadingNote(false);
+      setIngestStatus(null);
     }
+  };
+
+  const handleAction = async (type: 'summarize' | 'deep_dive') => {
+    if (!selectedNote) return;
+    setActionLoading(type);
+    setActionResult(null);
+    
+    try {
+      const res = await fetch(`/api/notes/${selectedNote.fileName}/${type}`, { method: 'POST' });
+      const data = await res.json();
+      setActionResult({ 
+        type: type === 'summarize' ? 'Quick Summary' : 'Deep Dive Analysis', 
+        content: data.summary || data.deep_dive 
+      });
+    } catch (e) {
+      setError("Action failed");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleSelectNote = async (note: Note) => {
@@ -242,7 +299,8 @@ export default function App() {
                 disabled={loadingNote}
               />
               {loadingNote && (
-                <div className="absolute right-4 flex items-center gap-2">
+                <div className="absolute right-4 flex items-center gap-3">
+                  <div className="text-[10px] text-orange-500/70 font-mono animate-pulse">{ingestStatus}</div>
                   <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
                 </div>
               )}
@@ -285,9 +343,80 @@ export default function App() {
 
         <div className="flex-1 flex overflow-hidden p-6 gap-6">
           {/* Note Viewer */}
-          <div className="flex-1 overflow-y-auto bg-[#111] border border-slate-800 rounded-sm p-6 scroll-smooth">
+          <div className="flex-1 overflow-y-auto bg-[#111] border border-slate-800 rounded-sm p-0 scroll-smooth relative">
             <AnimatePresence mode="wait">
-              {!selectedNote ? (
+              {selectedNote ? (
+                <motion.div
+                  key={selectedNote.fileName}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="h-full flex flex-col"
+                >
+                  {/* Toolbar */}
+                  <div className="flex items-center justify-between px-6 py-3 border-b border-slate-800 bg-black/50 sticky top-0 z-10 backdrop-blur-md">
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => handleAction('summarize')}
+                        disabled={!!actionLoading}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-slate-900 border border-slate-800 text-[10px] uppercase font-bold text-slate-400 hover:text-white hover:border-slate-600 transition-all disabled:opacity-50"
+                      >
+                        {actionLoading === 'summarize' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-orange-500" />}
+                        Summarize
+                      </button>
+                      <button 
+                        onClick={() => handleAction('deep_dive')}
+                        disabled={!!actionLoading}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-slate-900 border border-slate-800 text-[10px] uppercase font-bold text-slate-400 hover:text-white hover:border-slate-600 transition-all disabled:opacity-50"
+                      >
+                        {actionLoading === 'deep_dive' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 text-orange-500" />}
+                        Deep Dive
+                      </button>
+                    </div>
+                    
+                    <button 
+                      onClick={() => noteContent && handleCopy(noteContent)}
+                      className="p-1.5 rounded-sm hover:bg-slate-800 transition-colors text-slate-500 hover:text-white"
+                      title="Copy Markdown"
+                    >
+                      {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  <div className="p-8 pb-32">
+                    {/* Action Result Overlay */}
+                    <AnimatePresence>
+                      {actionResult && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 20 }}
+                          className="mb-8 p-6 bg-orange-500/5 border border-orange-500/20 rounded-sm relative group"
+                        >
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-[10px] uppercase tracking-[0.2em] font-black text-orange-500">{actionResult.type}</h4>
+                            <button onClick={() => setActionResult(null)} className="text-slate-600 hover:text-white text-xs transition-colors italic">dismiss</button>
+                          </div>
+                          <div className="prose prose-invert prose-sm max-w-none text-slate-300 font-serif italic leading-relaxed">
+                            <ReactMarkdown>{actionResult.content}</ReactMarkdown>
+                          </div>
+                          <div className="absolute -bottom-px left-0 right-0 h-px bg-gradient-to-r from-transparent via-orange-500/50 to-transparent" />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {noteContent ? (
+                      <div className="prose prose-invert prose-slate max-w-none prose-headings:font-display prose-headings:font-light prose-headings:italic">
+                        <ReactMarkdown>{noteContent}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <div className="h-full flex items-center justify-center py-20">
+                        <Loader2 className="w-6 h-6 text-slate-700 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              ) : (
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}

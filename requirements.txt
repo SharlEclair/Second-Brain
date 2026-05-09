@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+yt-dlp
+instaloader
+chromadb
+google-genai
+faster-whisper
+pillow
+python-dotenv
