@@ -10,7 +10,8 @@ import subprocess
 from typing import List, Optional
 from PIL import Image
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Request
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import chromadb
@@ -191,14 +192,19 @@ class SaveAnswerRequest(BaseModel):
     title: str
     content: str
 
-from fastapi.responses import StreamingResponse
-
 # --- ROUTES ---
 
 @app.post("/api/ingest")
-async def ingest_url(request: IngestRequest):
-    url = clean_url(request.url)
+async def ingest_url(request: Request):
+    body = await request.json()
+    url = clean_url(body.get('url', ''))
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required")
     
+    # Check if client wants streaming (Web UI) or plain JSON (Flutter)
+    accept_header = request.headers.get("Accept", "")
+    is_streaming = "text/event-stream" in accept_header
+
     async def stream_progress():
         try:
             index = get_url_index()
@@ -211,7 +217,7 @@ async def ingest_url(request: IngestRequest):
                     return
 
             yield json.dumps({"status": "status", "message": "⬇️ Downloading media..."}) + "\n"
-            await asyncio.sleep(0.1) # Small sleep to ensure the UI gets the event
+            await asyncio.sleep(0.1)
 
             if "instagram.com" in url and ("/p/" in url or "/post/" in url):
                 data = await process_image_post(url)
@@ -266,7 +272,21 @@ tags: {data['ai_data'].get('tags', [])}
         except Exception as e:
             yield json.dumps({"status": "error", "message": str(e)}) + "\n"
 
-    return StreamingResponse(stream_progress(), media_type="text/event-stream")
+    if is_streaming:
+        return StreamingResponse(stream_progress(), media_type="text/event-stream")
+    else:
+        # For non-streaming clients (like Flutter), we iterate the generator and return the last result
+        final_result = {"status": "error", "message": "Unknown error during ingestion"}
+        async for line in stream_progress():
+            try:
+                data = json.loads(line.strip())
+                if data['status'] in ['success', 'existing', 'error']:
+                    final_result = data
+            except: pass
+        
+        if final_result.get('status') == 'error':
+            raise HTTPException(status_code=500, detail=final_result.get('message'))
+        return final_result
 
 @app.post("/api/chat")
 async def chat_with_brain(request: AskRequest):

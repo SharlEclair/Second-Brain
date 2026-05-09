@@ -89,7 +89,10 @@ export default function App() {
     try {
       const response = await fetch('/api/ingest', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        },
         body: JSON.stringify({ url })
       });
 
@@ -443,23 +446,6 @@ export default function App() {
                       </div>
                     ))}
                   </div>
-                </motion.div>
-              ) : (
-                <motion.div 
-                  key={selectedNote.fileName}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="max-w-3xl mx-auto"
-                >
-                  {!noteContent ? (
-                    <div className="flex items-center justify-center py-20">
-                      <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
-                    </div>
-                  ) : (
-                    <div className="markdown-body">
-                      <ReactMarkdown>{noteContent}</ReactMarkdown>
-                    </div>
-                  )}
                 </motion.div>
               )}
             </AnimatePresence>
