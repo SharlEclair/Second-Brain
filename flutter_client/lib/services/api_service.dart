@@ -24,25 +24,28 @@ class ApiService {
     return '$cleanBase$endpoint';
   }
 
-  Future<void> ingestUrl(String url) async {
-    final apiUrl = await _buildUrl('/ingest');
+  Future<Map<String, dynamic>> ingestUrl(String url) async {
+    final apiUrl = await _buildUrl('/api/ingest');
     final response = await http.post(
       Uri.parse(apiUrl),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'url': url}),
     ).timeout(const Duration(seconds: 45));
 
-    if (response.statusCode != 200) {
-      throw Exception('Failed to ingest URL: ${response.statusCode}');
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      final error = jsonDecode(response.body)['error'] ?? 'Unknown error';
+      throw Exception('Failed to ingest URL: $error');
     }
   }
 
   Future<String> ask(String query) async {
-    final apiUrl = await _buildUrl('/ask');
+    final apiUrl = await _buildUrl('/api/chat');
     final response = await http.post(
       Uri.parse(apiUrl),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'query': query}),
+      body: jsonEncode({'message': query}),
     ).timeout(const Duration(seconds: 30));
 
     if (response.statusCode == 200) {
@@ -54,7 +57,7 @@ class ApiService {
   }
 
   Future<void> saveAnswer(String title, String content) async {
-    final apiUrl = await _buildUrl('/save_answer');
+    final apiUrl = await _buildUrl('/api/save_answer');
     final response = await http.post(
       Uri.parse(apiUrl),
       headers: {'Content-Type': 'application/json'},
@@ -67,7 +70,7 @@ class ApiService {
   }
 
   Future<void> syncVault() async {
-    final apiUrl = await _buildUrl('/sync');
+    final apiUrl = await _buildUrl('/api/sync');
     final response = await http.post(
       Uri.parse(apiUrl),
       headers: {'Content-Type': 'application/json'},

@@ -21,9 +21,22 @@ app.use(express.json());
 
 // Ensure directories exist
 async function ensureDirs() {
-  if (!existsSync(VAULT_PATH)) await fs.mkdir(VAULT_PATH);
-  if (!existsSync(TEMP_PATH)) await fs.mkdir(TEMP_PATH);
-  if (!existsSync(INDEX_FILE)) await fs.writeFile(INDEX_FILE, JSON.stringify({}));
+  try {
+    if (!existsSync(VAULT_PATH)) await fs.mkdir(VAULT_PATH, { recursive: true });
+    if (!existsSync(TEMP_PATH)) await fs.mkdir(TEMP_PATH, { recursive: true });
+    if (!existsSync(INDEX_FILE)) await fs.writeFile(INDEX_FILE, JSON.stringify({}));
+  } catch (err) {
+    console.error("Failed to ensure directories:", err);
+  }
+}
+
+function isValidUrl(urlString: string) {
+  try {
+    new URL(urlString);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 // Gemini Initialization
@@ -46,9 +59,14 @@ class LocalVectorDB {
 
   async load() {
     try {
-      const content = await fs.readFile(VECTOR_DB_PATH, 'utf-8');
-      this.data = JSON.parse(content);
+      if (existsSync(VECTOR_DB_PATH)) {
+        const content = await fs.readFile(VECTOR_DB_PATH, 'utf-8');
+        this.data = JSON.parse(content);
+      } else {
+        this.data = [];
+      }
     } catch(e) {
+      console.error("Failed to load vector DB:", e);
       this.data = [];
     }
   }
@@ -64,7 +82,7 @@ class LocalVectorDB {
                 model: 'text-embedding-004',
                 contents: documents[i]
             });
-            const embedding = result.embeddings?.[0]?.values;
+            const embedding = (result as any).embedding?.values || (result as any).embeddings?.[0]?.values || (result as any).embeddings?.values;
             if (embedding) {
                // Remove existing entry if id exists
                this.data = this.data.filter(item => item.id !== ids[i]);
@@ -92,15 +110,15 @@ class LocalVectorDB {
           model: 'text-embedding-004',
           contents: queryTexts[0]
       });
-      qEmbed = queryEmbedResult.embeddings?.[0]?.values;
+      qEmbed = (queryEmbedResult as any).embedding?.values || (queryEmbedResult as any).embeddings?.[0]?.values || (queryEmbedResult as any).embeddings?.values;
     } catch (e: any) {
       console.error("Embedding generation failed during query:", e.message);
     }
-    if (!qEmbed) return results;
+    if (!qEmbed || !Array.isArray(qEmbed)) return results;
 
     const scored = this.data.map(item => ({
         ...item,
-        score: dotProduct(qEmbed, item.embedding)
+        score: dotProduct(qEmbed, item.embedding || [])
     }));
     
     scored.sort((a, b) => b.score - a.score);
@@ -122,11 +140,18 @@ async function startServer() {
   app.post('/api/ingest', async (req, res) => {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL is required" });
+    if (!isValidUrl(url)) return res.status(400).json({ error: "Invalid URL format" });
 
     try {
-      const index = JSON.parse(await fs.readFile(INDEX_FILE, 'utf-8'));
+      const indexContent = await fs.readFile(INDEX_FILE, 'utf-8');
+      const index = JSON.parse(indexContent || '{}');
+      
       if (index[url]) {
-        return res.json({ status: 'existing', note: index[url] });
+        // Check if file still exists
+        const fullPath = path.join(VAULT_PATH, index[url].fileName);
+        if (existsSync(fullPath)) {
+          return res.json({ status: 'existing', note: index[url] });
+        }
       }
 
       console.log(`Ingesting: ${url}`);
@@ -134,14 +159,15 @@ async function startServer() {
       let sourceText = "";
       try {
         const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         let text = await response.text();
         // Truncate to avoid massive payloads for huge sites
         sourceText = text.substring(0, 50000); 
-      } catch (e) {
-        throw new Error("Failed to fetch URL. Ensure it is accessible.");
+      } catch (e: any) {
+        throw new Error(`Failed to fetch URL: ${e.message}`);
       }
 
-      const model = "gemini-3-flash-preview";
+      const model = "gemini-2.5-flash"; // Using a more stable model name for safety
       const prompt = `Please analyze the following raw content extracted from the URL (${url}) and structure it into a professional, structured Markdown note for a personal knowledge base. Include key takeaways, a summary, and detailed notes. If the content is an HTML page, extract the meaningful text.\n\nContent:\n${sourceText}`;
 
       let result;
@@ -157,25 +183,24 @@ async function startServer() {
       const noteContent = result.text || "Failed to generate content";
       
       // 3. Save to Vault
-      // Extract a title from Gemini or use URL
       let rawTitle = "Untitled Note";
       try {
         const titleResult = await genAI.models.generateContent({
           model: model,
-          contents: `Based on this content, generate a short (3-5 words) obsidian-friendly filename (no extension):\n\n${noteContent.substring(0, 1000)}`
+          contents: `Based on this content, generate a short (3-5 words) obsidian-friendly filename (no extension). Return ONLY the words, no preamble:\n\n${noteContent.substring(0, 1000)}`
         });
-        rawTitle = titleResult.text?.trim() || rawTitle;
+        rawTitle = titleResult.text?.trim().replace(/\n/g, ' ') || rawTitle;
       } catch (e: any) {
         console.error("Failed to generate title:", e.message);
       }
-      const safeTitle = rawTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      const noteFileName = `${safeTitle}.md`;
+      const safeTitle = rawTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 50);
+      const noteFileName = `${safeTitle || 'note'}_${Date.now()}.md`;
       const notePath = path.join(VAULT_PATH, noteFileName);
 
       const finalMarkdown = `---\nsource: ${url}\ndate: ${new Date().toISOString()}\ntag: #ingestion\n---\n\n# ${rawTitle}\n\n${noteContent}`;
       await fs.writeFile(notePath, finalMarkdown);
 
-      // 4. Index in ChromaDB
+      // 4. Index
       if (collection) {
         await collection.add({
           ids: [url],
@@ -191,7 +216,7 @@ async function startServer() {
       res.json({ status: 'success', note: index[url] });
 
     } catch (error: any) {
-      console.error(error);
+      console.error("Ingestion error:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -211,17 +236,12 @@ async function startServer() {
         context = results.documents[0].join("\n\n---\n\n");
       }
 
-      const prompt = `You are a helpful "Second Brain" assistant. Answer the user's question based on the following context from their personal vault. If the context doesn't contain the answer, use your general knowledge but mention that the vault didn't have specific info.
-
-Context:
-${context}
-
-User Question: ${message}`;
+      const prompt = `You are a helpful "Second Brain" assistant. Answer the user's question based on the following context from their personal vault. If the context doesn't contain the answer, use your general knowledge but mention that the vault didn't have specific info.\n\nContext:\n${context}\n\nUser Question: ${message}`;
 
       let result;
       try {
         result = await genAI.models.generateContent({
-          model: "gemini-3-flash-preview",
+          model: "gemini-2.5-flash",
           contents: prompt
         });
       } catch (geminiErr: any) {
@@ -230,6 +250,7 @@ User Question: ${message}`;
 
       res.json({ response: result.text });
     } catch (error: any) {
+      console.error("Chat error:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -251,6 +272,40 @@ User Question: ${message}`;
       res.send(content);
     } catch (e) {
       res.status(404).send("Note not found");
+    }
+  });
+
+  // Save Answer (from Mobile/Chat)
+  app.post('/api/save_answer', async (req, res) => {
+    const { title, content } = req.body;
+    if (!title || !content) return res.status(400).json({ error: "Title and content are required" });
+
+    try {
+      const safeTitle = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const noteFileName = `${safeTitle}.md`;
+      const notePath = path.join(VAULT_PATH, noteFileName);
+
+      const finalMarkdown = `---\nsource: Chat\ndate: ${new Date().toISOString()}\ntag: #chat-save\n---\n\n# ${title}\n\n${content}`;
+      await fs.writeFile(notePath, finalMarkdown);
+
+      // Update index
+      const index = JSON.parse(await fs.readFile(INDEX_FILE, 'utf-8'));
+      // For chat saves, use filename as key since there's no source URL
+      index[noteFileName] = { title, fileName: noteFileName, date: new Date().toISOString() };
+      await fs.writeFile(INDEX_FILE, JSON.stringify(index, null, 2));
+
+      // Add to vector DB
+      if (collection) {
+        await collection.add({
+          ids: [noteFileName],
+          documents: [finalMarkdown],
+          metadatas: [{ source: 'Chat', title, date: new Date().toISOString() }]
+        });
+      }
+
+      res.json({ status: 'success', fileName: noteFileName });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 

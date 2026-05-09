@@ -25,16 +25,25 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
     super.initState();
 
     // For sharing or intent containing text (like URLs) while app is in memory
-    _intentDataStreamSubscription = ReceiveSharingIntent.getTextStream().listen((String value) {
-      _handleSharedData(value);
+    _intentDataStreamSubscription = ReceiveSharingIntent.instance.getMediaStream().listen((List<SharedMediaFile> value) {
+      if (value.isNotEmpty) {
+        // We only care about the first shared item for simplicity, especially if it's text/url
+        final file = value.first;
+        if (file.type == SharedMediaType.text || file.type == SharedMediaType.url) {
+          _handleSharedData(file.path);
+        }
+      }
     }, onError: (err) {
-      debugPrint("getTextStream error: $err");
+      debugPrint("getMediaStream error: $err");
     });
 
     // For sharing or intent containing text while app is closed
-    ReceiveSharingIntent.getInitialText().then((String? value) {
-      if (value != null && value.isNotEmpty) {
-        _handleSharedData(value);
+    ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> value) {
+      if (value.isNotEmpty) {
+        final file = value.first;
+        if (file.type == SharedMediaType.text || file.type == SharedMediaType.url) {
+          _handleSharedData(file.path);
+        }
       }
     });
   }
@@ -58,10 +67,14 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
     _showToast("Processing shared URL: $sharedText");
     
     try {
-      await _apiService.ingestUrl(sharedText);
-      _showToast("Successfully ingested into Second Brain!");
+      final result = await _apiService.ingestUrl(sharedText);
+      if (result['status'] == 'existing') {
+        _showToast("Knowledge already exists in Brain Vault.");
+      } else {
+        _showToast("Successfully ingested into Second Brain!");
+      }
     } catch (e) {
-      _showToast("Failed to ingest URL: Check server IP or connection.");
+      _showToast("Error: ${e.toString().replaceAll('Exception: ', '')}");
     }
   }
 
