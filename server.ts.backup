@@ -3,7 +3,11 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs/promises';
 import { existsSync, createReadStream } from 'fs';
+import { exec } from 'child_process';
+import util from 'util';
 import cors from 'cors';
+
+const execPromise = util.promisify(exec);
 import { GoogleGenAI } from "@google/genai";
 import dotenv from 'dotenv';
 
@@ -309,11 +313,66 @@ async function startServer() {
     }
   });
 
-  // Sync (Mock)
+  // Sync (Real GitHub Sync)
   app.post('/api/sync', async (req, res) => {
-    // In a real app, we'd run git commands
-    // subprocess.run(["git", "add", "."], cwd=VAULT_PATH) etc.
-    res.json({ status: 'success', message: "Vault synced with remote repository" });
+    try {
+      // Add all changes in the vault and indexes
+      await execPromise('git add vault/ vector_db.json url_index.json', { cwd: process.cwd() });
+      
+      // Commit if there are changes
+      try {
+        await execPromise('git commit -m "Auto-sync from Second Brain"', { cwd: process.cwd() });
+      } catch (e: any) {
+        const output = (e.stdout || '') + (e.stderr || '');
+        if (!output.includes('nothing to commit') && !output.includes('clean')) {
+          throw e; // Rethrow if it's a real error
+        }
+      }
+      
+      // Push to GitHub
+      await execPromise('git push origin main', { cwd: process.cwd() });
+      
+      res.json({ status: 'success', message: "Vault successfully synced to GitHub!" });
+    } catch (e: any) {
+      console.error("Sync failed:", e);
+      res.status(500).json({ error: `Sync failed: ${e.message}` });
+    }
+  });
+
+  // Import Local Markdown File
+  app.post('/api/import_local', async (req, res) => {
+    const { filename, content } = req.body;
+    if (!filename || !content) return res.status(400).json({ error: "Filename and content required" });
+
+    try {
+      const notePath = path.join(VAULT_PATH, filename);
+      await fs.writeFile(notePath, content);
+
+      // Extract title from content if possible, or use filename
+      let title = filename.replace('.md', '');
+      const titleMatch = content.match(/^#\s+(.+)$/m);
+      if (titleMatch) {
+        title = titleMatch[1].trim();
+      }
+
+      // Update index
+      const index = JSON.parse(await fs.readFile(INDEX_FILE, 'utf-8'));
+      index[filename] = { title, fileName: filename, date: new Date().toISOString() };
+      await fs.writeFile(INDEX_FILE, JSON.stringify(index, null, 2));
+
+      // Add to vector DB
+      if (collection) {
+        await collection.add({
+          ids: [filename],
+          documents: [content],
+          metadatas: [{ source: 'Import', title, date: new Date().toISOString() }]
+        });
+      }
+
+      res.json({ status: 'success', fileName: filename });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // --- Vite Middleware ---
