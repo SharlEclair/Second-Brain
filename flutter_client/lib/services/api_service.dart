@@ -1,6 +1,24 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Custom exception to distinguish network errors from server errors
+class NetworkException implements Exception {
+  final String message;
+  NetworkException(this.message);
+  @override
+  String toString() => message;
+}
+
+class ServerException implements Exception {
+  final String message;
+  final int statusCode;
+  ServerException(this.message, this.statusCode);
+  @override
+  String toString() => message;
+}
 
 class ApiService {
   static const String _keyBaseUrl = 'base_url';
@@ -18,25 +36,65 @@ class ApiService {
   Future<String> _buildUrl(String endpoint) async {
     final baseUrl = await getBaseUrl();
     if (baseUrl == null || baseUrl.isEmpty) {
-      throw Exception('Backend URL is not set. Please set it in Settings.');
+      throw ServerException('Backend URL is not set. Please set it in Settings.', 0);
     }
     final cleanBase = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
     return '$cleanBase$endpoint';
   }
 
+  /// Quick connectivity check — returns true if backend is reachable
+  Future<bool> isReachable() async {
+    try {
+      final apiUrl = await _buildUrl('/api/health');
+      final response = await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<Map<String, dynamic>> ingestUrl(String url) async {
     final apiUrl = await _buildUrl('/api/ingest');
-    final response = await http.post(
-      Uri.parse(apiUrl),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'url': url}),
-    ).timeout(const Duration(seconds: 180));
+    
+    http.Response response;
+    try {
+      response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'url': url}),
+      ).timeout(const Duration(seconds: 180));
+    } on SocketException catch (e) {
+      throw NetworkException('Cannot reach server: $e');
+    } on HttpException catch (e) {
+      throw NetworkException('HTTP error: $e');
+    } on TimeoutException {
+      throw NetworkException('Connection timed out');
+    } catch (e) {
+      // Check if it's a network-level error
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Connection reset') ||
+          e.toString().contains('No route to host') ||
+          e.toString().contains('Network is unreachable') ||
+          e.toString().contains('timed out') ||
+          e.toString().contains('TimeoutException')) {
+        throw NetworkException('Network error: $e');
+      }
+      throw NetworkException('Connection failed: $e');
+    }
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     } else {
-      final error = jsonDecode(response.body)['error'] ?? 'Unknown error';
-      throw Exception('Failed to ingest URL: $error');
+      // Server returned an error — this is NOT a network issue, don't queue
+      String errorMsg;
+      try {
+        final body = jsonDecode(response.body);
+        errorMsg = body['detail'] ?? body['error'] ?? body['message'] ?? 'Unknown server error';
+      } catch (_) {
+        errorMsg = 'Server error (${response.statusCode})';
+      }
+      throw ServerException(errorMsg, response.statusCode);
     }
   }
 

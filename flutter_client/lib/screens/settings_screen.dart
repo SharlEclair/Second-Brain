@@ -38,6 +38,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  void _testConnection() async {
+    final reachable = await _apiService.isReachable();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(reachable ? '✓ Connected to backend!' : '✗ Cannot reach backend'),
+          backgroundColor: reachable ? const Color(0xFF22C55E) : Colors.red,
+        ),
+      );
+    }
+  }
+
   void _triggerSync() async {
     setState(() => _isSyncing = true);
     try {
@@ -111,6 +123,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
                 ),
                 child: const Text("SAVE NETWORK SETTINGS", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _testConnection,
+                icon: const Icon(Icons.wifi_find, size: 18),
+                label: const Text("TEST CONNECTION", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  side: const BorderSide(color: Color(0xFF333333)),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                ),
               ),
             ),
             const SizedBox(height: 48),

@@ -74,10 +74,17 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
       } else {
         _showToast("✓ Successfully ingested!");
       }
-    } catch (e) {
-      // Network error — save to local queue for later processing
+    } on NetworkException {
+      // Server unreachable — queue for later
       await _queueService.addToQueue(sharedText);
-      _showToast("📌 Saved to queue — will process when connected.");
+      _showToast("📌 Queued — will process when connected.");
+    } on ServerException catch (e) {
+      // Server reachable but processing failed — show error
+      _showToast("❌ Error: ${e.message}");
+    } catch (e) {
+      // Unknown — queue to be safe
+      await _queueService.addToQueue(sharedText);
+      _showToast("📌 Queued (${e.toString().substring(0, (e.toString().length).clamp(0, 60))})");
     }
   }
 
