@@ -39,12 +39,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _testConnection() async {
-    final reachable = await _apiService.isReachable();
+    final error = await _apiService.checkConnectivity();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(reachable ? '✓ Connected to backend!' : '✗ Cannot reach backend'),
-          backgroundColor: reachable ? const Color(0xFF22C55E) : Colors.red,
+          content: Text(error == null ? '✓ Connected to backend!' : '✗ $error'),
+          backgroundColor: error == null ? const Color(0xFF22C55E) : Colors.red,
+          duration: const Duration(seconds: 5),
         ),
       );
     }
