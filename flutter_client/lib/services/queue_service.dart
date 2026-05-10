@@ -40,28 +40,33 @@ class QueueService {
   }
 
   /// Process the entire queue. Returns a summary of results.
-  /// Calls the API for each URL. On success, removes it from the queue.
-  /// On failure, keeps it in the queue for retry.
   Future<QueueProcessResult> processQueue(ApiService api) async {
     final queue = await getQueue();
-    if (queue.isEmpty) return QueueProcessResult(processed: 0, failed: 0, total: 0);
+    if (queue.isEmpty) return QueueProcessResult(processed: 0, failed: 0, total: 0, errors: {});
 
     int processed = 0;
     int failed = 0;
     final total = queue.length;
+    final Map<String, String> errors = {};
 
-    // Process a copy so we can safely modify during iteration
     for (final url in List<String>.from(queue)) {
       try {
-        await api.ingestUrl(url);
+        await api.ingestUrl(url.trim());
         await removeFromQueue(url);
         processed++;
-      } catch (_) {
+      } on ServerException catch (e) {
         failed++;
+        errors[url] = e.message;
+      } on NetworkException catch (e) {
+        failed++;
+        errors[url] = 'Network error: ${e.message}';
+      } catch (e) {
+        failed++;
+        errors[url] = e.toString();
       }
     }
 
-    return QueueProcessResult(processed: processed, failed: failed, total: total);
+    return QueueProcessResult(processed: processed, failed: failed, total: total, errors: errors);
   }
 
   Future<void> _saveQueue(List<String> queue) async {
@@ -74,6 +79,12 @@ class QueueProcessResult {
   final int processed;
   final int failed;
   final int total;
+  final Map<String, String> errors;
 
-  QueueProcessResult({required this.processed, required this.failed, required this.total});
+  QueueProcessResult({
+    required this.processed, 
+    required this.failed, 
+    required this.total,
+    required this.errors,
+  });
 }

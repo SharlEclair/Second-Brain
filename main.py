@@ -134,6 +134,19 @@ You MUST respond strictly with this JSON structure:
 async def process_image_post(url: str) -> dict:
     post_shortcode = url.split("/")[-2] if len(url.split("/")[-2]) > 3 else url.split("/")[-3]
     download_path = f"temp_{post_shortcode}"
+    
+    # Use cookies if available
+    cookies_file = "cookies.txt"
+    if os.path.exists(cookies_file):
+        try:
+            import http.cookiejar
+            cj = http.cookiejar.MozillaCookieJar(cookies_file)
+            cj.load(ignore_discard=True, ignore_expires=True)
+            L.context._session.cookies.update(cj)
+            print(f"✓ Robustly loaded cookies into Instaloader from {cookies_file}")
+        except Exception as e:
+            print(f"Warning: Failed to load Instaloader cookies (Robust mode): {e}")
+
     try:
         post = instaloader.Post.from_shortcode(L.context, post_shortcode)
         L.download_post(post, target=download_path)
@@ -160,7 +173,15 @@ async def process_image_post(url: str) -> dict:
 async def process_reel(url: str) -> dict:
     temp_audio_file = f"temp_audio_{uuid.uuid4().hex}.m4a"
     platform = get_platform_from_url(url)
+    
     ydl_opts = {'format': 'm4a/bestaudio/best', 'outtmpl': temp_audio_file, 'quiet': True}
+    
+    # Use cookies if available
+    cookies_file = "cookies.txt"
+    if os.path.exists(cookies_file):
+        ydl_opts['cookiefile'] = cookies_file
+        print(f"✓ Using cookies for yt-dlp from {cookies_file}")
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=True)
@@ -232,7 +253,12 @@ async def ingest_url(request: Request):
         raw_category = data['ai_data'].get('category', 'Post')
         safe_category = re.sub(r'[\\/*?:"<>|]', "-", raw_category)
         filename = f"{date_str} - {safe_category} from {data['platform'].capitalize()} ({safe_uploader}).md"
-        filepath = os.path.join(OBSIDIAN_INBOX_PATH, filename)
+        
+        # Dual Path Saving
+        PROJECT_VAULT_PATH = "vault"
+        os.makedirs(PROJECT_VAULT_PATH, exist_ok=True)
+        project_filepath = os.path.join(PROJECT_VAULT_PATH, filename)
+        obsidian_filepath = os.path.join(OBSIDIAN_INBOX_PATH, filename)
 
         content = f"""---
 type: {data['type']}
@@ -253,7 +279,9 @@ tags: {data['ai_data'].get('tags', [])}
 ### Original Caption
 * {data['description']}
 """
-        with open(filepath, "w", encoding="utf-8") as f: f.write(content)
+        # Save to both locations
+        with open(project_filepath, "w", encoding="utf-8") as f: f.write(content)
+        with open(obsidian_filepath, "w", encoding="utf-8") as f: f.write(content)
 
         note_data = {"title": filename.replace(".md", ""), "fileName": filename, "date": datetime.datetime.now().isoformat()}
         index[url] = note_data
@@ -346,8 +374,23 @@ async def sync_vault():
 async def get_notes():
     index = get_url_index()
     notes = []
-    for url, filename in index.items():
-        notes.append({"url": url, "fileName": filename, "title": filename.replace(".md", "")})
+    for key, value in index.items():
+        # Handle both old format (string) and new format (dict)
+        if isinstance(value, dict):
+            filename = value.get('fileName', '')
+            title = value.get('title', filename.replace(".md", ""))
+            url = key if key.startswith('http') else value.get('url', '')
+        else:
+            filename = value
+            title = filename.replace(".md", "")
+            url = key if key.startswith('http') else ''
+            
+        if filename:
+            notes.append({
+                "url": url, 
+                "fileName": filename, 
+                "title": title
+            })
     return notes
 
 @app.get("/api/notes/{filename}")

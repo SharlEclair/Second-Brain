@@ -31,6 +31,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   bool _isIngesting = false;
   int _queueCount = 0;
   List<String> _queuedUrls = [];
+  Map<String, String> _queueErrors = {};
   bool _isProcessingQueue = false;
 
   @override
@@ -125,13 +126,19 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   void _processQueue() async {
     if (_queueCount == 0) return;
 
-    setState(() => _isProcessingQueue = true);
+    setState(() {
+      _isProcessingQueue = true;
+      _queueErrors = {};
+    });
 
     final result = await _queueService.processQueue(_apiService);
     await _refreshQueue();
 
     if (mounted) {
-      setState(() => _isProcessingQueue = false);
+      setState(() {
+        _isProcessingQueue = false;
+        _queueErrors = result.errors;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Processed ${result.processed}/${result.total}${result.failed > 0 ? " · ${result.failed} failed" : ""}'),
@@ -594,27 +601,40 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
                         color: const Color(0xFF111111),
-                        border: Border.all(color: const Color(0xFF222222)),
+                        border: Border.all(color: _queueErrors.containsKey(url) ? Colors.red.withOpacity(0.3) : const Color(0xFF222222)),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(platformIcon, color: platformColor, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              url,
-                              style: const TextStyle(color: Colors.white54, fontSize: 12, fontFamily: 'monospace'),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                          Row(
+                            children: [
+                              Icon(platformIcon, color: platformColor, size: 20),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  url,
+                                  style: const TextStyle(color: Colors.white54, fontSize: 12, fontFamily: 'monospace'),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, color: Colors.white24, size: 16),
+                                onPressed: () => _removeFromQueue(url),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ],
+                          ),
+                          if (_queueErrors.containsKey(url))
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8, left: 32),
+                              child: Text(
+                                _queueErrors[url]!,
+                                style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white24, size: 16),
-                            onPressed: () => _removeFromQueue(url),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
                         ],
                       ),
                     ),
