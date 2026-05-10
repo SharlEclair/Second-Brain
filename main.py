@@ -201,40 +201,32 @@ async def ingest_url(request: Request):
     if not url:
         raise HTTPException(status_code=400, detail="URL is required")
     
-    # Check if client wants streaming (Web UI) or plain JSON (Flutter)
-    accept_header = request.headers.get("Accept", "")
-    is_streaming = "text/event-stream" in accept_header
+    # Explicit header: only the React web UI sends this
+    wants_stream = request.headers.get("X-Stream", "") == "true"
 
-    async def stream_progress():
-        try:
-            index = get_url_index()
-            if url in index:
-                note_data = index[url]
-                filename = note_data['fileName'] if isinstance(note_data, dict) else note_data
-                filepath = os.path.join(OBSIDIAN_INBOX_PATH, filename)
-                if os.path.exists(filepath):
-                    yield json.dumps({"status": "existing", "note": note_data if isinstance(note_data, dict) else {"fileName": filename, "title": filename}}) + "\n"
-                    return
-
-            yield json.dumps({"status": "status", "message": "⬇️ Downloading media..."}) + "\n"
-            await asyncio.sleep(0.1)
-
-            if "instagram.com" in url and ("/p/" in url or "/post/" in url):
-                data = await process_image_post(url)
-            else:
-                data = await process_reel(url)
-
-            yield json.dumps({"status": "status", "message": "🧠 Analyzing & Saving..."}) + "\n"
-            
-            # Save to Obsidian
-            date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-            safe_uploader = re.sub(r'[\\/*?:"<>|]', "", data['uploader'])
-            raw_category = data['ai_data'].get('category', 'Post')
-            safe_category = re.sub(r'[\\/*?:"<>|]', "-", raw_category)
-            filename = f"{date_str} - {safe_category} from {data['platform'].capitalize()} ({safe_uploader}).md"
+    # --- Shared helper to save note to vault ---
+    async def _run_ingestion(url: str):
+        index = get_url_index()
+        if url in index:
+            note_data = index[url]
+            filename = note_data['fileName'] if isinstance(note_data, dict) else note_data
             filepath = os.path.join(OBSIDIAN_INBOX_PATH, filename)
+            if os.path.exists(filepath):
+                return {"status": "existing", "note": note_data if isinstance(note_data, dict) else {"fileName": filename, "title": filename}}
 
-            content = f"""---
+        if "instagram.com" in url and ("/p/" in url or "/post/" in url):
+            data = await process_image_post(url)
+        else:
+            data = await process_reel(url)
+
+        date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        safe_uploader = re.sub(r'[\\/*?:"<>|]', "", data['uploader'])
+        raw_category = data['ai_data'].get('category', 'Post')
+        safe_category = re.sub(r'[\\/*?:"<>|]', "-", raw_category)
+        filename = f"{date_str} - {safe_category} from {data['platform'].capitalize()} ({safe_uploader}).md"
+        filepath = os.path.join(OBSIDIAN_INBOX_PATH, filename)
+
+        content = f"""---
 type: {data['type']}
 date: {date_str}
 author: {data['uploader']}
@@ -253,40 +245,55 @@ tags: {data['ai_data'].get('tags', [])}
 ### Original Caption
 * {data['description']}
 """
-            with open(filepath, "w", encoding="utf-8") as f: f.write(content)
+        with open(filepath, "w", encoding="utf-8") as f: f.write(content)
 
-            # Update index
-            note_data = {"title": filename.replace(".md", ""), "fileName": filename, "date": datetime.datetime.now().isoformat()}
-            index[url] = note_data
-            save_url_index(index)
+        note_data = {"title": filename.replace(".md", ""), "fileName": filename, "date": datetime.datetime.now().isoformat()}
+        index[url] = note_data
+        save_url_index(index)
 
-            # Embed and Save to Chroma
-            chunks = chunk_text(data['ai_data'].get('formatted_content', ''))
-            vault_collection.add(
-                documents=chunks,
-                metadatas=[{"filename": filename, "url": url} for _ in chunks],
-                ids=[f"{url}_chunk_{i}" for i in range(len(chunks))]
-            )
+        chunks = chunk_text(data['ai_data'].get('formatted_content', ''))
+        vault_collection.add(
+            documents=chunks,
+            metadatas=[{"filename": filename, "url": url} for _ in chunks],
+            ids=[f"{url}_chunk_{i}" for i in range(len(chunks))]
+        )
+        return {"status": "success", "note": note_data}
 
-            yield json.dumps({"status": "success", "note": note_data}) + "\n"
-        except Exception as e:
-            yield json.dumps({"status": "error", "message": str(e)}) + "\n"
-
-    if is_streaming:
-        return StreamingResponse(stream_progress(), media_type="text/event-stream")
-    else:
-        # For non-streaming clients (like Flutter), we iterate the generator and return the last result
-        final_result = {"status": "error", "message": "Unknown error during ingestion"}
-        async for line in stream_progress():
+    # --- Streaming path (Web UI only) ---
+    if wants_stream:
+        async def stream_progress():
             try:
-                data = json.loads(line.strip())
-                if data['status'] in ['success', 'existing', 'error']:
-                    final_result = data
-            except: pass
-        
-        if final_result.get('status') == 'error':
-            raise HTTPException(status_code=500, detail=final_result.get('message'))
-        return final_result
+                index = get_url_index()
+                if url in index:
+                    note_data = index[url]
+                    filename = note_data['fileName'] if isinstance(note_data, dict) else note_data
+                    filepath = os.path.join(OBSIDIAN_INBOX_PATH, filename)
+                    if os.path.exists(filepath):
+                        yield json.dumps({"status": "existing", "note": note_data if isinstance(note_data, dict) else {"fileName": filename, "title": filename}}) + "\n"
+                        return
+
+                yield json.dumps({"status": "status", "message": "⬇️ Downloading media..."}) + "\n"
+                await asyncio.sleep(0.1)
+
+                if "instagram.com" in url and ("/p/" in url or "/post/" in url):
+                    data = await process_image_post(url)
+                else:
+                    data = await process_reel(url)
+
+                yield json.dumps({"status": "status", "message": "🧠 Analyzing & Saving..."}) + "\n"
+                result = await _run_ingestion(url)
+                yield json.dumps(result) + "\n"
+            except Exception as e:
+                yield json.dumps({"status": "error", "message": str(e)}) + "\n"
+
+        return StreamingResponse(stream_progress(), media_type="text/event-stream")
+    
+    # --- Non-streaming path (Flutter / curl) ---
+    try:
+        result = await _run_ingestion(url)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat")
 async def chat_with_brain(request: AskRequest):

@@ -91,7 +91,7 @@ export default function App() {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Accept': 'text/event-stream'
+          'X-Stream': 'true'
         },
         body: JSON.stringify({ url })
       });

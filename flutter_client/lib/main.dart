@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'screens/chat_screen.dart';
 import 'services/api_service.dart';
+import 'services/queue_service.dart';
 
 void main() {
   runApp(const SecondBrainApp());
@@ -19,6 +20,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
   late StreamSubscription _intentDataStreamSubscription;
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   final ApiService _apiService = ApiService();
+  final QueueService _queueService = QueueService();
 
   @override
   void initState() {
@@ -27,7 +29,6 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
     // For sharing or intent containing text (like URLs) while app is in memory
     _intentDataStreamSubscription = ReceiveSharingIntent.instance.getMediaStream().listen((List<SharedMediaFile> value) {
       if (value.isNotEmpty) {
-        // We only care about the first shared item for simplicity, especially if it's text/url
         final file = value.first;
         if (file.type == SharedMediaType.text || file.type == SharedMediaType.url) {
           _handleSharedData(file.path);
@@ -64,17 +65,19 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
       sharedText = match.group(0)!;
     }
 
-    _showToast("Processing shared URL: $sharedText");
+    _showToast("Processing: $sharedText");
     
     try {
       final result = await _apiService.ingestUrl(sharedText);
       if (result['status'] == 'existing') {
-        _showToast("Knowledge already exists in Brain Vault.");
+        _showToast("✓ Already in your Brain Vault.");
       } else {
-        _showToast("Successfully ingested into Second Brain!");
+        _showToast("✓ Successfully ingested!");
       }
     } catch (e) {
-      _showToast("Error: ${e.toString().replaceAll('Exception: ', '')}");
+      // Network error — save to local queue for later processing
+      await _queueService.addToQueue(sharedText);
+      _showToast("📌 Saved to queue — will process when connected.");
     }
   }
 
@@ -94,7 +97,6 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFFF97316), // Orange 500
           surface: Color(0xFF111111),
-          background: Color(0xFF050505),
         ),
         scaffoldBackgroundColor: const Color(0xFF050505),
         useMaterial3: true,

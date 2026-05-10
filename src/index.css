@@ -72,7 +72,7 @@ body {
   @apply font-sans leading-relaxed text-slate-300;
 }
 .markdown-body h1 { @apply text-2xl font-display italic font-light mb-4 text-white; }
- moss.markdown-body h2 { @apply text-xl font-display italic font-light mb-3 mt-6 text-white; }
+.markdown-body h2 { @apply text-xl font-display italic font-light mb-3 mt-6 text-white; }
 .markdown-body h3 { @apply text-lg font-display font-light mb-3 mt-4 text-slate-200; }
 .markdown-body p { @apply mb-4; }
 .markdown-body ul { @apply list-disc ml-6 mb-4; }
