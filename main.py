@@ -194,6 +194,10 @@ class SaveAnswerRequest(BaseModel):
 
 # --- ROUTES ---
 
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok"}
+
 @app.post("/api/ingest")
 async def ingest_url(request: Request):
     body = await request.json()
@@ -272,15 +276,8 @@ tags: {data['ai_data'].get('tags', [])}
                         yield json.dumps({"status": "existing", "note": note_data if isinstance(note_data, dict) else {"fileName": filename, "title": filename}}) + "\n"
                         return
 
-                yield json.dumps({"status": "status", "message": "⬇️ Downloading media..."}) + "\n"
+                yield json.dumps({"status": "status", "message": "⬇️ Downloading & Processing..."}) + "\n"
                 await asyncio.sleep(0.1)
-
-                if "instagram.com" in url and ("/p/" in url or "/post/" in url):
-                    data = await process_image_post(url)
-                else:
-                    data = await process_reel(url)
-
-                yield json.dumps({"status": "status", "message": "🧠 Analyzing & Saving..."}) + "\n"
                 result = await _run_ingestion(url)
                 yield json.dumps(result) + "\n"
             except Exception as e:

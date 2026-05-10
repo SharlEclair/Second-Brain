@@ -80,16 +80,40 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
           ),
         );
       }
-    } catch (e) {
-      // Network error — queue for later
+    } on NetworkException {
+      // Truly can't reach the server — queue for later
       await _queueService.addToQueue(url);
       await _refreshQueue();
       if (mounted) {
         _urlController.clear();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('📌 Queued for later — will process when connected'),
+            content: Text('📌 Queued — will process when connected'),
             backgroundColor: Color(0xFFF97316),
+          ),
+        );
+      }
+    } on ServerException catch (e) {
+      // Server IS reachable but returned an error — show it, don't queue
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Server error: ${e.message}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+    } catch (e) {
+      // Unknown error — queue to be safe
+      await _queueService.addToQueue(url);
+      await _refreshQueue();
+      if (mounted) {
+        _urlController.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('📌 Queued (error: ${e.toString().substring(0, (e.toString().length).clamp(0, 80))})'),
+            backgroundColor: const Color(0xFFF97316),
           ),
         );
       }
