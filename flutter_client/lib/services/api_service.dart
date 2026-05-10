@@ -30,7 +30,7 @@ class ApiService {
       Uri.parse(apiUrl),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'url': url}),
-    ).timeout(const Duration(seconds: 45));
+    ).timeout(const Duration(seconds: 180));
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
@@ -46,7 +46,7 @@ class ApiService {
       Uri.parse(apiUrl),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'message': query}),
-    ).timeout(const Duration(seconds: 30));
+    ).timeout(const Duration(seconds: 60));
 
     if (response.statusCode == 200) {
       final json = jsonDecode(response.body);
