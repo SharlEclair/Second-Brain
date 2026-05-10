@@ -19,28 +19,42 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _textController = TextEditingController();
   final TextEditingController _urlController = TextEditingController();
   final List<ChatMessage> _messages = [];
   final ApiService _apiService = ApiService();
   final QueueService _queueService = QueueService();
+  late TabController _tabController;
+
   bool _isLoading = false;
   bool _isIngesting = false;
   int _queueCount = 0;
+  List<String> _queuedUrls = [];
   bool _isProcessingQueue = false;
-  String? _ingestStatus;
 
   @override
   void initState() {
     super.initState();
-    _refreshQueueCount();
+    _tabController = TabController(length: 2, vsync: this);
+    _refreshQueue();
   }
 
-  Future<void> _refreshQueueCount() async {
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _textController.dispose();
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refreshQueue() async {
     final queue = await _queueService.getQueue();
     if (mounted) {
-      setState(() => _queueCount = queue.length);
+      setState(() {
+        _queuedUrls = queue;
+        _queueCount = queue.length;
+      });
     }
   }
 
@@ -50,10 +64,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final url = _urlController.text.trim();
     if (url.isEmpty) return;
 
-    setState(() {
-      _isIngesting = true;
-      _ingestStatus = 'Connecting...';
-    });
+    setState(() => _isIngesting = true);
 
     try {
       final result = await _apiService.ingestUrl(url);
@@ -62,17 +73,17 @@ class _ChatScreenState extends State<ChatScreen> {
         final status = result['status'];
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(status == 'existing' 
-              ? '✓ Already in your Brain Vault' 
+            content: Text(status == 'existing'
+              ? '✓ Already in your Brain Vault'
               : '✓ Successfully ingested!'),
             backgroundColor: const Color(0xFF22C55E),
           ),
         );
       }
     } catch (e) {
-      // Network error — queue it for later
+      // Network error — queue for later
       await _queueService.addToQueue(url);
-      await _refreshQueueCount();
+      await _refreshQueue();
       if (mounted) {
         _urlController.clear();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -83,32 +94,32 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isIngesting = false;
-          _ingestStatus = null;
-        });
-      }
+      if (mounted) setState(() => _isIngesting = false);
     }
   }
 
   void _processQueue() async {
     if (_queueCount == 0) return;
-    
+
     setState(() => _isProcessingQueue = true);
 
     final result = await _queueService.processQueue(_apiService);
-    await _refreshQueueCount();
+    await _refreshQueue();
 
     if (mounted) {
       setState(() => _isProcessingQueue = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Processed ${result.processed}/${result.total} links${result.failed > 0 ? " (${result.failed} failed, will retry)" : ""}'),
+          content: Text('Processed ${result.processed}/${result.total}${result.failed > 0 ? " · ${result.failed} failed" : ""}'),
           backgroundColor: result.failed == 0 ? const Color(0xFF22C55E) : const Color(0xFFF97316),
         ),
       );
     }
+  }
+
+  void _removeFromQueue(String url) async {
+    await _queueService.removeFromQueue(url);
+    await _refreshQueue();
   }
 
   void _pasteFromClipboard() async {
@@ -142,7 +153,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         setState(() {
           _messages.add(ChatMessage(
-              text: "Cannot connect to local server. Check IP address in Settings. \n\n${e.toString()}",
+              text: "Cannot connect. Check IP in Settings.\n\n${e.toString()}",
               isUser: false));
           _isLoading = false;
         });
@@ -182,18 +193,19 @@ class _ChatScreenState extends State<ChatScreen> {
               onPressed: () async {
                 Navigator.pop(context);
                 if (title.isNotEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Saving to vault...")),
-                  );
                   try {
                     await _apiService.saveAnswer(title, content);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Saved successfully")),
-                    );
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Saved successfully")),
+                      );
+                    }
                   } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Failed to save: $e")),
-                    );
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Failed: $e")),
+                      );
+                    }
                   }
                 }
               },
@@ -205,245 +217,388 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  // --- Build ---
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('CORTEX_AI', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2.0, fontSize: 16)),
+        title: const Text('CORTEX', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 3.0, fontSize: 16)),
         backgroundColor: const Color(0xFF111111),
         shape: const Border(bottom: BorderSide(color: Color(0xFF222222), width: 1)),
         actions: [
+          if (_queueCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Badge(
+                label: Text('$_queueCount'),
+                backgroundColor: const Color(0xFFF97316),
+                child: IconButton(
+                  icon: const Icon(Icons.schedule, color: Colors.white70),
+                  onPressed: () => _tabController.animateTo(1),
+                  tooltip: "Queued links",
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white70),
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SettingsScreen()),
-              );
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
             },
           )
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: const Color(0xFFF97316),
+          labelColor: const Color(0xFFF97316),
+          unselectedLabelColor: Colors.white38,
+          labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+          tabs: [
+            const Tab(text: "CHAT"),
+            Tab(text: "QUEUE ($_queueCount)"),
+          ],
+        ),
       ),
-      body: Column(
+      body: TabBarView(
+        controller: _tabController,
         children: [
-          // --- URL Ingestion Bar ---
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            decoration: const BoxDecoration(
-              color: Color(0xFF111111),
-              border: Border(bottom: BorderSide(color: Color(0xFF222222))),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _urlController,
-                        style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 13),
-                        decoration: InputDecoration(
-                          hintText: "Paste URL to ingest...",
-                          hintStyle: const TextStyle(color: Colors.white24, fontFamily: 'monospace', fontSize: 13),
-                          fillColor: const Color(0xFF050505),
-                          filled: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                            borderSide: const BorderSide(color: Color(0xFF333333)),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                            borderSide: const BorderSide(color: Color(0xFF222222)),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                            borderSide: const BorderSide(color: Color(0xFFF97316), width: 1),
-                          ),
-                          prefixIcon: IconButton(
-                            icon: const Icon(Icons.content_paste, color: Colors.white30, size: 18),
-                            onPressed: _pasteFromClipboard,
-                            tooltip: "Paste from clipboard",
-                          ),
-                          suffixIcon: _isIngesting
-                            ? const Padding(
-                                padding: EdgeInsets.all(12.0),
-                                child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF97316))),
-                              )
-                            : IconButton(
-                                icon: const Icon(Icons.send, color: Color(0xFFF97316), size: 20),
-                                onPressed: _ingestUrl,
-                                tooltip: "Ingest URL",
-                              ),
-                        ),
-                        onSubmitted: (_) => _ingestUrl(),
-                      ),
+          _buildChatTab(),
+          _buildQueueTab(),
+        ],
+      ),
+    );
+  }
+
+  // ===== CHAT TAB =====
+  Widget _buildChatTab() {
+    return Column(
+      children: [
+        // --- URL Input ---
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          decoration: const BoxDecoration(
+            color: Color(0xFF0A0A0A),
+            border: Border(bottom: BorderSide(color: Color(0xFF222222))),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _urlController,
+                  style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: "Paste URL to ingest...",
+                    hintStyle: const TextStyle(color: Colors.white24, fontFamily: 'monospace', fontSize: 13),
+                    fillColor: const Color(0xFF050505),
+                    filled: true,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                      borderSide: const BorderSide(color: Color(0xFF333333)),
                     ),
-                  ],
-                ),
-                // --- Queue Status Bar ---
-                if (_queueCount > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.schedule, color: Color(0xFFF97316), size: 14),
-                        const SizedBox(width: 6),
-                        Text(
-                          '$_queueCount link${_queueCount == 1 ? '' : 's'} queued',
-                          style: const TextStyle(color: Colors.white54, fontSize: 12, fontFamily: 'monospace'),
-                        ),
-                        const Spacer(),
-                        _isProcessingQueue
-                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF97316)))
-                          : GestureDetector(
-                              onTap: _processQueue,
-                              child: const Text(
-                                'PROCESS NOW',
-                                style: TextStyle(color: Color(0xFFF97316), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
-                              ),
-                            ),
-                      ],
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                      borderSide: const BorderSide(color: Color(0xFF222222)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                      borderSide: const BorderSide(color: Color(0xFFF97316), width: 1),
+                    ),
+                    prefixIcon: IconButton(
+                      icon: const Icon(Icons.content_paste, color: Colors.white30, size: 18),
+                      onPressed: _pasteFromClipboard,
                     ),
                   ),
-                const SizedBox(height: 12),
+                  onSubmitted: (_) => _ingestUrl(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: _isIngesting ? null : _ingestUrl,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF97316),
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                  child: _isIngesting
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    : const Text("INGEST", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // --- Messages ---
+        Expanded(
+          child: _messages.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.psychology, size: 48, color: Colors.white.withOpacity(0.1)),
+                    const SizedBox(height: 16),
+                    Text("Ask your brain anything",
+                      style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 14, fontFamily: 'monospace')),
+                    const SizedBox(height: 4),
+                    Text("or paste a URL above to ingest",
+                      style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 12, fontFamily: 'monospace')),
+                  ],
+                ),
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.all(16.0),
+                itemCount: _messages.length,
+                itemBuilder: (context, index) {
+                  final message = _messages[index];
+                  if (message.isUser) {
+                    return Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 4.0),
+                        padding: const EdgeInsets.all(12.0),
+                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          borderRadius: BorderRadius.circular(12.0),
+                        ),
+                        child: Text(message.text, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 15)),
+                      ),
+                    );
+                  } else {
+                    return Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8.0),
+                        padding: const EdgeInsets.all(16.0),
+                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.9),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF111111),
+                          border: Border.all(color: const Color(0xFF222222)),
+                          borderRadius: BorderRadius.circular(12.0),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            MarkdownBody(
+                              data: message.text,
+                              styleSheet: MarkdownStyleSheet(
+                                p: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.5),
+                                code: const TextStyle(backgroundColor: Colors.black38, color: Color(0xFFF97316)),
+                                codeblockDecoration: BoxDecoration(
+                                  color: const Color(0xFF050505),
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  border: Border.all(color: const Color(0xFF222222)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            OutlinedButton.icon(
+                              onPressed: () => _saveToVault(message.text),
+                              icon: const Icon(Icons.bookmark_add, size: 16),
+                              label: const Text("Save to Vault", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Theme.of(context).colorScheme.primary,
+                                side: BorderSide(color: Theme.of(context).colorScheme.primary.withOpacity(0.5)),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+                },
+              ),
+        ),
+
+        if (_isLoading)
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Row(
+              children: [
+                const SizedBox(width: 8),
+                const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF97316))),
+                const SizedBox(width: 12),
+                Text("Querying Vault...", style: TextStyle(color: Colors.white54, fontSize: 12, fontFamily: 'monospace')),
               ],
             ),
           ),
 
-          // --- Chat Messages ---
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16.0),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                if (message.isUser) {
-                  return Align(
-                    alignment: Alignment.centerRight,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 4.0),
-                      padding: const EdgeInsets.all(12.0),
-                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        borderRadius: BorderRadius.circular(12.0),
-                      ),
+        // --- Chat Input ---
+        Container(
+          padding: const EdgeInsets.all(16.0),
+          decoration: const BoxDecoration(
+            color: Color(0xFF111111),
+            border: Border(top: BorderSide(color: Color(0xFF222222))),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _textController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: "ASK YOUR BRAIN...",
+                    hintStyle: const TextStyle(color: Colors.white30, fontFamily: 'monospace', fontSize: 14),
+                    fillColor: const Color(0xFF050505),
+                    filled: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0), borderSide: const BorderSide(color: Color(0xFF333333))),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0), borderSide: const BorderSide(color: Color(0xFF222222))),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0), borderSide: const BorderSide(color: Color(0xFFF97316), width: 1)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  ),
+                  onSubmitted: (_) => _sendMessage(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FloatingActionButton(
+                onPressed: _sendMessage,
+                elevation: 0,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                child: const Icon(Icons.send, color: Colors.black),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ===== QUEUE TAB =====
+  Widget _buildQueueTab() {
+    return Column(
+      children: [
+        // Process button
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: const BoxDecoration(
+            color: Color(0xFF0A0A0A),
+            border: Border(bottom: BorderSide(color: Color(0xFF222222))),
+          ),
+          child: Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: (_isProcessingQueue || _queueCount == 0) ? null : _processQueue,
+                  icon: _isProcessingQueue
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    : const Icon(Icons.play_arrow),
+                  label: Text(
+                    _isProcessingQueue ? "PROCESSING..." : "PROCESS ALL ($_queueCount)",
+                    style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 13),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _queueCount > 0 ? const Color(0xFFF97316) : const Color(0xFF333333),
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _queueCount == 0
+                  ? "No pending links. Share or paste URLs and they'll queue here when offline."
+                  : "These links will be processed when you tap the button above.",
+                style: const TextStyle(color: Colors.white30, fontSize: 11, fontFamily: 'monospace'),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+
+        // Queue list
+        Expanded(
+          child: _queuedUrls.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.inbox, size: 48, color: Colors.white.withOpacity(0.08)),
+                    const SizedBox(height: 16),
+                    Text("Queue is empty", style: TextStyle(color: Colors.white.withOpacity(0.15), fontSize: 14, fontFamily: 'monospace')),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 48),
                       child: Text(
-                        message.text,
-                        style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 15),
+                        "Share Reels or links to Second Brain while you're away. They'll appear here for batch processing.",
+                        style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 12),
+                        textAlign: TextAlign.center,
                       ),
                     ),
-                  );
-                } else {
-                  return Align(
-                    alignment: Alignment.centerLeft,
+                  ],
+                ),
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                itemCount: _queuedUrls.length,
+                itemBuilder: (context, index) {
+                  final url = _queuedUrls[index];
+                  // Determine platform icon
+                  IconData platformIcon = Icons.link;
+                  Color platformColor = Colors.white38;
+                  if (url.contains('instagram.com')) {
+                    platformIcon = Icons.camera_alt;
+                    platformColor = const Color(0xFFE1306C);
+                  } else if (url.contains('youtube.com') || url.contains('youtu.be')) {
+                    platformIcon = Icons.play_circle;
+                    platformColor = const Color(0xFFFF0000);
+                  } else if (url.contains('tiktok.com')) {
+                    platformIcon = Icons.music_note;
+                    platformColor = Colors.white70;
+                  }
+
+                  return Dismissible(
+                    key: Key(url),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      color: Colors.red.withOpacity(0.2),
+                      child: const Icon(Icons.delete, color: Colors.red, size: 20),
+                    ),
+                    onDismissed: (_) => _removeFromQueue(url),
                     child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 8.0),
-                      padding: const EdgeInsets.all(16.0),
-                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.9),
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
                         color: const Color(0xFF111111),
                         border: Border.all(color: const Color(0xFF222222)),
-                        borderRadius: BorderRadius.circular(12.0),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          MarkdownBody(
-                            data: message.text,
-                            styleSheet: MarkdownStyleSheet(
-                              p: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.5),
-                              code: const TextStyle(backgroundColor: Colors.black38, color: Color(0xFFF97316)),
-                              codeblockDecoration: BoxDecoration(
-                                color: const Color(0xFF050505),
-                                borderRadius: BorderRadius.circular(8.0),
-                                border: Border.all(color: const Color(0xFF222222)),
-                              ),
+                          Icon(platformIcon, color: platformColor, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              url,
+                              style: const TextStyle(color: Colors.white54, fontSize: 12, fontFamily: 'monospace'),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          OutlinedButton.icon(
-                            onPressed: () => _saveToVault(message.text),
-                            icon: const Icon(Icons.bookmark_add, size: 16),
-                            label: const Text("Save to Vault", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Theme.of(context).colorScheme.primary,
-                              side: BorderSide(color: Theme.of(context).colorScheme.primary.withOpacity(0.5)),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                            ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white24, size: 16),
+                            onPressed: () => _removeFromQueue(url),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
                           ),
                         ],
                       ),
                     ),
                   );
-                }
-              },
-            ),
-          ),
-          if (_isLoading)
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Row(
-                children: [
-                  const SizedBox(width: 8),
-                  const SizedBox(
-                    width: 16, height: 16, 
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF97316))
-                  ),
-                  const SizedBox(width: 12),
-                  Text("Querying Vault...", style: TextStyle(color: Colors.white54, fontSize: 12, fontFamily: 'monospace')),
-                ],
+                },
               ),
-            ),
-
-          // --- Chat Input ---
-          Container(
-            padding: const EdgeInsets.all(16.0),
-            decoration: const BoxDecoration(
-              color: Color(0xFF111111),
-              border: Border(top: BorderSide(color: Color(0xFF222222))),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _textController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: "ASK YOUR BRAIN...",
-                      hintStyle: const TextStyle(color: Colors.white30, fontFamily: 'monospace', fontSize: 14),
-                      fillColor: const Color(0xFF050505),
-                      filled: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                        borderSide: const BorderSide(color: Color(0xFF333333)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                        borderSide: const BorderSide(color: Color(0xFF222222)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                        borderSide: const BorderSide(color: Color(0xFFF97316), width: 1),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    ),
-                    onSubmitted: (_) => _sendMessage(),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                FloatingActionButton(
-                  onPressed: _sendMessage,
-                  elevation: 0,
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  child: const Icon(Icons.send, color: Colors.black),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
