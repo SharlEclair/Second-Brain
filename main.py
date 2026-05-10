@@ -194,6 +194,10 @@ class SaveAnswerRequest(BaseModel):
 
 # --- ROUTES ---
 
+@app.get("/")
+async def root():
+    return {"message": "🧠 Second Brain API is Online", "docs": "/docs"}
+
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok"}

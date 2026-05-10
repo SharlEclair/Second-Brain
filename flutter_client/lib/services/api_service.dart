@@ -38,19 +38,37 @@ class ApiService {
     if (baseUrl == null || baseUrl.isEmpty) {
       throw ServerException('Backend URL is not set. Please set it in Settings.', 0);
     }
-    final cleanBase = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
-    return '$cleanBase$endpoint';
+    // Remove all trailing slashes from base
+    String cleanBase = baseUrl.trim();
+    while (cleanBase.endsWith('/')) {
+      cleanBase = cleanBase.substring(0, cleanBase.length - 1);
+    }
+    // Ensure endpoint starts with a single slash
+    final cleanEndpoint = endpoint.startsWith('/') ? endpoint : '/$endpoint';
+    
+    return '$cleanBase$cleanEndpoint';
   }
 
-  /// Quick connectivity check — returns true if backend is reachable
-  Future<bool> isReachable() async {
+  /// Quick connectivity check — returns error message if failed, null if success
+  Future<String?> checkConnectivity() async {
     try {
       final apiUrl = await _buildUrl('/api/health');
-      final response = await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 5));
-      return response.statusCode == 200;
-    } catch (_) {
-      return false;
+      final response = await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) return null;
+      return 'Server returned ${response.statusCode}';
+    } on TimeoutException {
+      return 'Connection timed out (15s)';
+    } on SocketException catch (e) {
+      return 'Network unreachable: ${e.message}';
+    } catch (e) {
+      return e.toString();
     }
+  }
+
+  @Deprecated('Use checkConnectivity instead')
+  Future<bool> isReachable() async {
+    final err = await checkConnectivity();
+    return err == null;
   }
 
   Future<Map<String, dynamic>> ingestUrl(String url) async {
