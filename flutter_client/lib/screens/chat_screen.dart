@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../services/api_service.dart';
 import '../services/queue_service.dart';
+import '../screens/debug_logs_screen.dart';
 import 'settings_screen.dart';
 
 class ChatMessage {
@@ -33,16 +35,22 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   List<String> _queuedUrls = [];
   Map<String, String> _queueErrors = {};
   bool _isProcessingQueue = false;
+  String _currentStatus = "";
+  Timer? _statusTimer;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {}); // Refresh for FAB visibility
+    });
     _refreshQueue();
   }
 
   @override
   void dispose() {
+    _statusTimer?.cancel();
     _tabController.dispose();
     _textController.dispose();
     _urlController.dispose();
@@ -59,6 +67,35 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     }
   }
 
+  void _startStatusPolling() {
+    _statusTimer?.cancel();
+    _statusTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      try {
+        final status = await _apiService.getStatus();
+        final activeTasks = status['active_tasks'];
+        if (activeTasks is List && activeTasks.isNotEmpty) {
+          final lastTask = activeTasks.last;
+          if (mounted && lastTask is Map) {
+            setState(() {
+              _currentStatus = (lastTask['status'] ?? '').toString().toUpperCase();
+            });
+          }
+        }
+      } catch (_) {
+        // Silently ignore polling errors
+      }
+    });
+  }
+
+  void _stopStatusPolling() {
+    _statusTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _currentStatus = "";
+      });
+    }
+  }
+
   // --- URL Ingestion ---
 
   void _ingestUrl() async {
@@ -66,6 +103,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     if (url.isEmpty) return;
 
     setState(() => _isIngesting = true);
+    _startStatusPolling();
 
     try {
       final result = await _apiService.ingestUrl(url);
@@ -95,7 +133,6 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         );
       }
     } on ServerException catch (e) {
-      // Server IS reachable but returned an error — show it, don't queue
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -106,20 +143,22 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         );
       }
     } catch (e) {
-      // Unknown error — queue to be safe
       await _queueService.addToQueue(url);
       await _refreshQueue();
       if (mounted) {
         _urlController.clear();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('📌 Queued (error: ${e.toString().substring(0, (e.toString().length).clamp(0, 80))})'),
+            content: Text('📌 Queued (error: ${e.toString().split("\n").first})'),
             backgroundColor: const Color(0xFFF97316),
           ),
         );
       }
     } finally {
-      if (mounted) setState(() => _isIngesting = false);
+      if (mounted) {
+        setState(() => _isIngesting = false);
+        _stopStatusPolling();
+      }
     }
   }
 
@@ -130,21 +169,29 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       _isProcessingQueue = true;
       _queueErrors = {};
     });
+    _startStatusPolling();
 
-    final result = await _queueService.processQueue(_apiService);
-    await _refreshQueue();
-
-    if (mounted) {
-      setState(() {
-        _isProcessingQueue = false;
-        _queueErrors = result.errors;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Processed ${result.processed}/${result.total}${result.failed > 0 ? " · ${result.failed} failed" : ""}'),
-          backgroundColor: result.failed == 0 ? const Color(0xFF22C55E) : const Color(0xFFF97316),
-        ),
-      );
+    try {
+      final result = await _queueService.processQueue(_apiService);
+      await _refreshQueue();
+      if (mounted) {
+        setState(() {
+          _queueErrors = result.errors;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Processed ${result.processed}/${result.total}${result.failed > 0 ? " · ${result.failed} failed" : ""}'),
+            backgroundColor: result.failed == 0 ? const Color(0xFF22C55E) : const Color(0xFFF97316),
+          ),
+        );
+      }
+    } catch (e) {
+      DebugLogger.log("Queue processing failed: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessingQueue = false);
+        _stopStatusPolling();
+      }
     }
   }
 
@@ -248,6 +295,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     );
   }
 
+
+
   // --- Build ---
 
   @override
@@ -297,6 +346,20 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
           _buildQueueTab(),
         ],
       ),
+      floatingActionButton: _tabController.index == 1 && _queueCount > 0
+          ? FloatingActionButton.extended(
+              onPressed: _isProcessingQueue ? null : _processQueue,
+              backgroundColor: const Color(0xFFF97316),
+              foregroundColor: Colors.black,
+              icon: _isProcessingQueue 
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                : const Icon(Icons.bolt),
+              label: Text(_isProcessingQueue 
+                ? (_currentStatus.isNotEmpty ? _currentStatus : "PROCESSING...") 
+                : "PROCESS ALL", 
+                style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+            )
+          : null,
     );
   }
 
@@ -348,7 +411,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
               SizedBox(
                 height: 44,
                 child: ElevatedButton(
-                  onPressed: _isIngesting ? null : _ingestUrl,
+                  onPressed: (_isIngesting || _isProcessingQueue) ? null : _ingestUrl,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFF97316),
                     foregroundColor: Colors.black,
@@ -356,7 +419,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                   ),
                   child: _isIngesting
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    ? Text(_currentStatus.isNotEmpty ? _currentStatus : "INGESTING...", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 1))
                     : const Text("INGEST", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
                 ),
               ),

@@ -1,10 +1,11 @@
 fastapi
 uvicorn
 pydantic
-yt-dlp
-instaloader
+python-dotenv
 chromadb
 google-genai
 faster-whisper
-pillow
-python-dotenv
+yt-dlp
+instaloader
+Pillow
+requests

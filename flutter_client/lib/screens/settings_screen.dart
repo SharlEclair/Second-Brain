@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import 'debug_logs_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -139,6 +140,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
                 ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const DebugLogsScreen()));
+                },
+                icon: const Icon(Icons.bug_report_outlined, color: Colors.white24),
+                label: const Text("VIEW DEBUG LOGS", style: TextStyle(color: Colors.white24, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
               ),
             ),
             const SizedBox(height: 48),

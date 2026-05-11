@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "backend": "python main.py",
+    "backend": ".\\venv\\Scripts\\python main.py",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
