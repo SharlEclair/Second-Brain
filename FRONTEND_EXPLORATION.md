@@ -40,3 +40,19 @@ Both platforms share a consistent "Dark/Tech" aesthetic:
 - **Background**: Pure Black (`#050505`) / Panel Gray (`#111111`)
 - **Typography**: Inter (UI), JetBrains Mono (Tech), Georgia (Reading)
 - **Animations**: Subtle motion via `framer-motion` (Web) and native Flutter transitions (Mobile).
+
+## 2026-05-11 Frontend Changes
+
+### Web Dashboard
+- The React app now polls `/api/status` globally, so active ingestion is visible even when started from the Flutter app or Android share sheet.
+- The header shows a compact active-operation indicator with stage and progress when ingestion is running.
+- Failed recent ingests remain visible as a header warning until a newer status replaces them.
+- Mission Control now renders recent completed or failed operations in addition to active tasks.
+- The "Sync Vault" button now calls the backend sync endpoint instead of only toggling local spinner state.
+
+### Mobile App
+- Manual URL ingestion now tracks the matching backend task by URL and shows the current stage in the INGEST button.
+- Progress percentages from the backend are displayed where available.
+- Android "Share to Cortex" ingestions now poll `/api/status` while the long-running POST is active and surface stage updates through snackbars.
+- The mobile HTTP ingestion timeout was increased to 15 minutes so longer media has time to download, transcribe, analyze, save, and index.
+- `/api/status` polling now has its own timeout to avoid hanging the UI on weak networks.

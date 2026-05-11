@@ -69,3 +69,34 @@ The system includes a built-in Git sync mechanism. Ensure `PROJECT_VAULT_PATH` i
 
 ### Temporary Files
 Cortex creates temporary audio/image files during ingestion. The system automatically runs `cleanup_temp_files()` on startup, but you can manually delete any files starting with `temp_` if needed.
+
+## 2026-05-11 Configuration Notes
+
+### Gemini Model Chain
+The backend now uses a two-model Gemini chain:
+
+```text
+Primary:  models/gemini-2.5-flash-lite
+Fallback: models/gemini-2.5-flash
+```
+
+The fallback is only used after repeated busy or server-side failures from Google, such as rate limiting, temporary unavailability, overload, timeout, or 5xx responses.
+
+### Vault Paths
+`PROJECT_VAULT_PATH` is now read from `.env` and falls back to `./vault` when unset. `OBSIDIAN_INBOX_PATH` continues to support both `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_INBOX_PATH` for backwards compatibility.
+
+### Instagram Cookies
+Instagram carousel ingestion now tries `yt-dlp` first and Instaloader second. Both can use `cookies.txt` from the project root. If Instagram returns `403 Forbidden`, `Fetching Post metadata failed`, or login-required errors, refresh `cookies.txt` from an authenticated browser session and retry.
+
+### Status Monitoring
+Use `GET /api/status` to inspect live and recent operations. The response includes:
+
+```json
+{
+  "active_tasks": [],
+  "recent_tasks": [],
+  "task_count": 0
+}
+```
+
+Tasks include stage, progress, state, timestamps, URL, platform, and error fields. This endpoint powers Mission Control, the web header operation indicator, and mobile ingestion status.

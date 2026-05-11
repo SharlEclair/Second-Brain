@@ -37,6 +37,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   bool _isProcessingQueue = false;
   String _currentStatus = "";
   Timer? _statusTimer;
+  String? _statusFilterUrl;
 
   @override
   void initState() {
@@ -67,17 +68,43 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     }
   }
 
-  void _startStatusPolling() {
+  String _canonicalUrl(String value) {
+    var cleaned = value.trim();
+    final queryIndex = cleaned.indexOf('?');
+    if (queryIndex >= 0) cleaned = cleaned.substring(0, queryIndex);
+    while (cleaned.endsWith('/')) {
+      cleaned = cleaned.substring(0, cleaned.length - 1);
+    }
+    return cleaned;
+  }
+
+  void _startStatusPolling({String? url}) {
     _statusTimer?.cancel();
+    _statusFilterUrl = url;
+    if (mounted) {
+      setState(() => _currentStatus = "STARTING...");
+    }
     _statusTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       try {
         final status = await _apiService.getStatus();
         final activeTasks = status['active_tasks'];
         if (activeTasks is List && activeTasks.isNotEmpty) {
-          final lastTask = activeTasks.last;
-          if (mounted && lastTask is Map) {
+          Map? selectedTask;
+          if (_statusFilterUrl != null) {
+            final target = _canonicalUrl(_statusFilterUrl!);
+            for (final task in activeTasks) {
+              if (task is Map && _canonicalUrl((task['url'] ?? '').toString()) == target) {
+                selectedTask = task;
+                break;
+              }
+            }
+          }
+          selectedTask ??= activeTasks.last is Map ? activeTasks.last as Map : null;
+          if (mounted && selectedTask != null) {
+            final progress = selectedTask['progress'];
+            final progressText = progress is num ? ' ${progress.round()}%' : '';
             setState(() {
-              _currentStatus = (lastTask['status'] ?? '').toString().toUpperCase();
+              _currentStatus = '${(selectedTask!['status'] ?? '').toString().toUpperCase()}$progressText';
             });
           }
         }
@@ -89,6 +116,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
 
   void _stopStatusPolling() {
     _statusTimer?.cancel();
+    _statusFilterUrl = null;
     if (mounted) {
       setState(() {
         _currentStatus = "";
@@ -103,7 +131,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     if (url.isEmpty) return;
 
     setState(() => _isIngesting = true);
-    _startStatusPolling();
+    _startStatusPolling(url: url);
 
     try {
       final result = await _apiService.ingestUrl(url);
@@ -586,7 +614,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                     : const Icon(Icons.play_arrow),
                   label: Text(
-                    _isProcessingQueue ? "PROCESSING..." : "PROCESS ALL ($_queueCount)",
+                    _isProcessingQueue ? (_currentStatus.isNotEmpty ? _currentStatus : "PROCESSING...") : "PROCESS ALL ($_queueCount)",
                     style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 13),
                   ),
                   style: ElevatedButton.styleFrom(

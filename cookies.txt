@@ -9,6 +9,6 @@
 .instagram.com	TRUE	/	TRUE	1812611480	mid	afrplwALAAHjxV4rOw5IwRNoVU32
 .instagram.com	TRUE	/	TRUE	1779047681	dpr	1.25
 .instagram.com	TRUE	/	TRUE	1779047681	wd	1536x730
-.instagram.com	TRUE	/	TRUE	1813034656	csrftoken	5HZnofGarL5wFtbxLIPwEQjDD9MQRnTg
+.instagram.com	TRUE	/	TRUE	1813072215	csrftoken	5HZnofGarL5wFtbxLIPwEQjDD9MQRnTg
 .instagram.com	TRUE	/	TRUE	1786218883	ds_user_id	4963583628
 .instagram.com	TRUE	/	TRUE	0	rur	"HIL\0544963583628\0541809978882:01fea9a0fb4bc52b3ef7da2594852834d3bc62634173a08fbcfdf33f90963359a7e36d73"

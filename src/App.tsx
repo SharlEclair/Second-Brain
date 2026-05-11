@@ -40,6 +40,19 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+interface OperationTask {
+  task_id?: string;
+  url: string;
+  platform?: string;
+  status: string;
+  state?: string;
+  progress?: number;
+  start_time: string;
+  updated_at?: string;
+  finished_at?: string | null;
+  error?: string | null;
+}
+
 export default function App() {
   const [url, setUrl] = useState('');
   const [loadingNote, setLoadingNote] = useState(false);
@@ -55,18 +68,26 @@ export default function App() {
   const [ingestStatus, setIngestStatus] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<{ type: string, content: string } | null>(null);
+
   const [copied, setCopied] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeModel, setActiveModel] = useState('GEMINI-2.5-FLASH-LITE');
+  const [activeTasks, setActiveTasks] = useState<OperationTask[]>([]);
+  const [recentTasks, setRecentTasks] = useState<OperationTask[]>([]);
+  const [isChatMinimized, setIsChatMinimized] = useState(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchNotes();
+    fetchOperationStatus();
     fetch('/api/config').then(r => r.json()).then(d => {
       if (d.model) setActiveModel(d.model.replace('models/', '').toUpperCase());
     }).catch(() => {});
+
+    const interval = setInterval(fetchOperationStatus, 2000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -75,6 +96,27 @@ export default function App() {
     }
   }, [messages]);
 
+  useEffect(() => {
+    const handleGlobalPaste = (e: ClipboardEvent) => {
+      // Don't auto-ingest if user is actively typing in a form field
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+      const pastedText = e.clipboardData?.getData('text');
+      if (pastedText && pastedText.startsWith('http')) {
+        setUrl(pastedText);
+        // We need a slight delay to ensure setUrl state is updated before triggering
+        setTimeout(() => {
+          const form = document.querySelector('form');
+          if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        }, 50);
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, []);
+
   const fetchNotes = async () => {
     try {
       const res = await fetch('/api/notes');
@@ -82,6 +124,17 @@ export default function App() {
       setNotes(data);
     } catch (e) {
       console.error("Failed to fetch notes", e);
+    }
+  };
+
+  const fetchOperationStatus = async () => {
+    try {
+      const res = await fetch('/api/status');
+      const data = await res.json();
+      setActiveTasks(data.active_tasks || []);
+      setRecentTasks(data.recent_tasks || []);
+    } catch (e) {
+      console.error("Failed to fetch operation status", e);
     }
   };
 
@@ -126,6 +179,7 @@ export default function App() {
             setIngestStatus(data.message);
           } else if (data.status === 'success' || data.status === 'existing') {
             await fetchNotes();
+            await fetchOperationStatus();
             handleSelectNote(data.note);
             setUrl('');
             setSuccess(data.status === 'existing' ? 'Note already exists' : 'Note successfully ingested');
@@ -141,6 +195,7 @@ export default function App() {
     } finally {
       setLoadingNote(false);
       setIngestStatus(null);
+      fetchOperationStatus();
     }
   };
 
@@ -236,6 +291,9 @@ export default function App() {
     }
   };
 
+  const visibleTask = activeTasks[0] || recentTasks.find(task => task.state === 'failed');
+  const visibleTaskProgress = typeof visibleTask?.progress === 'number' ? `${visibleTask.progress}%` : null;
+
   return (
     <div className="flex h-screen w-full bg-[#050505] font-sans text-slate-300 overflow-hidden p-0 sm:p-2">
       {/* Sidebar - Vault Explorer */}
@@ -247,27 +305,14 @@ export default function App() {
             </div>
             <h1 className="font-display font-light italic text-xl tracking-tight text-white glow-text">BRAIN_VAULT</h1>
           </div>
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={() => { setShowDashboard(!showDashboard); if (!showDashboard) setSelectedNote(null); }}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-widest transition-all rounded-md",
-                  showDashboard 
-                    ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/30" 
-                    : "text-zinc-500 hover:text-white border border-transparent hover:bg-white/5"
-                )}
-              >
-                <Activity className="w-4 h-4" />
-                {showDashboard ? "Exit Mission Control" : "Mission Control"}
-              </button>
-              <button 
-                onClick={() => setIsSyncing(!isSyncing)}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-white transition-all rounded-md hover:bg-white/5"
-              >
-                <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
-                Sync Vault
-              </button>
-            </div>
+          <button 
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-white transition-all rounded-md hover:bg-white/5"
+          >
+            <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
+            Sync Vault
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -370,10 +415,45 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4 ml-8">
+            {visibleTask && (
+              <div className={cn(
+                "hidden xl:flex items-center gap-2 max-w-xs border rounded-sm px-3 py-2 bg-black font-mono",
+                visibleTask.state === 'failed'
+                  ? "border-red-500/30 text-red-400"
+                  : "border-orange-500/30 text-orange-400"
+              )}>
+                {visibleTask.state === 'failed' ? (
+                  <Shield className="w-4 h-4 shrink-0" />
+                ) : (
+                  <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                )}
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-widest truncate">
+                    {visibleTask.state === 'failed' ? 'Last ingest failed' : 'Active ingest'}
+                    {visibleTaskProgress ? ` - ${visibleTaskProgress}` : ''}
+                  </div>
+                  <div className="text-[10px] text-slate-400 truncate">{visibleTask.status}</div>
+                </div>
+              </div>
+            )}
             <div className="h-4 w-px bg-slate-800" />
-            <div className="text-right">
-              <p className="text-[10px] uppercase text-slate-500 tracking-widest leading-none mb-1">Active Model</p>
-              <p className="text-xs font-mono text-white">{activeModel}</p>
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => { setShowDashboard(!showDashboard); if (!showDashboard) setSelectedNote(null); }}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-widest transition-all rounded-sm",
+                  showDashboard 
+                    ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/50 shadow-[0_0_10px_rgba(99,102,241,0.2)]" 
+                    : "text-slate-500 hover:text-white border border-slate-800 hover:border-slate-600 bg-slate-900/50"
+                )}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                {showDashboard ? "Exit Status" : "Mission Control"}
+              </button>
+              <div className="text-right">
+                <p className="text-[10px] uppercase text-slate-500 tracking-widest leading-none mb-1">Active Model</p>
+                <p className="text-xs font-mono text-white">{activeModel}</p>
+              </div>
             </div>
           </div>
         </header>
@@ -497,63 +577,87 @@ export default function App() {
           </div>
 
           {/* AI Chat Sidebar */}
-          <section className="w-[400px] border border-slate-800 bg-black/80 backdrop-blur-md rounded-sm flex flex-col hardware-border shadow-2xl">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-              <h2 className="text-xs uppercase text-slate-500 tracking-widest font-bold">Terminal / Chat</h2>
-              <span className="text-[10px] font-mono bg-slate-800 px-2 py-1 text-slate-400 rounded-sm">RAG_ENABLED</span>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono text-sm">
-              {messages.length === 0 && (
-                <div className="text-left text-slate-500">
-                  <p>{">"} Ask questions about your ingested knowledge.</p>
-                  <p>{">"} Cortex will synthesize answers from your vault.</p>
-                </div>
-              )}
-              {messages.map((msg) => (
-                <div 
-                  key={msg.id} 
-                  className={cn(
-                    "flex flex-col gap-1.5",
-                    msg.isAi ? "items-start border-l border-slate-700 pl-4 py-2 bg-slate-900/30" : "items-end"
-                  )}
-                >
-                  <div className={cn(
-                    "text-xs leading-relaxed max-w-[95%]",
-                    msg.isAi 
-                      ? "text-slate-300 font-mono" 
-                      : "bg-orange-500 text-black font-medium py-2 px-3 rounded-sm"
-                  )}>
-                    {msg.isAi ? <ReactMarkdown>{msg.text}</ReactMarkdown> : msg.text}
+          <section className={cn(
+            "transition-all duration-500 ease-in-out flex flex-col hardware-border shadow-2xl relative",
+            isChatMinimized ? "w-12 h-12 self-end mt-auto" : "w-[400px] border border-slate-800 bg-black/80 backdrop-blur-md rounded-sm"
+          )}>
+            {isChatMinimized ? (
+              <button 
+                onClick={() => setIsChatMinimized(false)}
+                className="w-full h-full flex items-center justify-center bg-orange-500 text-black rounded-sm hover:bg-orange-400 transition-colors shadow-[0_0_15px_rgba(249,115,22,0.4)]"
+                title="Restore Terminal"
+              >
+                <Send className="w-5 h-5 -rotate-45" />
+              </button>
+            ) : (
+              <>
+                <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-black/40">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xs uppercase text-slate-500 tracking-widest font-bold">Terminal / Chat</h2>
+                    <span className="text-[10px] font-mono bg-slate-800 px-2 py-1 text-slate-400 rounded-sm">RAG_ENABLED</span>
                   </div>
+                  <button 
+                    onClick={() => setIsChatMinimized(true)}
+                    className="p-1 hover:bg-slate-800 rounded transition-colors text-slate-500 hover:text-white"
+                    title="Minimize"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
                 </div>
-              ))}
-              {isTyping && (
-                <div className="text-orange-500 animate-pulse font-mono text-sm pl-4">
-                  {"_"}
-                </div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
 
-            <div className="p-4 border-t border-slate-800 bg-[#111]">
-              <form onSubmit={handleChat} className="relative">
-                <input 
-                  type="text" 
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="ASK YOUR BRAIN..."
-                  className="w-full bg-black border border-slate-800 rounded-sm py-3 pl-4 pr-12 text-sm text-white font-mono placeholder-slate-700 outline-none focus:border-orange-500/50 transition-colors"
-                />
-                <button 
-                  type="submit"
-                  disabled={!chatInput.trim() || isTyping}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-orange-500 hover:text-orange-400 disabled:text-slate-700 transition-colors"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </form>
-            </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono text-sm">
+                  {messages.length === 0 && (
+                    <div className="text-left text-slate-500">
+                      <p>{">"} Ask questions about your ingested knowledge.</p>
+                      <p>{">"} Cortex will synthesize answers from your vault.</p>
+                    </div>
+                  )}
+                  {messages.map((msg) => (
+                    <div 
+                      key={msg.id} 
+                      className={cn(
+                        "flex flex-col gap-1.5",
+                        msg.isAi ? "items-start border-l border-slate-700 pl-4 py-2 bg-slate-900/30" : "items-end"
+                      )}
+                    >
+                      <div className={cn(
+                        "text-xs leading-relaxed max-w-[95%]",
+                        msg.isAi 
+                          ? "text-slate-300 font-mono" 
+                          : "bg-orange-500 text-black font-medium py-2 px-3 rounded-sm"
+                      )}>
+                        {msg.isAi ? <ReactMarkdown>{msg.text}</ReactMarkdown> : msg.text}
+                      </div>
+                    </div>
+                  ))}
+                  {isTyping && (
+                    <div className="text-orange-500 animate-pulse font-mono text-sm pl-4">
+                      {"_"}
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                <div className="p-4 border-t border-slate-800 bg-[#111]">
+                  <form onSubmit={handleChat} className="relative">
+                    <input 
+                      type="text" 
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder="ASK YOUR BRAIN..."
+                      className="w-full bg-black border border-slate-800 rounded-sm py-3 pl-4 pr-12 text-sm text-white font-mono placeholder-slate-700 outline-none focus:border-orange-500/50 transition-colors"
+                    />
+                    <button 
+                      type="submit"
+                      disabled={!chatInput.trim() || isTyping}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-orange-500 hover:text-orange-400 disabled:text-slate-700 transition-colors"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </form>
+                </div>
+              </>
+            )}
           </section>
         </div>
       </main>

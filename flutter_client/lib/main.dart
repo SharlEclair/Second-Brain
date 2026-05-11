@@ -21,6 +21,8 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   final ApiService _apiService = ApiService();
   final QueueService _queueService = QueueService();
+  Timer? _sharedStatusTimer;
+  String _lastSharedStatus = "";
 
   @override
   void initState() {
@@ -52,7 +54,52 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
   @override
   void dispose() {
     _intentDataStreamSubscription.cancel();
+    _sharedStatusTimer?.cancel();
     super.dispose();
+  }
+
+  String _canonicalUrl(String value) {
+    var cleaned = value.trim();
+    final queryIndex = cleaned.indexOf('?');
+    if (queryIndex >= 0) cleaned = cleaned.substring(0, queryIndex);
+    while (cleaned.endsWith('/')) {
+      cleaned = cleaned.substring(0, cleaned.length - 1);
+    }
+    return cleaned;
+  }
+
+  void _startSharedStatusPolling(String url) {
+    _sharedStatusTimer?.cancel();
+    _lastSharedStatus = "";
+    final target = _canonicalUrl(url);
+    _sharedStatusTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      try {
+        final status = await _apiService.getStatus();
+        final activeTasks = status['active_tasks'];
+        if (activeTasks is! List) return;
+
+        for (final task in activeTasks) {
+          if (task is Map && _canonicalUrl((task['url'] ?? '').toString()) == target) {
+            final progress = task['progress'];
+            final progressText = progress is num ? ' ${progress.round()}%' : '';
+            final message = '${(task['status'] ?? 'Processing').toString()}$progressText';
+            if (message != _lastSharedStatus) {
+              _lastSharedStatus = message;
+              _showToast(message);
+            }
+            return;
+          }
+        }
+      } catch (_) {
+        // Status polling is best-effort for shared intents.
+      }
+    });
+  }
+
+  void _stopSharedStatusPolling() {
+    _sharedStatusTimer?.cancel();
+    _sharedStatusTimer = null;
+    _lastSharedStatus = "";
   }
 
   void _handleSharedData(String sharedText) async {
@@ -66,6 +113,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
     }
 
     _showToast("Processing: $sharedText");
+    _startSharedStatusPolling(sharedText);
     
     try {
       final result = await _apiService.ingestUrl(sharedText);
@@ -85,10 +133,13 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
       // Unknown — queue to be safe
       await _queueService.addToQueue(sharedText);
       _showToast("📌 Queued (${e.toString().substring(0, (e.toString().length).clamp(0, 60))})");
+    } finally {
+      _stopSharedStatusPolling();
     }
   }
 
   void _showToast(String message) {
+    _scaffoldMessengerKey.currentState?.hideCurrentSnackBar();
     _scaffoldMessengerKey.currentState?.showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 4)),
     );

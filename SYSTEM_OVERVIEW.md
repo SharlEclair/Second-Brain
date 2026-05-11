@@ -27,3 +27,10 @@ The system is built on a "Secure Node" architecture:
 - **Database**: ChromaDB (Vector) + Local JSON (Index)
 - **Frameworks**: FastAPI (Backend), React (Web), Flutter (Mobile)
 - **Tools**: yt-dlp (Acquisition), Instaloader (Instagram), Obsidian (Organization)
+
+## 2026-05-11 Reliability Update
+
+- **Transcript Persistence**: Video and carousel-video ingests now preserve the raw transcript in the generated Markdown note under `## Raw Transcript`. The transcript is also included in the vector index so RAG can retrieve source wording, not only the AI-formatted summary.
+- **Operation Visibility**: The backend now tracks both active and recent operations with `task_id`, stage, state, progress, timestamps, and error details. This allows the web dashboard and mobile app to show ingestion progress even for operations started from another client.
+- **Instagram Carousel Resilience**: Instagram `/p/` ingestion now tries `yt-dlp` first, falls back to Instaloader, and reports stale or missing cookie problems clearly when Instagram blocks metadata access.
+- **Gemini Fallback Chain**: AI synthesis uses `models/gemini-2.5-flash-lite` first and falls back to `models/gemini-2.5-flash` when Google returns repeated busy or server-side failures.

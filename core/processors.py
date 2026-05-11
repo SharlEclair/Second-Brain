@@ -1,19 +1,34 @@
-import os
-import json
-import uuid
+import asyncio
+import glob
+import hashlib
 import io
+import json
+import os
+import random
+import re
 import shutil
-import datetime
+import time
+import uuid
+from typing import Any
+
 from PIL import Image
 from google import genai
 from google.genai import types
 from faster_whisper import WhisperModel
-import hashlib
-import yt_dlp
 import instaloader
-from .config import GEMINI_API_KEY, AI_MODEL, TAGS_LIST
-from .state import ops_manager, get_url_index, save_url_index
+import yt_dlp
+
+from .config import GEMINI_API_KEY, AI_MODEL_CHAIN, TAGS_LIST
+from .state import ops_manager
 from .utils import get_platform_from_url
+
+
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+MEDIA_EXTENSIONS = IMAGE_EXTENSIONS + (".mp4", ".m4a", ".mp3", ".webm", ".mov", ".wav", ".ogg", ".aac")
+VIDEO_EXTENSIONS = (".mp4", ".webm", ".mov")
+AUDIO_EXTENSIONS = (".m4a", ".mp3", ".wav", ".ogg", ".aac", ".webm", ".mp4", ".mov")
+RETRYABLE_GEMINI_STATUS_CODES = {429, 500, 502, 503, 504}
+
 
 def calculate_md5(file_path):
     hash_md5 = hashlib.md5()
@@ -22,18 +37,82 @@ def calculate_md5(file_path):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
+
+def calculate_composite_md5(file_paths):
+    hash_md5 = hashlib.md5()
+    for file_path in sorted(file_paths):
+        hash_md5.update(os.path.basename(file_path).encode("utf-8"))
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+    return hash_md5.hexdigest()
+
+
+def _find_files(folder, extensions=MEDIA_EXTENSIONS):
+    if not os.path.exists(folder):
+        return []
+    files = []
+    for root, _, names in os.walk(folder):
+        for name in names:
+            if name.lower().endswith(extensions):
+                files.append(os.path.join(root, name))
+    return sorted(files)
+
+
+def _find_downloaded_media(prefix):
+    return sorted(path for path in glob.glob(f"{prefix}.*") if os.path.isfile(path))
+
+
+def _build_ytdlp_opts(outtmpl, quiet=True):
+    opts = {
+        "outtmpl": outtmpl,
+        "quiet": quiet,
+        "no_warnings": quiet,
+        "retries": 2,
+        "fragment_retries": 2,
+        "windowsfilenames": True,
+    }
+    if os.path.exists("cookies.txt"):
+        opts["cookiefile"] = "cookies.txt"
+    return opts
+
+
+def _metadata_from_info(info):
+    if not isinstance(info, dict):
+        return {"description": "", "uploader": "Unknown"}
+
+    entries = info.get("entries") or []
+    first_entry = next((entry for entry in entries if isinstance(entry, dict)), {})
+
+    return {
+        "description": (
+            info.get("description")
+            or info.get("title")
+            or first_entry.get("description")
+            or first_entry.get("title")
+            or ""
+        ),
+        "uploader": (
+            info.get("uploader")
+            or info.get("uploader_id")
+            or info.get("channel")
+            or first_entry.get("uploader")
+            or first_entry.get("uploader_id")
+            or "Unknown"
+        ),
+    }
+
+
 # --- INITIALIZATION ---
 print("Configuring AI & Transcription Models...")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 try:
-    # Optimized: Using float16 for better speed/memory efficiency
     whisper_model = WhisperModel("large-v3-turbo", device="auto", compute_type="float16")
 except Exception as e:
     print(f"Fallback to int8: {e}")
     whisper_model = WhisperModel("base", device="auto", compute_type="int8")
 
-L = instaloader.Instaloader(download_video_thumbnails=False, save_metadata=False, post_metadata_txt_pattern="")
 
 SYSTEM_PROMPT = f"""
 You are an AI organizing data for a personal Obsidian Second Brain.
@@ -57,120 +136,373 @@ You MUST respond strictly with this JSON structure:
 }}
 """
 
-import asyncio
+
+def _is_retryable_gemini_error(error: Exception) -> bool:
+    status_code = getattr(error, "status_code", None) or getattr(error, "code", None)
+    if status_code in RETRYABLE_GEMINI_STATUS_CODES:
+        return True
+
+    message = str(error).lower()
+    retryable_markers = (
+        "429",
+        "500",
+        "502",
+        "503",
+        "504",
+        "resource_exhausted",
+        "unavailable",
+        "deadline",
+        "timeout",
+        "temporarily",
+        "busy",
+        "overloaded",
+    )
+    return any(marker in message for marker in retryable_markers)
+
+
+def generate_content_with_fallback(contents: Any, config=None, purpose="generate_content"):
+    last_error = None
+
+    for model_index, model in enumerate(AI_MODEL_CHAIN):
+        attempts = 3 if model_index == 0 else 2
+        for attempt in range(1, attempts + 1):
+            try:
+                response = client.models.generate_content(model=model, contents=contents, config=config)
+                return response, model
+            except Exception as error:
+                last_error = error
+                if not _is_retryable_gemini_error(error):
+                    raise
+
+                is_last_attempt_for_model = attempt == attempts
+                is_last_model = model_index == len(AI_MODEL_CHAIN) - 1
+                if is_last_attempt_for_model and is_last_model:
+                    break
+
+                delay = min(8, (2 ** (attempt - 1)) + random.random())
+                print(f"Gemini {purpose} failed on {model} attempt {attempt}: {error}. Retrying in {delay:.1f}s")
+                time.sleep(delay)
+
+    raise last_error
+
+
+def _parse_json_response(text, fallback_content):
+    raw_text = (text or "").strip()
+    if not raw_text:
+        return fallback_content
+
+    candidates = [raw_text]
+    brace_start = raw_text.find("{")
+    brace_end = raw_text.rfind("}")
+    if brace_start >= 0 and brace_end > brace_start:
+        candidates.append(raw_text[brace_start : brace_end + 1])
+
+    for candidate in candidates:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            cleaned = re.sub(r"[\x00-\x1f]+", " ", candidate)
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError:
+                continue
+
+    return fallback_content
+
+
+def _fallback_ai_data(source_text, reason="AI formatting failed"):
+    source_text = (source_text or "").strip()
+    summary = "Content was captured, but AI formatting could not be completed."
+    formatted = source_text if source_text else "*No extractable text was found.*"
+    return {
+        "category": "General",
+        "tags": ["#uncategorized"],
+        "summary": summary,
+        "formatted_content": f"*(Note: {reason}; preserved source text below.)*\n\n{formatted}",
+    }
+
 
 # --- Sync helpers (run in thread pool to avoid blocking event loop) ---
 
-def _sync_download_reel(url, ydl_opts, temp_audio):
-    """Synchronous yt-dlp download — runs in thread pool."""
+def _sync_download_reel(url, ydl_opts, temp_prefix):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
-    content_hash = calculate_md5(temp_audio)
+
+    media_files = _find_downloaded_media(temp_prefix)
+    audio_candidates = [path for path in media_files if path.lower().endswith(AUDIO_EXTENSIONS)]
+    if not audio_candidates:
+        raise RuntimeError("Media download completed, but no audio/video file was created.")
+
+    audio_path = max(audio_candidates, key=lambda path: os.path.getsize(path))
+    if os.path.getsize(audio_path) == 0:
+        raise RuntimeError("Downloaded audio/video file is empty.")
+
+    metadata = _metadata_from_info(info)
     return {
-        'description': info.get('description', ''),
-        'uploader': info.get('uploader', 'Unknown'),
-        'content_hash': content_hash,
+        "audio_path": audio_path,
+        "description": metadata["description"],
+        "uploader": metadata["uploader"],
+        "content_hash": calculate_md5(audio_path),
+        "media_size": os.path.getsize(audio_path),
     }
 
-def _sync_transcribe(temp_audio):
-    """Synchronous whisper transcription — runs in thread pool."""
-    segments, _ = whisper_model.transcribe(temp_audio)
-    return "".join([s.text for s in segments]).strip()
 
-def _sync_download_images(post_shortcode, download_path):
-    """Synchronous Instaloader download — runs in thread pool."""
+def _sync_transcribe(media_path):
+    segments, _ = whisper_model.transcribe(media_path)
+    texts = [segment.text.strip() for segment in segments if segment.text and segment.text.strip()]
+    return " ".join(texts).strip()
+
+
+def _sync_download_instagram_with_ytdlp(url, download_path):
+    os.makedirs(download_path, exist_ok=True)
+    outtmpl = os.path.join(download_path, "%(id)s_%(autonumber)s.%(ext)s")
+    ydl_opts = _build_ytdlp_opts(outtmpl)
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+
+    media_files = _find_files(download_path)
+    if not media_files:
+        raise RuntimeError("yt-dlp did not download any Instagram carousel media.")
+
+    metadata = _metadata_from_info(info)
+    return {
+        "source": "yt-dlp",
+        "description": metadata["description"],
+        "uploader": metadata["uploader"],
+        "media_files": media_files,
+    }
+
+
+def _sync_download_instagram_with_instaloader(post_shortcode, download_path):
+    loader = instaloader.Instaloader(
+        download_video_thumbnails=False,
+        save_metadata=False,
+        post_metadata_txt_pattern="",
+    )
     cookies_file = "cookies.txt"
     if os.path.exists(cookies_file):
         try:
             import http.cookiejar
-            cj = http.cookiejar.MozillaCookieJar(cookies_file)
-            cj.load(ignore_discard=True, ignore_expires=True)
-            for cookie in cj:
-                L.context._session.cookies.set_cookie(cookie)
-        except Exception as e:
-            print(f"Cookie load warning: {e}")
-    
-    post = instaloader.Post.from_shortcode(L.context, post_shortcode)
-    L.download_post(post, target=download_path)
-    images = [os.path.join(download_path, f) for f in os.listdir(download_path) if f.endswith(('.jpg', '.jpeg', '.webp'))]
-    return post, images
 
-def _sync_analyze_images(images):
-    """Synchronous image analysis via Gemini — runs in thread pool."""
-    content_parts = [f"{SYSTEM_PROMPT}\n\nExtract knowledge from these images."]
+            cookie_jar = http.cookiejar.MozillaCookieJar(cookies_file)
+            cookie_jar.load(ignore_discard=True, ignore_expires=True)
+            for cookie in cookie_jar:
+                loader.context._session.cookies.set_cookie(cookie)
+        except Exception as error:
+            print(f"Cookie load warning: {error}")
+
+    post = instaloader.Post.from_shortcode(loader.context, post_shortcode)
+    loader.download_post(post, target=download_path)
+    media_files = _find_files(download_path)
+    if not media_files:
+        raise RuntimeError("Instaloader did not download any Instagram carousel media.")
+
+    return {
+        "source": "instaloader",
+        "description": post.caption or "",
+        "uploader": post.owner_username or "Unknown",
+        "media_files": media_files,
+    }
+
+
+def _sync_download_instagram_post(url, post_shortcode, download_path):
+    ytdlp_error = None
+    try:
+        return _sync_download_instagram_with_ytdlp(url, download_path)
+    except Exception as error:
+        ytdlp_error = error
+        if os.path.exists(download_path):
+            shutil.rmtree(download_path)
+
+    try:
+        return _sync_download_instagram_with_instaloader(post_shortcode, download_path)
+    except Exception as instaloader_error:
+        raise RuntimeError(
+            "Instagram metadata/media fetch failed. Refresh cookies.txt or retry later; "
+            f"yt-dlp error: {ytdlp_error}; Instaloader error: {instaloader_error}"
+        ) from instaloader_error
+
+
+def _sync_analyze_images(images, description="", transcript_text=""):
+    context = "\n\n".join(
+        part
+        for part in [
+            f"{SYSTEM_PROMPT}\n\nExtract knowledge from these images.",
+            f"Caption/description:\n{description}" if description else "",
+            f"Video/audio transcript from this carousel:\n{transcript_text}" if transcript_text else "",
+        ]
+        if part
+    )
+    content_parts = [context]
+
     for img_path in images:
         with Image.open(img_path) as img:
             img.thumbnail((1024, 1024))
-            if img.mode != "RGB": img = img.convert("RGB")
+            if img.mode != "RGB":
+                img = img.convert("RGB")
             buf = io.BytesIO()
-            img.save(buf, format='JPEG')
+            img.save(buf, format="JPEG")
             content_parts.append(types.Part.from_bytes(data=buf.getvalue(), mime_type="image/jpeg"))
 
-    response = client.models.generate_content(model=AI_MODEL, contents=content_parts, config=types.GenerateContentConfig(response_mime_type="application/json"))
-    return json.loads(response.text.strip())
+    fallback_text = "\n\n".join(part for part in [description, transcript_text] if part)
+    response, model_used = generate_content_with_fallback(
+        contents=content_parts,
+        config=types.GenerateContentConfig(response_mime_type="application/json"),
+        purpose="image_analysis",
+    )
+    ai_data = _parse_json_response(response.text, _fallback_ai_data(fallback_text, "AI image JSON parsing failed"))
+    ai_data["_model_used"] = model_used
+    return ai_data
 
-def _sync_analyze_text(raw_text):
-    """Synchronous text analysis via Gemini — runs in thread pool."""
-    prompt = f"{SYSTEM_PROMPT}\n\nTranscript:\n{raw_text}"
-    response = client.models.generate_content(model=AI_MODEL, contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
-    return json.loads(response.text.strip())
+
+def _sync_analyze_text(raw_text, description=""):
+    analysis_text = "\n\n".join(part for part in [raw_text, f"Caption/description:\n{description}" if description else ""] if part)
+    prompt = f"{SYSTEM_PROMPT}\n\nTranscript:\n{analysis_text}"
+    response, model_used = generate_content_with_fallback(
+        contents=prompt,
+        config=types.GenerateContentConfig(response_mime_type="application/json"),
+        purpose="text_analysis",
+    )
+    ai_data = _parse_json_response(response.text, _fallback_ai_data(analysis_text, "AI text JSON parsing failed"))
+    ai_data["_model_used"] = model_used
+    return ai_data
+
+
+def _cleanup_paths(paths):
+    for path in paths:
+        try:
+            if os.path.isfile(path):
+                os.remove(path)
+            elif os.path.isdir(path):
+                shutil.rmtree(path)
+        except Exception as error:
+            print(f"Cleanup warning for {path}: {error}")
+
 
 # --- Async processors (non-blocking, event loop stays free) ---
 
 async def process_image_post(url: str, task_id: str = None, status_callback=None) -> dict:
-    if status_callback: await status_callback("Downloading Images")
-    if task_id: ops_manager.update_task(task_id, "Downloading Images")
-    
+    if status_callback:
+        await status_callback("Downloading Instagram carousel media")
+    if task_id:
+        ops_manager.update_task(task_id, "Downloading Instagram carousel media", progress=20)
+
     parts = url.split("/")
     post_shortcode = parts[-2] if len(parts[-2]) > 3 else parts[-3]
-    download_path = f"temp_{post_shortcode}"
+    download_path = f"temp_{post_shortcode}_{uuid.uuid4().hex[:8]}"
 
     try:
-        # Stage 1: Download (in thread — non-blocking)
-        post, images = await asyncio.to_thread(_sync_download_images, post_shortcode, download_path)
-        
-        # Stage 2: AI Analysis (in thread — non-blocking)
-        if status_callback: await status_callback("AI Analyzing Images")
-        if task_id: ops_manager.update_task(task_id, "AI Analyzing Images")
-        ai_data = await asyncio.to_thread(_sync_analyze_images, images)
-        
-        content_hash = calculate_md5(images[0])
-        
-        if os.path.exists(download_path): shutil.rmtree(download_path)
-        return {"uploader": post.owner_username, "description": post.caption or "", "url": url, "type": "instagram-carousel", "platform": "instagram", "ai_data": ai_data, "content_hash": content_hash}
-    except Exception as e:
-        if os.path.exists(download_path): shutil.rmtree(download_path)
-        raise e
+        download_result = await asyncio.to_thread(_sync_download_instagram_post, url, post_shortcode, download_path)
+        media_files = download_result["media_files"]
+        image_files = [path for path in media_files if path.lower().endswith(IMAGE_EXTENSIONS)]
+        transcript_media = [path for path in media_files if path.lower().endswith(VIDEO_EXTENSIONS)]
+
+        if status_callback:
+            await status_callback("Hashing carousel media")
+        if task_id:
+            ops_manager.update_task(task_id, "Hashing carousel media", progress=35)
+        content_hash = calculate_composite_md5(media_files)
+
+        transcript_parts = []
+        for index, media_path in enumerate(transcript_media, start=1):
+            if status_callback:
+                await status_callback(f"Transcribing carousel video {index}/{len(transcript_media)}")
+            if task_id:
+                ops_manager.update_task(task_id, f"Transcribing carousel video {index}/{len(transcript_media)}", progress=45)
+            transcript = await asyncio.to_thread(_sync_transcribe, media_path)
+            if transcript:
+                transcript_parts.append(transcript)
+
+        raw_transcript = "\n\n".join(transcript_parts).strip()
+        transcript_status = "complete" if raw_transcript else ("not_applicable" if not transcript_media else "empty")
+
+        if status_callback:
+            await status_callback("AI analyzing carousel")
+        if task_id:
+            ops_manager.update_task(task_id, "AI analyzing carousel", progress=70)
+
+        description = download_result["description"]
+        if image_files:
+            ai_data = await asyncio.to_thread(_sync_analyze_images, image_files, description, raw_transcript)
+        else:
+            source_text = raw_transcript or description
+            ai_data = await asyncio.to_thread(_sync_analyze_text, source_text, description)
+
+        _cleanup_paths([download_path])
+        return {
+            "uploader": download_result["uploader"],
+            "description": description,
+            "url": url,
+            "type": "instagram-carousel",
+            "platform": "instagram",
+            "ai_data": ai_data,
+            "content_hash": content_hash,
+            "raw_transcript": raw_transcript,
+            "transcript_status": transcript_status,
+            "media_count": len(media_files),
+            "processor": download_result["source"],
+        }
+    except Exception:
+        _cleanup_paths([download_path])
+        raise
+
 
 async def process_reel(url: str, task_id: str = None, status_callback=None) -> dict:
-    if status_callback: await status_callback("Downloading Audio")
-    if task_id: ops_manager.update_task(task_id, "Downloading Audio")
-    temp_audio = f"temp_audio_{uuid.uuid4().hex}.m4a"
+    if status_callback:
+        await status_callback("Downloading audio/video")
+    if task_id:
+        ops_manager.update_task(task_id, "Downloading audio/video", progress=20)
+
+    temp_prefix = f"temp_audio_{uuid.uuid4().hex}"
     platform = get_platform_from_url(url)
-    ydl_opts = {'format': 'm4a/bestaudio/best', 'outtmpl': temp_audio, 'quiet': True}
-    
-    if os.path.exists("cookies.txt"):
-        ydl_opts['cookiefile'] = "cookies.txt"
+    ydl_opts = _build_ytdlp_opts(f"{temp_prefix}.%(ext)s")
+    ydl_opts["format"] = "bestaudio/best"
 
     try:
-        # Stage 1: Download (in thread — non-blocking)
-        dl_result = await asyncio.to_thread(_sync_download_reel, url, ydl_opts, temp_audio)
-        description = dl_result['description']
-        uploader = dl_result['uploader']
-        content_hash = dl_result['content_hash']
+        dl_result = await asyncio.to_thread(_sync_download_reel, url, ydl_opts, temp_prefix)
+        temp_audio = dl_result["audio_path"]
+        description = dl_result["description"]
+        uploader = dl_result["uploader"]
+        content_hash = dl_result["content_hash"]
 
-        # Stage 2: Transcribe (in thread — non-blocking)
-        if status_callback: await status_callback("Transcribing Audio")
-        if task_id: ops_manager.update_task(task_id, "Transcribing Audio")
+        if status_callback:
+            await status_callback("Transcribing audio")
+        if task_id:
+            ops_manager.update_task(
+                task_id,
+                "Transcribing audio",
+                progress=45,
+                media_size=dl_result.get("media_size"),
+            )
         raw_text = await asyncio.to_thread(_sync_transcribe, temp_audio)
-        
-        # Stage 3: AI Analysis (in thread — non-blocking)
-        if status_callback: await status_callback("AI Analyzing Transcript")
-        if task_id: ops_manager.update_task(task_id, "AI Analyzing Transcript")
-        ai_data = await asyncio.to_thread(_sync_analyze_text, raw_text)
+        transcript_status = "complete" if raw_text else "empty"
+        analysis_text = raw_text or description
 
-        if os.path.exists(temp_audio): os.remove(temp_audio)
-        return {"uploader": uploader, "description": description, "url": url, "type": f"{platform}-video", "platform": platform, "ai_data": ai_data, "content_hash": content_hash}
-    except Exception as e:
-        if os.path.exists(temp_audio): os.remove(temp_audio)
-        raise e
+        if status_callback:
+            await status_callback("AI analyzing transcript")
+        if task_id:
+            ops_manager.update_task(
+                task_id,
+                "AI analyzing transcript",
+                progress=70,
+                transcript_chars=len(raw_text),
+            )
+        ai_data = await asyncio.to_thread(_sync_analyze_text, analysis_text, description)
+
+        _cleanup_paths(_find_downloaded_media(temp_prefix))
+        return {
+            "uploader": uploader,
+            "description": description,
+            "url": url,
+            "type": f"{platform}-video",
+            "platform": platform,
+            "ai_data": ai_data,
+            "content_hash": content_hash,
+            "raw_transcript": raw_text,
+            "transcript_status": transcript_status,
+            "media_size": dl_result.get("media_size"),
+        }
+    except Exception:
+        _cleanup_paths(_find_downloaded_media(temp_prefix))
+        raise

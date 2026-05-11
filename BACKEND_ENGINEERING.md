@@ -44,3 +44,38 @@ Cortex uses a state-of-the-art RAG pipeline for the "Ask Your Brain" feature:
 - `core/processors.py`: The acquisition engine (yt-dlp, Instaloader, Whisper, Gemini).
 - `core/state.py`: Manages the global `OperationsManager` for task tracking.
 - `core/utils.py`: URL sanitization and platform detection.
+
+## 2026-05-11 Backend Changes
+
+### Transcript Generation and Persistence
+- `process_reel()` now returns `raw_transcript`, `transcript_status`, media size, and the model used for AI synthesis.
+- Saved Markdown notes include a `## Raw Transcript` section for video content.
+- Empty or silent media is recorded as an explicit transcript status instead of disappearing from the note.
+- ChromaDB indexing now combines formatted AI content, raw transcript text, and source captions.
+
+### Operation State Model
+`OperationManager` now keeps active tasks plus a bounded recent-task history. `/api/status` returns:
+- `active_tasks`: tasks currently running.
+- `recent_tasks`: recently completed, duplicate, or failed tasks.
+- `task_count`: active task count.
+
+Each task can include `task_id`, `url`, `platform`, `status`, `state`, `progress`, `start_time`, `updated_at`, `finished_at`, and `error`.
+
+### Instagram Carousel Pipeline
+- Instagram `/p/` posts are downloaded with a provider strategy: `yt-dlp` first, Instaloader fallback second.
+- Carousel image files are sent to Gemini vision.
+- Carousel video files are transcribed with Faster-Whisper and included in the analysis prompt.
+- Duplicate detection uses a composite MD5 over all downloaded carousel media files.
+- Metadata failures now include a clear remediation path: refresh `cookies.txt` or retry later if Instagram blocks GraphQL/media access.
+
+### Gemini Fallbacks
+All Gemini calls now go through `generate_content_with_fallback()`:
+- Primary: `models/gemini-2.5-flash-lite`
+- Fallback: `models/gemini-2.5-flash`
+- Retry/fallback triggers: 429, 5xx, timeout, unavailable, overloaded, and resource exhaustion style errors.
+- Non-retryable errors, such as invalid auth or bad requests, still fail fast.
+
+### Related Endpoint Changes
+- `GET /api/config` now returns `primary_model`, `fallback_model`, and `model_chain`.
+- `POST /api/ingest` streamed responses are newline-delimited JSON (`application/x-ndjson`).
+- Note summary, deep dive, RAG chat, text analysis, and image analysis all share the same Gemini fallback behavior.

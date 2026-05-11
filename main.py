@@ -11,10 +11,10 @@ from pydantic import BaseModel
 import chromadb
 
 # Internal Imports
-from core.config import GEMINI_API_KEY, OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH, AI_MODEL
+from core.config import OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH, AI_MODEL, AI_MODEL_PRIMARY, AI_MODEL_FALLBACK, AI_MODEL_CHAIN
 from core.state import ops_manager, get_url_index, save_url_index
-from core.utils import clean_url, chunk_text, cleanup_temp_files
-from core.processors import process_reel, process_image_post, client
+from core.utils import clean_url, chunk_text, cleanup_temp_files, get_platform_from_url
+from core.processors import process_reel, process_image_post, generate_content_with_fallback
 
 # --- INITIALIZATION ---
 app = FastAPI(title="Second Brain API")
@@ -44,6 +44,18 @@ class SaveAnswerRequest(BaseModel):
     title: str
     content: str
 
+def get_unique_filename(filename: str) -> str:
+    stem, ext = os.path.splitext(filename)
+    candidate = filename
+    counter = 2
+    while (
+        os.path.exists(os.path.join(PROJECT_VAULT_PATH, candidate))
+        or os.path.exists(os.path.join(OBSIDIAN_INBOX_PATH, candidate))
+    ):
+        candidate = f"{stem} ({counter}){ext}"
+        counter += 1
+    return candidate
+
 # --- ROUTES ---
 
 @app.get("/")
@@ -56,10 +68,7 @@ async def health_check():
 
 @app.get("/api/status")
 async def get_system_status():
-    return {
-        "active_tasks": list(ops_manager.active_tasks.values()),
-        "task_count": len(ops_manager.active_tasks)
-    }
+    return ops_manager.get_status()
 
 @app.get("/api/logs")
 async def get_error_logs():
@@ -98,7 +107,13 @@ async def get_note_content(filename: str):
 @app.get("/api/config")
 async def get_config():
     index = get_url_index()
-    return {"model": AI_MODEL, "note_count": len(index)}
+    return {
+        "model": AI_MODEL,
+        "primary_model": AI_MODEL_PRIMARY,
+        "fallback_model": AI_MODEL_FALLBACK,
+        "model_chain": AI_MODEL_CHAIN,
+        "note_count": len(index),
+    }
 
 @app.post("/api/sync")
 async def sync_vault():
@@ -124,8 +139,8 @@ async def summarize_note(filename: str):
         raise HTTPException(status_code=404, detail="Note not found")
     
     prompt = f"Provide a concise 3-5 bullet point summary of this note. Focus on actionable takeaways:\n\n{content}"
-    response = client.models.generate_content(model=AI_MODEL, contents=prompt)
-    return {"summary": response.text}
+    response, model_used = generate_content_with_fallback(prompt, purpose="note_summary")
+    return {"summary": response.text, "model": model_used}
 
 @app.post("/api/notes/{filename}/deep_dive")
 async def deep_dive_note(filename: str):
@@ -140,8 +155,8 @@ async def deep_dive_note(filename: str):
         raise HTTPException(status_code=404, detail="Note not found")
     
     prompt = f"Provide a detailed analysis of this note. Include: (1) Key concepts explained, (2) Connections to broader topics, (3) Questions worth exploring further, (4) Practical applications. Format with markdown headers:\n\n{content}"
-    response = client.models.generate_content(model=AI_MODEL, contents=prompt)
-    return {"deep_dive": response.text}
+    response, model_used = generate_content_with_fallback(prompt, purpose="note_deep_dive")
+    return {"deep_dive": response.text, "model": model_used}
 
 @app.post("/api/ingest")
 async def ingest_url(request: Request):
@@ -154,17 +169,22 @@ async def ingest_url(request: Request):
 
     async def _run_ingestion(url: str, status_callback=None):
         task_id = f"task_{uuid.uuid4().hex[:8]}"
-        if status_callback: await status_callback("Checking Index")
-        ops_manager.start_task(task_id, url, "Checking Index")
+        platform = get_platform_from_url(url)
+        if status_callback: await status_callback("Checking index")
+        ops_manager.start_task(task_id, url, "Checking index", platform=platform, progress=5)
         
         try:
             index = get_url_index()
             if url in index:
                 note_data = index[url]
                 fn = note_data['fileName'] if isinstance(note_data, dict) else note_data
-                if os.path.exists(os.path.join(OBSIDIAN_INBOX_PATH, fn)):
-                    ops_manager.end_task(task_id)
-                    return {"status": "existing", "note": note_data if isinstance(note_data, dict) else {"fileName": fn, "title": fn}}
+                if any(os.path.exists(os.path.join(path, fn)) for path in [OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH]):
+                    ops_manager.end_task(task_id, "Already exists", state="existing")
+                    return {
+                        "status": "existing",
+                        "task_id": task_id,
+                        "note": note_data if isinstance(note_data, dict) else {"fileName": fn, "title": fn},
+                    }
 
             if "instagram.com" in url and ("/reel/" not in url and "/p/" in url):
                 data = await process_image_post(url, task_id, status_callback)
@@ -172,27 +192,44 @@ async def ingest_url(request: Request):
                 data = await process_reel(url, task_id, status_callback)
             
             # MD5 Duplicate Detection
+            if status_callback: await status_callback("Checking content fingerprint")
+            ops_manager.update_task(task_id, "Checking content fingerprint", progress=80)
+            index = get_url_index()
             content_hash = data.get('content_hash')
             if content_hash:
                 for existing_url, existing_data in index.items():
                     if isinstance(existing_data, dict) and existing_data.get('content_hash') == content_hash:
-                        ops_manager.end_task(task_id)
+                        ops_manager.end_task(task_id, "Duplicate content", state="existing")
                         return {
                             "status": "existing", 
+                            "task_id": task_id,
                             "message": "Content already exists in vault (detected via MD5)",
                             "note": existing_data
                         }
             
-            if status_callback: await status_callback("Saving to Vaults")
-            ops_manager.update_task(task_id, "Saving to Vaults")
+            if status_callback: await status_callback("Saving to vaults")
+            ops_manager.update_task(task_id, "Saving to vaults", progress=85)
             date_str = datetime.datetime.now().strftime("%Y-%m-%d")
             safe_uploader = re.sub(r'[\\/*?:"<>|]', "", data['uploader'])
             raw_category = data['ai_data'].get('category', 'Post')
             safe_category = re.sub(r'[\\/*?:"<>|]', "-", raw_category)
-            filename = f"{date_str} - {safe_category} from {data['platform'].capitalize()} ({safe_uploader}).md"
+            filename = get_unique_filename(f"{date_str} - {safe_category} from {data['platform'].capitalize()} ({safe_uploader}).md")
             
             project_filepath = os.path.join(PROJECT_VAULT_PATH, filename)
             obsidian_filepath = os.path.join(OBSIDIAN_INBOX_PATH, filename)
+            raw_transcript = (data.get("raw_transcript") or "").strip()
+            transcript_status = data.get("transcript_status") or ("complete" if raw_transcript else "not_available")
+            transcript_section = ""
+            if raw_transcript:
+                transcript_section = f"""
+## Raw Transcript
+{raw_transcript}
+"""
+            elif data["type"].endswith("-video") or data["type"] == "instagram-carousel":
+                transcript_section = f"""
+## Raw Transcript
+*Transcript status: {transcript_status}. No spoken transcript was captured for this media.*
+"""
 
             content = f"""---
 type: {data['type']}
@@ -201,6 +238,10 @@ author: {data['uploader']}
 url: {data['url']}
 category: {raw_category}
 tags: {data['ai_data'].get('tags', [])}
+content_hash: {data.get('content_hash', '')}
+transcript_status: {transcript_status}
+ai_model: {data['ai_data'].get('_model_used', AI_MODEL)}
+processor: {data.get('processor', '')}
 ---
 # {raw_category} by {data['uploader']}
 
@@ -208,6 +249,7 @@ tags: {data['ai_data'].get('tags', [])}
 
 ## Extracted Content
 {data['ai_data'].get('formatted_content', '')}
+{transcript_section}
 
 ---
 ### Original Caption
@@ -221,25 +263,40 @@ tags: {data['ai_data'].get('tags', [])}
                 "fileName": filename, 
                 "date": datetime.datetime.now().isoformat(), 
                 "url": url,
-                "content_hash": data.get('content_hash')
+                "content_hash": data.get('content_hash'),
+                "platform": data.get("platform"),
+                "type": data.get("type"),
+                "transcript_status": transcript_status,
+                "ai_model": data['ai_data'].get('_model_used', AI_MODEL),
             }
+            index = get_url_index()
             index[url] = note_data
             save_url_index(index)
 
-            if status_callback: await status_callback("Updating AI Index")
-            ops_manager.update_task(task_id, "Updating AI Index")
-            chunks = chunk_text(data['ai_data'].get('formatted_content', ''))
-            vault_collection.add(
-                documents=chunks,
-                metadatas=[{"filename": filename, "url": url} for _ in chunks],
-                ids=[f"{url}_chunk_{i}" for i in range(len(chunks))]
+            if status_callback: await status_callback("Updating AI index")
+            ops_manager.update_task(task_id, "Updating AI index", progress=95)
+            index_text = "\n\n".join(
+                part.strip()
+                for part in [
+                    data['ai_data'].get('formatted_content', ''),
+                    raw_transcript,
+                    data.get('description', ''),
+                ]
+                if part and part.strip()
             )
-            ops_manager.end_task(task_id)
-            return {"status": "success", "note": note_data}
+            chunks = [chunk for chunk in chunk_text(index_text) if chunk.strip()]
+            if chunks:
+                vault_collection.add(
+                    documents=chunks,
+                    metadatas=[{"filename": filename, "url": url, "content_hash": data.get("content_hash")} for _ in chunks],
+                    ids=[f"{content_hash or uuid.uuid4().hex}_chunk_{i}" for i in range(len(chunks))]
+                )
+            ops_manager.end_task(task_id, "Completed", state="completed")
+            return {"status": "success", "task_id": task_id, "note": note_data}
         except Exception as e:
             import traceback
             ops_manager.log_error(url, str(e), detail=traceback.format_exc())
-            ops_manager.end_task(task_id)
+            ops_manager.end_task(task_id, "Failed", state="failed", error=str(e))
             raise e
 
     if wants_stream:
@@ -247,7 +304,7 @@ tags: {data['ai_data'].get('tags', [])}
             try:
                 async def on_status(msg):
                     nonlocal stream_queue
-                    await stream_queue.put(json.dumps({"status": "status", "message": f"⬇️ {msg}..."}) + "\n")
+                    await stream_queue.put(json.dumps({"status": "status", "message": f"{msg}..."}) + "\n")
 
                 import asyncio
                 stream_queue = asyncio.Queue()
@@ -269,7 +326,7 @@ tags: {data['ai_data'].get('tags', [])}
                     yield item
             except Exception as e:
                 yield json.dumps({"status": "error", "message": str(e)}) + "\n"
-        return StreamingResponse(stream(), media_type="text/event-stream")
+        return StreamingResponse(stream(), media_type="application/x-ndjson")
     
     try:
         return await _run_ingestion(url)
@@ -282,8 +339,8 @@ async def chat(request: AskRequest):
         results = vault_collection.query(query_texts=[request.message], n_results=5)
         ctx = "\n".join(results['documents'][0]) if results['documents'] and results['documents'][0] else ""
         prompt = f"Answer based on these notes:\n\n{ctx}\n\nQuestion: {request.message}"
-        response = client.models.generate_content(model=AI_MODEL, contents=prompt)
-        return {"response": response.text}
+        response, model_used = generate_content_with_fallback(prompt, purpose="rag_chat")
+        return {"response": response.text, "model": model_used}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

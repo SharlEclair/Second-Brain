@@ -1,27 +1,77 @@
 import json
 import os
 import datetime
+import threading
 from .config import URL_INDEX_FILE
 
 class OperationManager:
     def __init__(self):
-        self.active_tasks = {} # task_id -> {url, status, start_time}
+        self.active_tasks = {}
+        self.recent_tasks = []
+        self.max_recent_tasks = 25
         self.error_logs_file = "error_log.json"
+        self._lock = threading.Lock()
         
-    def start_task(self, task_id, url, initial_status="Starting"):
-        self.active_tasks[task_id] = {
+    def start_task(self, task_id, url, initial_status="Starting", platform=None, progress=0):
+        now = datetime.datetime.now().isoformat()
+        task = {
+            "task_id": task_id,
             "url": url,
+            "platform": platform,
             "status": initial_status,
-            "start_time": datetime.datetime.now().isoformat()
+            "state": "active",
+            "progress": progress,
+            "start_time": now,
+            "updated_at": now,
+            "finished_at": None,
+            "error": None,
         }
+        with self._lock:
+            self.active_tasks[task_id] = task
+        return task
         
-    def update_task(self, task_id, status):
-        if task_id in self.active_tasks:
-            self.active_tasks[task_id]["status"] = status
+    def update_task(self, task_id, status, progress=None, error=None, **extra):
+        with self._lock:
+            if task_id in self.active_tasks:
+                task = self.active_tasks[task_id]
+                task["status"] = status
+                task["updated_at"] = datetime.datetime.now().isoformat()
+                if progress is not None:
+                    task["progress"] = progress
+                if error is not None:
+                    task["error"] = error
+                for key, value in extra.items():
+                    task[key] = value
+                return task
+        return None
             
-    def end_task(self, task_id):
-        if task_id in self.active_tasks:
-            del self.active_tasks[task_id]
+    def end_task(self, task_id, final_status="Completed", state="completed", error=None):
+        with self._lock:
+            task = self.active_tasks.pop(task_id, None)
+            if not task:
+                return None
+
+            now = datetime.datetime.now().isoformat()
+            task["status"] = final_status
+            task["state"] = state
+            task["updated_at"] = now
+            task["finished_at"] = now
+            if error is not None:
+                task["error"] = error
+            if state in {"completed", "existing"}:
+                task["progress"] = 100
+
+            self.recent_tasks.insert(0, task)
+            self.recent_tasks = self.recent_tasks[:self.max_recent_tasks]
+            return task
+
+    def get_status(self):
+        with self._lock:
+            return {
+                "active_tasks": list(self.active_tasks.values()),
+                "recent_tasks": list(self.recent_tasks),
+                "task_count": len(self.active_tasks),
+            }
 
     def log_error(self, url, error_msg, detail=None):
         log_entry = {
