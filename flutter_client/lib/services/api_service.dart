@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../screens/debug_logs_screen.dart';
 
 /// Custom exception to distinguish network errors from server errors
 class NetworkException implements Exception {
@@ -53,14 +54,19 @@ class ApiService {
   Future<String?> checkConnectivity() async {
     try {
       final apiUrl = await _buildUrl('/api/health');
+      DebugLogger.log('GET $apiUrl', type: 'NETWORK');
       final response = await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 15));
+      DebugLogger.log('Health check: ${response.statusCode}', type: 'NETWORK');
       if (response.statusCode == 200) return null;
       return 'Server returned ${response.statusCode}';
     } on TimeoutException {
+      DebugLogger.log('Health check TIMEOUT', type: 'ERROR');
       return 'Connection timed out (15s)';
     } on SocketException catch (e) {
+      DebugLogger.log('Health check SOCKET ERROR: ${e.message}', type: 'ERROR');
       return 'Network unreachable: ${e.message}';
     } catch (e) {
+      DebugLogger.log('Health check ERROR: $e', type: 'ERROR');
       return e.toString();
     }
   }
@@ -76,18 +82,24 @@ class ApiService {
     
     http.Response response;
     try {
+      DebugLogger.log('POST $apiUrl URL: $url', type: 'NETWORK');
       response = await http.post(
         Uri.parse(apiUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'url': url}),
       ).timeout(const Duration(seconds: 180));
+      DebugLogger.log('Ingest response: ${response.statusCode}', type: 'NETWORK');
     } on SocketException catch (e) {
+      DebugLogger.log('SocketException: $e', type: 'ERROR');
       throw NetworkException('Cannot reach server: $e');
     } on HttpException catch (e) {
+      DebugLogger.log('HttpException: $e', type: 'ERROR');
       throw NetworkException('HTTP error: $e');
     } on TimeoutException {
+      DebugLogger.log('TimeoutException', type: 'ERROR');
       throw NetworkException('Connection timed out');
     } catch (e) {
+      DebugLogger.log('Unexpected error: $e', type: 'ERROR');
       // Check if it's a network-level error
       if (e.toString().contains('SocketException') ||
           e.toString().contains('Connection refused') ||
@@ -155,6 +167,20 @@ class ApiService {
 
     if (response.statusCode != 200) {
       throw Exception('Failed to sync: ${response.statusCode}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getStatus() async {
+    try {
+      final apiUrl = await _buildUrl('/api/status');
+      final response = await http.get(Uri.parse(apiUrl));
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      }
+      return {"active_tasks": []};
+    } catch (e) {
+      DebugLogger.log("Failed to fetch status: $e");
+      return {"active_tasks": []};
     }
   }
 }

@@ -17,12 +17,14 @@ import {
   Sparkles,
   Copy,
   Check,
-  ChevronDown
+  ChevronDown,
+  Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { format } from 'date-fns';
 import { cn } from './lib/utils';
+import SystemDashboard from './components/SystemDashboard';
 
 interface Note {
   title: string;
@@ -54,11 +56,17 @@ export default function App() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<{ type: string, content: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeModel, setActiveModel] = useState('GEMINI-2.5-FLASH-LITE');
   
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchNotes();
+    fetch('/api/config').then(r => r.json()).then(d => {
+      if (d.model) setActiveModel(d.model.replace('models/', '').toUpperCase());
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -239,21 +247,47 @@ export default function App() {
             </div>
             <h1 className="font-display font-light italic text-xl tracking-tight text-white glow-text">BRAIN_VAULT</h1>
           </div>
-          <button 
-            onClick={handleSync}
-            disabled={isSyncing}
-            className="p-2 rounded-sm hover:bg-slate-800 transition-colors text-slate-500 hover:text-white"
-          >
-            <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
-          </button>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => { setShowDashboard(!showDashboard); if (!showDashboard) setSelectedNote(null); }}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-widest transition-all rounded-md",
+                  showDashboard 
+                    ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/30" 
+                    : "text-zinc-500 hover:text-white border border-transparent hover:bg-white/5"
+                )}
+              >
+                <Activity className="w-4 h-4" />
+                {showDashboard ? "Exit Mission Control" : "Mission Control"}
+              </button>
+              <button 
+                onClick={() => setIsSyncing(!isSyncing)}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-white transition-all rounded-md hover:bg-white/5"
+              >
+                <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
+                Sync Vault
+              </button>
+            </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          <div className="text-[10px] uppercase tracking-widest font-bold text-slate-500 px-3 border-b border-slate-800 pb-2 mb-4">Stored Knowledge</div>
+          <div className="text-[10px] uppercase tracking-widest font-bold text-slate-500 px-3 border-b border-slate-800 pb-2 mb-4">Stored Knowledge ({notes.length})</div>
+          <div className="px-1 mb-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600" />
+              <input
+                type="text"
+                placeholder="Search notes..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-black border border-slate-800 rounded-sm py-2 pl-9 pr-3 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500/50 transition-all font-mono placeholder-slate-700 text-slate-300"
+              />
+            </div>
+          </div>
           {notes.length === 0 && (
             <div className="px-3 py-6 text-sm text-slate-500 italic">No notes ingested yet.</div>
           )}
-          {notes.map((note) => (
+          {notes.filter(n => !searchQuery || n.title.toLowerCase().includes(searchQuery.toLowerCase())).map((note) => (
             <button
               key={note.fileName}
               onClick={() => handleSelectNote(note)}
@@ -339,7 +373,7 @@ export default function App() {
             <div className="h-4 w-px bg-slate-800" />
             <div className="text-right">
               <p className="text-[10px] uppercase text-slate-500 tracking-widest leading-none mb-1">Active Model</p>
-              <p className="text-xs font-mono text-white">GEMINI-FLASH</p>
+              <p className="text-xs font-mono text-white">{activeModel}</p>
             </div>
           </div>
         </header>
@@ -419,8 +453,19 @@ export default function App() {
                     )}
                   </div>
                 </motion.div>
+              ) : showDashboard ? (
+                <motion.div
+                  key="dashboard"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  className="h-full overflow-y-auto"
+                >
+                  <SystemDashboard />
+                </motion.div>
               ) : (
                 <motion.div 
+                  key="empty"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
