@@ -87,7 +87,7 @@ class ApiService {
         Uri.parse(apiUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'url': url}),
-      ).timeout(const Duration(seconds: 180));
+      ).timeout(const Duration(seconds: 900));
       DebugLogger.log('Ingest response: ${response.statusCode}', type: 'NETWORK');
     } on SocketException catch (e) {
       DebugLogger.log('SocketException: $e', type: 'ERROR');
@@ -173,7 +173,7 @@ class ApiService {
   Future<Map<String, dynamic>> getStatus() async {
     try {
       final apiUrl = await _buildUrl('/api/status');
-      final response = await http.get(Uri.parse(apiUrl));
+      final response = await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         return json.decode(response.body);
       }
