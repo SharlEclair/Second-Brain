@@ -23,10 +23,9 @@ jobs:
           cd flutter_client
           flutter pub get
 
-      - name: Setup CocoaPods
+      - name: Debug Listing
         run: |
-          cd flutter_client/ios
-          pod install
+          ls -R flutter_client/ios
         
       - name: Build iOS (No Codesign)
         run: |
