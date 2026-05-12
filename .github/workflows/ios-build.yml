@@ -23,6 +23,11 @@ jobs:
           cd flutter_client
           flutter pub get
 
+      - name: Setup CocoaPods
+        run: |
+          cd flutter_client/ios
+          pod install
+        
       - name: Build iOS (No Codesign)
         run: |
           cd flutter_client
@@ -30,8 +35,7 @@ jobs:
 
       - name: Zip Build
         run: |
-          compress-archive -Path flutter_client/build/ios/iphoneos/Runner.app -DestinationPath Runner.zip
-        shell: pwsh
+          zip -r Runner.zip flutter_client/build/ios/iphoneos/Runner.app
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
