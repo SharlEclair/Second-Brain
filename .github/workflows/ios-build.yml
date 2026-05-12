@@ -23,20 +23,23 @@ jobs:
           cd flutter_client
           flutter pub get
 
-      - name: Debug Listing
+      - name: Environment Diagnostics
         run: |
+          flutter doctor
           ls -R flutter_client/ios
-        
+
       - name: Build iOS (No Codesign)
         run: |
           cd flutter_client
-          flutter build ios --release --no-codesign
+          flutter build ios --release --no-codesign -v
 
       - name: Zip Build
+        if: success()
         run: |
           zip -r Runner.zip flutter_client/build/ios/iphoneos/Runner.app
 
       - name: Upload Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ios-build
