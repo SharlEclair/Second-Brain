@@ -69,6 +69,7 @@ export default function App() {
   const [success, setSuccess] = useState<string | null>(null);
   const [ingestStatus, setIngestStatus] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [actionResult, setActionResult] = useState<{ type: string, content: string } | null>(null);
 
   const [copied, setCopied] = useState(false);
@@ -140,6 +141,46 @@ export default function App() {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoadingNote(true);
+    setError(null);
+    setSuccess(null);
+    setIngestStatus(`Uploading ${file.name}...`);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'Upload failed');
+      }
+
+      setSuccess('PDF successfully ingested');
+      fetchNotes();
+      setUrl('');
+      if (data.note) {
+        handleSelectNote(data.note);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to process PDF.");
+    } finally {
+      setLoadingNote(false);
+      setIngestStatus(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   const handleIngest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
@@ -150,14 +191,32 @@ export default function App() {
     setIngestStatus('Initiating session...');
 
     try {
+      const isQueue = url.includes("twitter.com") || url.includes("x.com");
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (isQueue) {
+        headers['X-Queue'] = 'true';
+      } else {
+        headers['X-Stream'] = 'true';
+      }
+
       const response = await fetch('/api/ingest', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Stream': 'true'
-        },
+        headers,
         body: JSON.stringify({ url })
       });
+
+      if (isQueue) {
+        const data = await response.json();
+        setSuccess(data.message || 'Added to background queue');
+        setUrl('');
+        setLoadingNote(false);
+        setIngestStatus(null);
+        return;
+      }
 
       if (!response.body) throw new Error('No response body');
       
@@ -408,30 +467,48 @@ export default function App() {
         {/* Top Header - Ingestion Bar */}
         <header className="h-16 border-b border-slate-800 bg-black/60 backdrop-blur-md flex items-center px-8 justify-between z-10">
           <div className="flex-1 max-w-2xl flex flex-col relative">
-            <form onSubmit={handleIngest} className="flex items-center relative group">
-              <Zap className="absolute left-4 w-4 h-4 text-orange-500 opacity-50 group-focus-within:opacity-100 transition-opacity" />
-              <input 
-                type="text" 
-                placeholder="Paste URL (YouTube, TikTok, Instagram) to ingest knowledge..."
-                className="w-full bg-black border border-slate-800 rounded-sm py-2 pl-12 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-orange-500/50 transition-all font-mono placeholder-slate-700"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                disabled={loadingNote}
+            <form onSubmit={handleIngest} className="flex items-center gap-2 group">
+              <div className="relative flex-1 flex items-center group">
+                <Zap className="absolute left-4 w-4 h-4 text-orange-500 opacity-50 group-focus-within:opacity-100 transition-opacity" />
+                <input
+                  type="text"
+                  placeholder="Paste URL (YouTube, TikTok, Instagram, Web) to ingest knowledge..."
+                  className="w-full bg-black border border-slate-800 rounded-sm py-2 pl-12 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-orange-500/50 transition-all font-mono placeholder-slate-700"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  disabled={loadingNote}
+                />
+                {loadingNote && (
+                  <div className="absolute right-4 flex items-center gap-3">
+                    <div className="text-[10px] text-orange-500/70 font-mono animate-pulse">{ingestStatus}</div>
+                    <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
+                  </div>
+                )}
+                {!loadingNote && url && (
+                  <button
+                    type="submit"
+                    className="absolute right-2 px-3 py-1 rounded-sm bg-orange-500 text-black text-[10px] font-bold uppercase tracking-wider hover:bg-orange-400 transition-colors"
+                  >
+                    Ingest
+                  </button>
+                )}
+              </div>
+              <input
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
               />
-              {loadingNote && (
-                <div className="absolute right-4 flex items-center gap-3">
-                  <div className="text-[10px] text-orange-500/70 font-mono animate-pulse">{ingestStatus}</div>
-                  <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
-                </div>
-              )}
-              {!loadingNote && url && (
-                <button 
-                  type="submit"
-                  className="absolute right-2 px-3 py-1 rounded-sm bg-orange-500 text-black text-[10px] font-bold uppercase tracking-wider hover:bg-orange-400 transition-colors"
-                >
-                  Ingest
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loadingNote}
+                className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-sm hover:bg-slate-700 transition-colors text-slate-300 font-mono text-xs disabled:opacity-50 flex items-center gap-2"
+                title="Upload PDF Document"
+              >
+                <Plus className="w-4 h-4" /> PDF
+              </button>
             </form>
             
             <AnimatePresence>
