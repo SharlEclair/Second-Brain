@@ -1,0 +1,40 @@
+name: Build iOS App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: |
+          cd flutter_client
+          flutter pub get
+
+      - name: Build iOS (No Codesign)
+        run: |
+          cd flutter_client
+          flutter build ios --release --no-codesign
+          
+      - name: Zip Build for Download
+        run: |
+          cd flutter_client/build/ios/iphoneos
+          zip -r Cortex_iOS.zip Runner.app
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cortex-iphone-app
+          path: flutter_client/build/ios/iphoneos/Cortex_iOS.zip
