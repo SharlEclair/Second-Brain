@@ -25,6 +25,7 @@ import ReactMarkdown from 'react-markdown';
 import { format } from 'date-fns';
 import { cn } from './lib/utils';
 import SystemDashboard from './components/SystemDashboard';
+import ChatSidebar from './components/ChatSidebar';
 
 interface Note {
   title: string;
@@ -61,6 +62,7 @@ export default function App() {
   const [noteContent, setNoteContent] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -236,6 +238,39 @@ export default function App() {
     }
   };
 
+  const loadChatSession = async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/chats/${sessionId}`);
+      const data = await res.json();
+      if (data.messages) {
+        const loadedMessages = [];
+        data.messages.forEach((msg: any, index: number) => {
+          loadedMessages.push({
+            id: `user-${index}`,
+            text: msg.query,
+            isAi: false,
+            timestamp: new Date(msg.timestamp)
+          });
+          loadedMessages.push({
+            id: `ai-${index}`,
+            text: msg.response,
+            isAi: true,
+            timestamp: new Date(msg.timestamp)
+          });
+        });
+        setMessages(loadedMessages);
+        setCurrentSessionId(sessionId);
+      }
+    } catch (e) {
+      console.error("Failed to load chat session", e);
+    }
+  };
+
+  const handleNewSession = () => {
+    setCurrentSessionId(null);
+    setMessages([]);
+  };
+
   const handleChat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
@@ -256,11 +291,14 @@ export default function App() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg.text })
+        body: JSON.stringify({ message: userMsg.text, session_id: currentSessionId })
       });
       const data = await res.json();
       
       if (data.response) {
+        if (!currentSessionId && data.session_id) {
+          setCurrentSessionId(data.session_id);
+        }
         const aiMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),
           text: data.response,
@@ -576,11 +614,19 @@ export default function App() {
             </AnimatePresence>
           </div>
 
-          {/* AI Chat Sidebar */}
+          {/* AI Chat Sidebar Area */}
           <section className={cn(
-            "transition-all duration-500 ease-in-out flex flex-col hardware-border shadow-2xl relative",
-            isChatMinimized ? "w-12 h-12 self-end mt-auto" : "w-[400px] border border-slate-800 bg-black/80 backdrop-blur-md rounded-sm"
+            "transition-all duration-500 ease-in-out flex shadow-2xl relative",
+            isChatMinimized ? "h-12 w-[640px] translate-y-[calc(100%-3rem)] absolute bottom-0 right-8 bg-[#111] flex-row" : "w-[640px] bg-[#111] border-l border-slate-800 flex-row"
           )}>
+            {!isChatMinimized && (
+              <ChatSidebar
+                onSelectSession={loadChatSession}
+                currentSessionId={currentSessionId}
+                onNewSession={handleNewSession}
+              />
+            )}
+            <div className="flex-1 flex flex-col hardware-border border-l border-slate-800">
             {isChatMinimized ? (
               <button 
                 onClick={() => setIsChatMinimized(false)}
@@ -591,7 +637,7 @@ export default function App() {
               </button>
             ) : (
               <>
-                <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-black/40">
+                <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-black/40 min-h-[57px]">
                   <div className="flex items-center gap-3">
                     <h2 className="text-xs uppercase text-slate-500 tracking-widest font-bold">Terminal / Chat</h2>
                     <span className="text-[10px] font-mono bg-slate-800 px-2 py-1 text-slate-400 rounded-sm">RAG_ENABLED</span>
@@ -658,6 +704,7 @@ export default function App() {
                 </div>
               </>
             )}
+            </div>
           </section>
         </div>
       </main>
