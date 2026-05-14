@@ -127,12 +127,15 @@ Format the 'formatted_content' precisely based on the category:
 
 Wrap important entities in double brackets for Obsidian wiki-links (e.g., [[Machine Learning]]).
 
+If the content contains a specific upcoming date, time, or deadline (especially for Events or Job/Career items), extract that date and provide it in the 'event_date' field as an ISO 8601 string (e.g., "2024-12-31T19:00:00Z"). If there is no specific date mentioned, leave the field null.
+
 You MUST respond strictly with this JSON structure:
 {{
   "category": "The Category",
   "tags": ["#tag1", "#tag2"],
   "summary": "A 1-2 sentence quick summary",
-  "formatted_content": "The beautifully formatted markdown text"
+  "formatted_content": "The beautifully formatted markdown text",
+  "event_date": "ISO-8601 string or null"
 }}
 """
 
@@ -447,6 +450,148 @@ async def process_image_post(url: str, task_id: str = None, status_callback=None
         _cleanup_paths([download_path])
         raise
 
+
+
+async def _async_fetch_twitter_thread(url):
+    import twscrape
+    import re
+    tweet_id_match = re.search(r'status/(\d+)', url)
+    if not tweet_id_match:
+        raise ValueError("Could not find tweet ID in URL")
+    tweet_id = int(tweet_id_match.group(1))
+
+    api = twscrape.API()
+    try:
+        tweet = await api.tweet_details(tweet_id)
+        if not tweet:
+             raise ValueError("Tweet not found")
+
+        text = tweet.rawContent
+        author = tweet.user.username if tweet.user else "Twitter User"
+
+        return {
+            "title": f"Tweet by {author}",
+            "text": text,
+            "author": author
+        }
+    except Exception as e:
+        return await asyncio.to_thread(_sync_fetch_web_article, url)
+
+def _sync_fetch_web_article(url):
+    import requests
+    from bs4 import BeautifulSoup
+    response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    for script in soup(["script", "style"]):
+        script.extract()
+
+    title = soup.title.string if soup.title else "Web Article"
+    text = soup.get_text(separator=' ')
+
+    lines = (line.strip() for line in text.splitlines())
+    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+    text = '\n'.join(chunk for chunk in chunks if chunk)
+
+    return {
+        "title": title,
+        "text": text,
+        "author": "Web Source"
+    }
+
+async def process_web_article(url: str, task_id: str = None, status_callback=None) -> dict:
+    if status_callback:
+        await status_callback("Fetching text content")
+    if task_id:
+        ops_manager.update_task(task_id, "Fetching text content", progress=20)
+
+    try:
+        from core.utils import get_platform_from_url
+        platform = get_platform_from_url(url)
+
+        if platform == "twitter":
+            article_data = await _async_fetch_twitter_thread(url)
+        else:
+            article_data = await asyncio.to_thread(_sync_fetch_web_article, url)
+
+        if status_callback:
+            await status_callback("AI analyzing article text")
+        if task_id:
+            ops_manager.update_task(task_id, "AI analyzing article text", progress=70)
+
+        import hashlib
+        content_hash = hashlib.md5(article_data["text"].encode('utf-8')).hexdigest()
+        ai_data = await asyncio.to_thread(_sync_analyze_text, article_data["text"], article_data["title"])
+
+        return {
+            "uploader": article_data["author"],
+            "description": article_data["title"],
+            "url": url,
+            "type": "web-article",
+            "platform": "web",
+            "ai_data": ai_data,
+            "content_hash": content_hash,
+            "raw_transcript": article_data["text"],
+            "transcript_status": "complete",
+            "processor": "beautifulsoup"
+        }
+    except Exception:
+        raise
+
+def _sync_extract_pdf_text(filepath):
+    import fitz # PyMuPDF
+    doc = fitz.open(filepath)
+    text = ""
+    for page in doc:
+        text += page.get_text()
+
+    title = os.path.basename(filepath)
+    if doc.metadata and doc.metadata.get("title"):
+        title = doc.metadata.get("title")
+
+    author = "Unknown Author"
+    if doc.metadata and doc.metadata.get("author"):
+        author = doc.metadata.get("author")
+
+    return {
+        "text": text,
+        "title": title,
+        "author": author
+    }
+
+async def process_pdf(filepath: str, original_filename: str, task_id: str = None, status_callback=None) -> dict:
+    if status_callback:
+        await status_callback("Extracting text from PDF")
+    if task_id:
+        ops_manager.update_task(task_id, "Extracting text from PDF", progress=20)
+
+    try:
+        pdf_data = await asyncio.to_thread(_sync_extract_pdf_text, filepath)
+
+        if status_callback:
+            await status_callback("AI analyzing PDF content")
+        if task_id:
+            ops_manager.update_task(task_id, "AI analyzing PDF content", progress=70)
+
+        import hashlib
+        content_hash = hashlib.md5(pdf_data["text"].encode('utf-8')).hexdigest()
+        ai_data = await asyncio.to_thread(_sync_analyze_text, pdf_data["text"], pdf_data["title"])
+
+        return {
+            "uploader": pdf_data["author"],
+            "description": pdf_data["title"],
+            "url": f"file://{original_filename}",
+            "type": "pdf-document",
+            "platform": "local",
+            "ai_data": ai_data,
+            "content_hash": content_hash,
+            "raw_transcript": pdf_data["text"],
+            "transcript_status": "complete",
+            "processor": "pymupdf"
+        }
+    except Exception:
+        raise
 
 async def process_reel(url: str, task_id: str = None, status_callback=None) -> dict:
     if status_callback:
