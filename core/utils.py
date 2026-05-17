@@ -36,7 +36,7 @@ def chunk_text(text: str, chunk_size: int = 1500, overlap: int = 200) -> list[st
         return chunks
 
 def cleanup_temp_files():
-    print("🧹 Cleaning up temporary files...")
+    print("[Clean] Cleaning up temporary files...")
     count = 0
     for item in os.listdir("."):
         if item.startswith(("temp_audio_", "temp_")):
@@ -49,4 +49,4 @@ def cleanup_temp_files():
             except Exception as e:
                 print(f"Failed to delete {item}: {e}")
     if count > 0:
-        print(f"✓ Removed {count} temporary items.")
+        print(f"[Clean] Removed {count} temporary items.")
