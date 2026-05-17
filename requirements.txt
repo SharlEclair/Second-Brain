@@ -9,3 +9,7 @@ yt-dlp
 instaloader
 Pillow
 requests
+langchain-text-splitters
+beautifulsoup4
+pymupdf
+twscrape

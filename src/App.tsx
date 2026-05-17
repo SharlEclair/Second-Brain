@@ -25,6 +25,9 @@ import ReactMarkdown from 'react-markdown';
 import { format } from 'date-fns';
 import { cn } from './lib/utils';
 import SystemDashboard from './components/SystemDashboard';
+import ChatSidebar from './components/ChatSidebar';
+import EventsWidget from './components/EventsWidget';
+import SuggestionsWidget from './components/SuggestionsWidget';
 
 interface Note {
   title: string;
@@ -61,12 +64,14 @@ export default function App() {
   const [noteContent, setNoteContent] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [ingestStatus, setIngestStatus] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [actionResult, setActionResult] = useState<{ type: string, content: string } | null>(null);
 
   const [copied, setCopied] = useState(false);
@@ -138,6 +143,46 @@ export default function App() {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoadingNote(true);
+    setError(null);
+    setSuccess(null);
+    setIngestStatus(`Uploading ${file.name}...`);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'Upload failed');
+      }
+
+      setSuccess('PDF successfully ingested');
+      fetchNotes();
+      setUrl('');
+      if (data.note) {
+        handleSelectNote(data.note);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to process PDF.");
+    } finally {
+      setLoadingNote(false);
+      setIngestStatus(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   const handleIngest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
@@ -148,14 +193,33 @@ export default function App() {
     setIngestStatus('Initiating session...');
 
     try {
+      const isQueue = url.includes("twitter.com") || url.includes("x.com");
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (isQueue) {
+        headers['X-Queue'] = 'true';
+        headers['X-Stream'] = 'false';
+      } else {
+        headers['X-Stream'] = 'true';
+      }
+
       const response = await fetch('/api/ingest', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Stream': 'true'
-        },
+        headers,
         body: JSON.stringify({ url })
       });
+
+      if (isQueue) {
+        const data = await response.json();
+        setSuccess(data.message || 'Added to background queue');
+        setUrl('');
+        setLoadingNote(false);
+        setIngestStatus(null);
+        return;
+      }
 
       if (!response.body) throw new Error('No response body');
       
@@ -236,6 +300,39 @@ export default function App() {
     }
   };
 
+  const loadChatSession = async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/chats/${sessionId}`);
+      const data = await res.json();
+      if (data.messages) {
+        const loadedMessages = [];
+        data.messages.forEach((msg: any, index: number) => {
+          loadedMessages.push({
+            id: `user-${index}`,
+            text: msg.query,
+            isAi: false,
+            timestamp: new Date(msg.timestamp)
+          });
+          loadedMessages.push({
+            id: `ai-${index}`,
+            text: msg.response,
+            isAi: true,
+            timestamp: new Date(msg.timestamp)
+          });
+        });
+        setMessages(loadedMessages);
+        setCurrentSessionId(sessionId);
+      }
+    } catch (e) {
+      console.error("Failed to load chat session", e);
+    }
+  };
+
+  const handleNewSession = () => {
+    setCurrentSessionId(null);
+    setMessages([]);
+  };
+
   const handleChat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
@@ -256,11 +353,14 @@ export default function App() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg.text })
+        body: JSON.stringify({ message: userMsg.text, session_id: currentSessionId })
       });
       const data = await res.json();
       
       if (data.response) {
+        if (!currentSessionId && data.session_id) {
+          setCurrentSessionId(data.session_id);
+        }
         const aiMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),
           text: data.response,
@@ -370,30 +470,48 @@ export default function App() {
         {/* Top Header - Ingestion Bar */}
         <header className="h-16 border-b border-slate-800 bg-black/60 backdrop-blur-md flex items-center px-8 justify-between z-10">
           <div className="flex-1 max-w-2xl flex flex-col relative">
-            <form onSubmit={handleIngest} className="flex items-center relative group">
-              <Zap className="absolute left-4 w-4 h-4 text-orange-500 opacity-50 group-focus-within:opacity-100 transition-opacity" />
-              <input 
-                type="text" 
-                placeholder="Paste URL (YouTube, TikTok, Instagram) to ingest knowledge..."
-                className="w-full bg-black border border-slate-800 rounded-sm py-2 pl-12 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-orange-500/50 transition-all font-mono placeholder-slate-700"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                disabled={loadingNote}
+            <form onSubmit={handleIngest} className="flex items-center gap-2 group">
+              <div className="relative flex-1 flex items-center group">
+                <Zap className="absolute left-4 w-4 h-4 text-orange-500 opacity-50 group-focus-within:opacity-100 transition-opacity" />
+                <input
+                  type="text"
+                  placeholder="Paste URL (YouTube, TikTok, Instagram, Web) to ingest knowledge..."
+                  className="w-full bg-black border border-slate-800 rounded-sm py-2 pl-12 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-orange-500/50 transition-all font-mono placeholder-slate-700"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  disabled={loadingNote}
+                />
+                {loadingNote && (
+                  <div className="absolute right-4 flex items-center gap-3">
+                    <div className="text-[10px] text-orange-500/70 font-mono animate-pulse">{ingestStatus}</div>
+                    <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
+                  </div>
+                )}
+                {!loadingNote && url && (
+                  <button
+                    type="submit"
+                    className="absolute right-2 px-3 py-1 rounded-sm bg-orange-500 text-black text-[10px] font-bold uppercase tracking-wider hover:bg-orange-400 transition-colors"
+                  >
+                    Ingest
+                  </button>
+                )}
+              </div>
+              <input
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
               />
-              {loadingNote && (
-                <div className="absolute right-4 flex items-center gap-3">
-                  <div className="text-[10px] text-orange-500/70 font-mono animate-pulse">{ingestStatus}</div>
-                  <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
-                </div>
-              )}
-              {!loadingNote && url && (
-                <button 
-                  type="submit"
-                  className="absolute right-2 px-3 py-1 rounded-sm bg-orange-500 text-black text-[10px] font-bold uppercase tracking-wider hover:bg-orange-400 transition-colors"
-                >
-                  Ingest
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loadingNote}
+                className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-sm hover:bg-slate-700 transition-colors text-slate-300 font-mono text-xs disabled:opacity-50 flex items-center gap-2"
+                title="Upload PDF Document"
+              >
+                <Plus className="w-4 h-4" /> PDF
+              </button>
             </form>
             
             <AnimatePresence>
@@ -549,38 +667,60 @@ export default function App() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto"
+                  className="h-full flex flex-col items-center justify-center w-full"
                 >
-                  <div className="w-20 h-20 bg-black border border-slate-800 flex items-center justify-center mb-6 relative">
-                    <Brain className="w-8 h-8 text-orange-500" />
-                  </div>
-                  <h2 className="text-2xl font-display font-light italic mb-3 tracking-tight text-white">Awaiting Input</h2>
-                  <p className="text-xs text-slate-500 leading-relaxed mb-8 uppercase tracking-widest">
-                    SYSTEM IDLE. INGEST URL OR SELECT EXISTING ENTRY.
-                  </p>
-                  <div className="grid grid-cols-2 gap-3 w-full">
-                    {[
-                      { icon: <Zap className="w-4 h-4 text-orange-500" />, label: "Auto Transcribe" },
-                      { icon: <Clock className="w-4 h-4 text-slate-400" />, label: "Long-term Recall" },
-                      { icon: <Shield className="w-4 h-4 text-emerald-500" />, label: "Secure Storage" },
-                      { icon: <Search className="w-4 h-4 text-blue-400" />, label: "AI Search" },
-                    ].map((feat, i) => (
-                      <div key={i} className="flex flex-col items-center gap-2 p-4 bg-black border border-slate-800 rounded-sm">
-                        {feat.icon}
-                        <span className="text-[10px] uppercase font-mono text-slate-500">{feat.label}</span>
+                  <div className="w-full h-full overflow-y-auto py-12 flex flex-col items-center">
+                    <div className="flex flex-col items-center justify-center text-center max-w-md mx-auto mb-12 shrink-0">
+                      <div className="w-20 h-20 bg-black border border-slate-800 flex items-center justify-center mb-6 relative">
+                        <Brain className="w-8 h-8 text-orange-500" />
                       </div>
-                    ))}
+                      <h2 className="text-2xl font-display font-light italic mb-3 tracking-tight text-white">Awaiting Input</h2>
+                      <p className="text-xs text-slate-500 leading-relaxed mb-8 uppercase tracking-widest">
+                        SYSTEM IDLE. INGEST URL OR SELECT EXISTING ENTRY.
+                      </p>
+                    </div>
+
+                    <div className="w-full max-w-5xl mx-auto px-8 grid grid-cols-1 md:grid-cols-4 gap-6">
+                      <div className="md:col-span-1">
+                        <EventsWidget onSelectEvent={handleSelectNote} />
+                      </div>
+                      <div className="md:col-span-3">
+                        <SuggestionsWidget onSelectSuggestion={handleSelectNote} />
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full mt-6">
+                          {[
+                            { icon: <Zap className="w-4 h-4 text-orange-500" />, label: "Auto Transcribe" },
+                            { icon: <Clock className="w-4 h-4 text-slate-400" />, label: "Long-term Recall" },
+                            { icon: <Shield className="w-4 h-4 text-emerald-500" />, label: "Secure Storage" },
+                            { icon: <Search className="w-4 h-4 text-blue-400" />, label: "AI Search" },
+                          ].map((feat, i) => (
+                            <div key={i} className="flex flex-col items-center gap-2 p-4 bg-[#111] border border-slate-800 hover:border-slate-700 transition-colors rounded-sm group">
+                              {feat.icon}
+                              <span className="text-[10px] uppercase font-mono text-slate-500 group-hover:text-slate-400 transition-colors">{feat.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
 
-          {/* AI Chat Sidebar */}
+          {/* AI Chat Sidebar Area */}
           <section className={cn(
-            "transition-all duration-500 ease-in-out flex flex-col hardware-border shadow-2xl relative",
-            isChatMinimized ? "w-12 h-12 self-end mt-auto" : "w-[400px] border border-slate-800 bg-black/80 backdrop-blur-md rounded-sm"
+            "transition-all duration-500 ease-in-out flex shadow-2xl relative",
+            isChatMinimized ? "h-12 w-[640px] translate-y-[calc(100%-3rem)] absolute bottom-0 right-8 bg-[#111] flex-row" : "w-[640px] bg-[#111] border-l border-slate-800 flex-row"
           )}>
+            {!isChatMinimized && (
+              <ChatSidebar
+                onSelectSession={loadChatSession}
+                currentSessionId={currentSessionId}
+                onNewSession={handleNewSession}
+              />
+            )}
+            <div className="flex-1 flex flex-col hardware-border border-l border-slate-800">
             {isChatMinimized ? (
               <button 
                 onClick={() => setIsChatMinimized(false)}
@@ -591,7 +731,7 @@ export default function App() {
               </button>
             ) : (
               <>
-                <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-black/40">
+                <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-black/40 min-h-[57px]">
                   <div className="flex items-center gap-3">
                     <h2 className="text-xs uppercase text-slate-500 tracking-widest font-bold">Terminal / Chat</h2>
                     <span className="text-[10px] font-mono bg-slate-800 px-2 py-1 text-slate-400 rounded-sm">RAG_ENABLED</span>
@@ -658,6 +798,7 @@ export default function App() {
                 </div>
               </>
             )}
+            </div>
           </section>
         </div>
       </main>
