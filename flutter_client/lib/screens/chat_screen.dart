@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../services/queue_service.dart';
 import '../screens/debug_logs_screen.dart';
 import 'settings_screen.dart';
+import 'notes_browser_screen.dart';
 
 class ChatMessage {
   final String text;
@@ -348,6 +349,13 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                 ),
               ),
             ),
+          IconButton(
+            icon: const Icon(Icons.psychology_outlined, color: Colors.white70),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const NotesBrowserScreen()));
+            },
+            tooltip: "Brain Vault",
+          ),
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white70),
             onPressed: () {

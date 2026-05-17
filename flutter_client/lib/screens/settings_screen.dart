@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 import 'debug_logs_screen.dart';
 
@@ -34,6 +35,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Backend URL saved successfully')),
+        );
+      }
+    }
+  }
+
+  void _pasteFromClipboard() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data != null && data.text != null) {
+      setState(() {
+        _urlController.text = data.text!;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('URL pasted from clipboard')),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No text found in clipboard')),
         );
       }
     }
@@ -99,6 +120,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 hintStyle: const TextStyle(color: Colors.white24),
                 fillColor: const Color(0xFF111111),
                 filled: true,
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.content_paste, color: Colors.white54, size: 20),
+                  onPressed: _pasteFromClipboard,
+                  tooltip: "Paste from clipboard",
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8.0),
                   borderSide: const BorderSide(color: Color(0xFF333333)),
