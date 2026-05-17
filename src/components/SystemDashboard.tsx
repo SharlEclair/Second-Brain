@@ -3,6 +3,7 @@ import {
   Activity, 
   AlertCircle, 
   Clock, 
+  Network,
   ExternalLink, 
   Trash2, 
   CheckCircle, 
@@ -17,6 +18,8 @@ import {
   Video,
   FileText
 } from 'lucide-react';
+import VaultGraph from './VaultGraph';
+import TagManager from './TagManager';
 
 interface Task {
   task_id?: string;
@@ -177,6 +180,17 @@ const SystemDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Network Graph */}
+      <div className="bg-[#0a0a0a] border border-white/5 rounded-sm overflow-hidden">
+        <div className="p-4 border-b border-white/5 flex items-center justify-between bg-black/20">
+          <div className="flex items-center gap-2">
+            <Network className="w-4 h-4 text-indigo-400" />
+            <h3 className="text-xs font-mono uppercase tracking-widest text-zinc-300">Vault Neural Network</h3>
+          </div>
+        </div>
+        <VaultGraph />
+      </div>
+
       {/* Analytics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
@@ -197,6 +211,11 @@ const SystemDashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column: Active Operations, Platform Stats, and Tags */}
+        <div className="lg:col-span-1 space-y-6">
+          <TagManager />
+        </div>
+
         {/* Visual Analytics */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-[#0a0a0a] border border-white/5 rounded-sm p-6">
