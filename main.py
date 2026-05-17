@@ -210,6 +210,40 @@ async def ingest_url(request: Request):
         if status_callback: await status_callback("Checking index")
         ops_manager.start_task(task_id, url, "Checking index", platform=platform, progress=5)
         return await _run_ingestion_logic(url, task_id, status_callback)
+
+    if wants_stream:
+        async def stream():
+            try:
+                async def on_status(msg):
+                    nonlocal stream_queue
+                    await stream_queue.put(json.dumps({"status": "status", "message": f"{msg}..."}) + "\n")
+
+                import asyncio
+                stream_queue = asyncio.Queue()
+                
+                async def run_task():
+                    try:
+                        res = await _run_ingestion(url, on_status)
+                        await stream_queue.put(json.dumps(res) + "\n")
+                    except Exception as e:
+                        await stream_queue.put(json.dumps({"status": "error", "message": str(e)}) + "\n")
+                    finally:
+                        await stream_queue.put(None)
+
+                asyncio.create_task(run_task())
+                
+                while True:
+                    item = await stream_queue.get()
+                    if item is None: break
+                    yield item
+            except Exception as e:
+                yield json.dumps({"status": "error", "message": str(e)}) + "\n"
+        return StreamingResponse(stream(), media_type="application/x-ndjson")
+    
+    try:
+        return await _run_ingestion(url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
         
 async def _run_ingestion_logic(url: str, task_id: str, status_callback=None):
     platform = get_platform_from_url(url)
@@ -351,40 +385,6 @@ processor: {data.get('processor', '')}
         ops_manager.log_error(url, str(e), detail=traceback.format_exc())
         ops_manager.end_task(task_id, "Failed", state="failed", error=str(e))
         raise e
-
-    if wants_stream:
-        async def stream():
-            try:
-                async def on_status(msg):
-                    nonlocal stream_queue
-                    await stream_queue.put(json.dumps({"status": "status", "message": f"{msg}..."}) + "\n")
-
-                import asyncio
-                stream_queue = asyncio.Queue()
-                
-                async def run_task():
-                    try:
-                        res = await _run_ingestion(url, on_status)
-                        await stream_queue.put(json.dumps(res) + "\n")
-                    except Exception as e:
-                        await stream_queue.put(json.dumps({"status": "error", "message": str(e)}) + "\n")
-                    finally:
-                        await stream_queue.put(None)
-
-                asyncio.create_task(run_task())
-                
-                while True:
-                    item = await stream_queue.get()
-                    if item is None: break
-                    yield item
-            except Exception as e:
-                yield json.dumps({"status": "error", "message": str(e)}) + "\n"
-        return StreamingResponse(stream(), media_type="application/x-ndjson")
-    
-    try:
-        return await _run_ingestion(url)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 # --- CHAT HISTORY STORAGE ---
 CHAT_HISTORY_FILE = "chat_history.json"
