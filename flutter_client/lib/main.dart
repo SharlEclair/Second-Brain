@@ -166,17 +166,15 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
         } else {
           _showToast("✓ Successfully ingested!");
         }
-      } on NetworkException {
-        // Server unreachable — queue for later
-        await _queueService.addToQueue(url);
-        _showToast("📌 Queued — will process when connected.");
-      } on ServerException catch (e) {
-        // Server reachable but processing failed — show error
-        _showToast("❌ Error: ${e.message}");
       } catch (e) {
-        // Unknown — queue to be safe
         await _queueService.addToQueue(url);
-        _showToast("📌 Queued (${e.toString().substring(0, (e.toString().length).clamp(0, 60))})");
+        if (e is NetworkException) {
+          _showToast("📌 Queued — will process when connected.");
+        } else if (e is ServerException) {
+          _showToast("📌 Queued (Server Error: ${e.message})");
+        } else {
+          _showToast("📌 Queued (${e.toString().substring(0, (e.toString().length).clamp(0, 45))})");
+        }
       } finally {
         _stopSharedStatusPolling();
       }
