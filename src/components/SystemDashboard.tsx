@@ -274,7 +274,7 @@ const SystemDashboard: React.FC = () => {
                       {t.includes('video') ? <Video className="w-4 h-4 text-orange-500" /> : <FileText className="w-4 h-4 text-zinc-400" />}
                     </div>
                     <div className="text-lg font-mono font-bold text-white">{count}</div>
-                    <div className="text-[10px] font-mono text-zinc-600 uppercase truncate">{t.replace('-', ' ')}</div>
+                    <div className="text-[10px] font-mono text-zinc-600 uppercase leading-tight">{t.replace('-', ' ')}</div>
                   </div>
                 ))}
               </div>

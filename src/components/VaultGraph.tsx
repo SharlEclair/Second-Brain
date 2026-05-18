@@ -16,18 +16,20 @@ export default function VaultGraph() {
   useEffect(() => {
     fetchGraphData();
 
-    const updateDimensions = () => {
-      if (containerRef.current) {
+    if (!containerRef.current) return;
+    
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
         setDimensions({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight
+          width: entry.contentRect.width,
+          height: entry.contentRect.height
         });
       }
-    };
-
-    updateDimensions();
-    window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
+    });
+    
+    observer.observe(containerRef.current);
+    
+    return () => observer.disconnect();
   }, []);
 
   const fetchGraphData = async () => {

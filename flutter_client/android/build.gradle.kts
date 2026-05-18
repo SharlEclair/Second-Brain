@@ -24,13 +24,14 @@ subprojects {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
-    
-    // Force Java compilation to use JVM target 17 via Android extension
-    pluginManager.withPlugin("com.android.library") {
-        val android = extensions.getByName("android") as com.android.build.gradle.LibraryExtension
-        android.compileOptions {
-            sourceCompatibility = JavaVersion.VERSION_17
-            targetCompatibility = JavaVersion.VERSION_17
+}
+
+// Force Javac compiler tasks to target Java 17 after all projects are fully evaluated
+gradle.projectsEvaluated {
+    subprojects {
+        tasks.withType<JavaCompile>().configureEach {
+            sourceCompatibility = "17"
+            targetCompatibility = "17"
         }
     }
 }

@@ -208,4 +208,99 @@ class ApiService {
       return {"active_tasks": []};
     }
   }
+
+  Future<Map<String, dynamic>> ingestRawText(String text, {String? title}) async {
+    final apiUrl = await _buildUrl('/api/ingest_text');
+    
+    http.Response response;
+    try {
+      DebugLogger.log('POST $apiUrl text length: ${text.length}', type: 'NETWORK');
+      response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'text': text,
+          'title': title ?? 'Shared Text Note'
+        }),
+      ).timeout(const Duration(seconds: 120));
+      DebugLogger.log('IngestRawText response: ${response.statusCode}', type: 'NETWORK');
+    } on SocketException catch (e) {
+      DebugLogger.log('SocketException: $e', type: 'ERROR');
+      throw NetworkException('Cannot reach server: $e');
+    } on TimeoutException {
+      DebugLogger.log('TimeoutException', type: 'ERROR');
+      throw NetworkException('Connection timed out');
+    } catch (e) {
+      throw NetworkException('Connection failed: $e');
+    }
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      String errorMsg;
+      try {
+        final body = jsonDecode(response.body);
+        errorMsg = body['detail'] ?? body['error'] ?? body['message'] ?? 'Unknown server error';
+      } catch (_) {
+        errorMsg = 'Server error (${response.statusCode})';
+      }
+      throw ServerException(errorMsg, response.statusCode);
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadFile(String filePath, {String? customFileName}) async {
+    final apiUrl = await _buildUrl('/api/upload');
+    
+    try {
+      DebugLogger.log('POST multipart $apiUrl file: $filePath', type: 'NETWORK');
+      final request = http.MultipartRequest('POST', Uri.parse(apiUrl));
+      final file = await http.MultipartFile.fromPath(
+        'file',
+        filePath,
+        filename: customFileName ?? filePath.split('/').last,
+      );
+      request.files.add(file);
+      
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
+      final response = await http.Response.fromStream(streamedResponse);
+      DebugLogger.log('UploadFile response: ${response.statusCode}', type: 'NETWORK');
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        String errorMsg;
+        try {
+          final body = jsonDecode(response.body);
+          errorMsg = body['detail'] ?? body['error'] ?? body['message'] ?? 'Unknown server error';
+        } catch (_) {
+          errorMsg = 'Server error (${response.statusCode})';
+        }
+        throw ServerException(errorMsg, response.statusCode);
+      }
+    } on SocketException catch (e) {
+      throw NetworkException('Cannot reach server: $e');
+    } on TimeoutException {
+      throw NetworkException('Connection timed out');
+    } catch (e) {
+      throw NetworkException('Connection failed: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchUpcomingEvents() async {
+    try {
+      final apiUrl = await _buildUrl('/api/events/upcoming');
+      DebugLogger.log('GET $apiUrl', type: 'NETWORK');
+      final response = await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 15));
+      DebugLogger.log('FetchUpcomingEvents response: ${response.statusCode}', type: 'NETWORK');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      }
+      return [];
+    } catch (e) {
+      DebugLogger.log("Failed to fetch upcoming events: $e", type: 'ERROR');
+      return [];
+    }
+  }
 }

@@ -14,7 +14,7 @@ import chromadb
 from core.config import OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH, AI_MODEL, AI_MODEL_PRIMARY, AI_MODEL_FALLBACK, AI_MODEL_CHAIN, TAGS_FILE
 from core.state import ops_manager, get_url_index, save_url_index
 from core.utils import clean_url, chunk_text, cleanup_temp_files, get_platform_from_url
-from core.processors import process_reel, process_image_post, generate_content_with_fallback, process_pdf, process_web_article
+from core.processors import process_reel, process_image_post, generate_content_with_fallback, process_pdf, process_web_article, process_text_file, process_raw_text
 
 
 import asyncio
@@ -64,7 +64,7 @@ class IngestRequest(BaseModel):
 
 class AskRequest(BaseModel):
     message: str
-    session_id: str = None
+    session_id: Optional[str] = None
 
 class SaveAnswerRequest(BaseModel):
     title: str
@@ -445,8 +445,9 @@ async def chat(request: AskRequest):
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are currently supported")
+    filename_lower = file.filename.lower()
+    if not (filename_lower.endswith(".pdf") or filename_lower.endswith(".txt") or filename_lower.endswith(".md")):
+        raise HTTPException(status_code=400, detail="Only PDF, TXT, and MD files are currently supported")
 
     task_id = f"task_{uuid.uuid4().hex[:8]}"
     ops_manager.start_task(task_id, file.filename, "Uploading file", platform="local", progress=5)
@@ -458,7 +459,10 @@ async def upload_file(file: UploadFile = File(...)):
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        data = await process_pdf(temp_path, safe_filename, task_id)
+        if filename_lower.endswith(".pdf"):
+            data = await process_pdf(temp_path, safe_filename, task_id)
+        else:
+            data = await process_text_file(temp_path, safe_filename, task_id)
 
         # Save to vaults
         ops_manager.update_task(task_id, "Saving to vaults", progress=85)
@@ -543,6 +547,102 @@ processor: {data.get('processor', '')}
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+class IngestTextRequest(BaseModel):
+    text: str
+    title: Optional[str] = "Shared Text"
+
+@app.post("/api/ingest_text")
+async def ingest_text(request: IngestTextRequest):
+    if not request.text.strip():
+        raise HTTPException(status_code=400, detail="Text content is required")
+
+    task_id = f"task_{uuid.uuid4().hex[:8]}"
+    ops_manager.start_task(task_id, request.title, "Ingesting raw text", platform="local", progress=10)
+
+    try:
+        # Process raw text using our helper
+        data = await process_raw_text(request.text, request.title, task_id)
+
+        # Save to vaults
+        ops_manager.update_task(task_id, "Saving to vaults", progress=85)
+        date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        raw_category = data['ai_data'].get('category', 'General')
+        safe_category = re.sub(r'[\/*?:"<>|]', "-", raw_category)
+        filename = get_unique_filename(f"{date_str} - {safe_category} (Shared Text).md", category=safe_category)
+
+        project_category_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
+        obsidian_category_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
+        os.makedirs(project_category_path, exist_ok=True)
+        os.makedirs(obsidian_category_path, exist_ok=True)
+
+        project_filepath = os.path.join(project_category_path, filename)
+        obsidian_filepath = os.path.join(obsidian_category_path, filename)
+
+        event_date = data.get('ai_data', {}).get('event_date')
+        event_date_str = f"event_date: {event_date}\n" if event_date and str(event_date).lower() != "null" else ""
+
+        content = f"""---
+type: {data['type']}
+date: {date_str}
+author: {data['uploader']}
+url: {data['url']}
+category: {raw_category}
+tags: {data['ai_data'].get('tags', [])}
+{event_date_str}content_hash: {data.get('content_hash', '')}
+ai_model: {data['ai_data'].get('_model_used', AI_MODEL)}
+processor: {data.get('processor', '')}
+---
+# {raw_category} - {data['description']}
+
+> **AI Summary:** {data['ai_data'].get('summary', '')}
+
+## Extracted Content
+{data['ai_data'].get('formatted_content', '')}
+
+## Original Text
+{data['raw_transcript']}
+"""
+        with open(project_filepath, "w", encoding="utf-8") as f: f.write(content)
+        with open(obsidian_filepath, "w", encoding="utf-8") as f: f.write(content)
+
+        relative_filename = os.path.join(safe_category, filename).replace("\\", "/")
+        note_data = {
+            "title": filename.replace(".md", ""),
+            "fileName": relative_filename,
+            "date": datetime.datetime.now().isoformat(),
+            "url": data['url'],
+            "content_hash": data.get('content_hash'),
+            "platform": data.get("platform"),
+            "type": data.get("type"),
+            "ai_model": data['ai_data'].get('_model_used', AI_MODEL),
+            "event_date": data.get("ai_data", {}).get("event_date"),
+        }
+
+        # Update JSON index
+        index = get_url_index()
+        index[data['url']] = note_data
+        save_url_index(index)
+
+        # Update Vector DB
+        ops_manager.update_task(task_id, "Updating AI index", progress=95)
+        index_text = "\n\n".join([data['ai_data'].get('formatted_content', ''), data.get('raw_transcript', '')])
+        chunks = [chunk for chunk in chunk_text(index_text) if chunk.strip()]
+        if chunks:
+            vault_collection.add(
+                documents=chunks,
+                metadatas=[{"filename": relative_filename, "url": data['url'], "content_hash": data.get("content_hash")} for _ in chunks],
+                ids=[f"{data.get('content_hash') or uuid.uuid4().hex}_chunk_{i}" for i in range(len(chunks))]
+            )
+
+        ops_manager.end_task(task_id, "Completed", state="completed")
+        return {"status": "success", "task_id": task_id, "note": note_data}
+
+    except Exception as e:
+        import traceback
+        ops_manager.log_error(request.title, str(e), detail=traceback.format_exc())
+        ops_manager.end_task(task_id, "Failed", state="failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/chats")
 async def get_chats():
