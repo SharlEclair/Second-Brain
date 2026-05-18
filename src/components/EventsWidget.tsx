@@ -56,7 +56,7 @@ export default function EventsWidget({ onSelectEvent }: EventsWidgetProps) {
                 <span className="text-[10px] uppercase text-orange-500 font-bold">{format(date, 'MMM')}</span>
                 <span className="text-lg font-display text-white">{format(date, 'd')}</span>
               </div>
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-hidden min-w-0">
                 <h4 className="text-sm font-medium text-slate-200 truncate group-hover:text-orange-400 transition-colors">
                   {event.title}
                 </h4>

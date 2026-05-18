@@ -651,3 +651,72 @@ async def process_reel(url: str, task_id: str = None, status_callback=None) -> d
     except Exception:
         _cleanup_paths(_find_downloaded_media(temp_prefix))
         raise
+
+def _sync_extract_text_file_content(filepath):
+    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+        text = f.read()
+    title = os.path.basename(filepath)
+    return {
+        "text": text,
+        "title": title,
+        "author": "Local Text File"
+    }
+
+async def process_text_file(filepath: str, original_filename: str, task_id: str = None, status_callback=None) -> dict:
+    if status_callback:
+        await status_callback("Reading text file")
+    if task_id:
+        ops_manager.update_task(task_id, "Reading text file", progress=20)
+
+    try:
+        file_data = await asyncio.to_thread(_sync_extract_text_file_content, filepath)
+
+        if status_callback:
+            await status_callback("AI analyzing text content")
+        if task_id:
+            ops_manager.update_task(task_id, "AI analyzing text content", progress=70)
+
+        import hashlib
+        content_hash = hashlib.md5(file_data["text"].encode('utf-8')).hexdigest()
+        ai_data = await asyncio.to_thread(_sync_analyze_text, file_data["text"], file_data["title"])
+
+        return {
+            "uploader": file_data["author"],
+            "description": file_data["title"],
+            "url": f"file://{original_filename}",
+            "type": "text-document",
+            "platform": "local",
+            "ai_data": ai_data,
+            "content_hash": content_hash,
+            "raw_transcript": file_data["text"],
+            "transcript_status": "complete",
+            "processor": "text-reader"
+        }
+    except Exception:
+        raise
+
+async def process_raw_text(text: str, title: str, task_id: str = None, status_callback=None) -> dict:
+    if status_callback:
+        await status_callback("AI analyzing raw text")
+    if task_id:
+        ops_manager.update_task(task_id, "AI analyzing raw text", progress=50)
+
+    try:
+        import hashlib
+        content_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+        ai_data = await asyncio.to_thread(_sync_analyze_text, text, title)
+
+        return {
+            "uploader": "Shared Text",
+            "description": title,
+            "url": f"local://shared-text-{task_id or uuid.uuid4().hex[:8]}",
+            "type": "shared-text",
+            "platform": "local",
+            "ai_data": ai_data,
+            "content_hash": content_hash,
+            "raw_transcript": text,
+            "transcript_status": "complete",
+            "processor": "raw-text-processor"
+        }
+    except Exception:
+        raise

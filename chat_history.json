@@ -1,1 +1,114 @@
-{}
+{
+  "test": [
+    {
+      "timestamp": "2026-05-19T02:09:07.834718",
+      "query": "hello",
+      "response": "Based on the notes, here's how I can answer your \"hello\":\n\n*   **Are you asking about the Google AI Studio?** If so, it's an AI playground for building chatbots, analyzing videos, and generating creative text, allowing experimentation with AI models like Gemini and Gemma without coding.\n*   **Are you asking about the Melbourne Ice Cream Spots?** If so, they offer a fun, nostalgic vibe with unique flavors, perfect for hot weather. Highlights include Good Days, Lou the Scoops, Kariton Gelato, Kori Ice Cream, and Pidapipo Gelateria.\n*   **Are you asking about the webinar on May 25th at 3 PM?** This webinar discusses a technique for stretching AI model context lengths, making them up to 32 times longer, by selectively adjusting frequency squishing and adding a small temperature bump to attention.\n\nCould you please specify what you'd like to know more about?",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ],
+  "e5c7b111-1750-4684-9ced-ddae8a66ad1e": [
+    {
+      "timestamp": "2026-05-19T02:24:13.103783",
+      "query": "Tell me about the upcoming AI workshop",
+      "response": "The upcoming AI workshop is the \"Next-Gen AI Orchestration Workshop\" scheduled for May 28, 2026, at 10:00 AM. It will be a live interactive programming stream on YouTube, featuring a hands-on coding lab. Key topics will include building multi-agent systems with Google Gemini, offline-first Flutter local caching strategies, and vector index tuning with ChromaDB.",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ],
+  "2b336a1e-6b77-4dd8-9c73-a2e29d480f52": [
+    {
+      "timestamp": "2026-05-19T02:28:11.402422",
+      "query": "Tell me about the upcoming AI workshop",
+      "response": "The upcoming AI workshop is called the **Next-Gen AI Orchestration Workshop**.\n\nHere are the details:\n\n*   **Date/Time:** May 28, 2026, 10:00 AM\n*   **Location:** Live on [[YouTube]]\n*   **Expectations:** Live interactive programming stream and a hands-on coding lab.\n*   **Key topics to be covered:**\n    *   Building multi-agent systems with [[Google Gemini]]\n    *   Offline-first [[Flutter]] local caching strategies\n    *   Vector index tuning with [[ChromaDB]]",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ],
+  "95e65a95-a964-4578-8555-08700404a470": [
+    {
+      "timestamp": "2026-05-19T02:29:35.310673",
+      "query": "Tell me about the upcoming AI workshop",
+      "response": "Based on the provided notes, here's information about the upcoming AI workshop:\n\nThere is an upcoming **Next-Gen AI Orchestration Workshop** scheduled for **May 28, 2026, at 10:00 AM**. This workshop will be a **live interactive programming stream** with a hands-on coding lab, broadcast live on **YouTube**.\n\nKey topics to be covered include:\n*   Building multi-agent systems with **Google Gemini**.\n*   Offline-first **Flutter** local caching strategies.\n*   Vector index tuning with **ChromaDB**.",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ],
+  "590c5a03-788d-4c37-b030-c8ed1ddb2853": [
+    {
+      "timestamp": "2026-05-19T02:29:50.057968",
+      "query": "Tell me about the upcoming AI workshop",
+      "response": "The upcoming AI workshop is the **Next-Gen AI Orchestration Workshop**, scheduled for **May 28, 2026, at 10:00 AM**. It will be a live interactive programming stream, including a hands-on coding lab, broadcast on **YouTube**. Key topics will include building multi-agent systems with **Google Gemini**, **Flutter** local caching strategies, and vector index tuning with **ChromaDB**.",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ],
+  "1faab5c3-7a88-4d52-9002-9842ba682853": [
+    {
+      "timestamp": "2026-05-19T02:36:32.386018",
+      "query": "Tell me about the upcoming AI workshop",
+      "response": "The upcoming AI workshop is the **Next-Gen AI Orchestration Workshop**, scheduled for **May 28, 2026, at 10:00 AM**. It will be a live interactive programming stream on **YouTube**, featuring a hands-on coding lab. Key topics include building multi-agent systems with Google Gemini, offline-first Flutter local caching strategies, and vector index tuning with ChromaDB.",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ],
+  "2b5cf62f-8077-430a-9052-4a6ac58770e3": [
+    {
+      "timestamp": "2026-05-19T02:38:56.500969",
+      "query": "Tell me about the upcoming AI workshop",
+      "response": "There is an upcoming **Next-Gen AI Orchestration Workshop** scheduled for:\n\n*   **Date/Time:** May 28, 2026, at 10:00 AM\n*   **Location:** Live on YouTube\n*   **Format:** Live interactive programming stream with a hands-on coding lab.\n*   **Key Topics:**\n    *   Building multi-agent systems with Google Gemini\n    *   Offline-first Flutter local caching strategies\n    *   Vector index tuning with ChromaDB",
+      "model_used": "models/gemini-2.5-flash"
+    }
+  ],
+  "0b9e89a6-e7be-41dc-8e97-7425b3ffe008": [
+    {
+      "timestamp": "2026-05-19T02:40:41.234939",
+      "query": "Tell me about the upcoming AI workshop",
+      "response": "The notes describe two upcoming AI-related events:\n\n1.  **Next-Gen AI Orchestration Workshop:** This event is scheduled for May 28, 2026, at 10:00 AM and will be live on YouTube. It will feature a live interactive programming stream and a hands-on coding lab. Key topics include building multi-agent systems with Google Gemini, offline-first Flutter local caching strategies, and vector index tuning with ChromaDB.\n\n2.  **Webinar on May 25th at 3 PM:** This is an online webinar, with specific details to be shared later. It will include supplementary text notes.",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ],
+  "93a15d35-c7a7-4327-a009-bd2f87d0107a": [
+    {
+      "timestamp": "2026-05-19T02:41:59.926836",
+      "query": "Tell me about the upcoming AI workshop",
+      "response": "Based on the notes provided, here's information about upcoming AI-related events and tools:\n\n**Google AI Studio & Gemini/Gemma:**\n*   **What it is:** Google AI Studio is an \"AI playground\" for experimenting with AI models like Gemini and Gemma.\n*   **What you can do:** Build chatbots, analyze videos, generate creative text for marketing, explore prompts, and fine-tune models without needing to program.\n*   **How to get started:** A full video tutorial is available.\n\n**Next-Gen AI Orchestration Workshop:**\n*   **Date/Time:** May 28, 2026, 10:00 AM\n*   **Location:** Live on YouTube\n*   **Format:** Live interactive programming stream and hands-on coding lab.\n*   **Key Topics:** Building multi-agent systems with Google Gemini, offline-first Flutter local caching strategies, and vector index tuning with ChromaDB.\n\n**Prompt Master:**\n*   **What it is:** An \"innovative skill\" for creating effective and efficient prompts for any AI tool.\n*   **Benefits:** Generates accurate prompts, minimizes token expenditure (saving time and resources), and is adaptable to various AI models and platforms.\n*   **Example:** Can create optimal prompts for tasks like building a business landing page using Cloud Code.\n\n**Claude AI Skills (Prompt Engineering Techniques):**\nThese are four advanced techniques to enhance AI output from Claude AI:\n1.  **Primotum:** Makes Claude AI imagine a project failed 6 months later and explain why, exposing blind spots.\n2.  **Steelman:** Makes Claude AI argue the strongest version of the opposite side to help critically evaluate ideas.\n3.  **Brutal Critique:** Claude AI acts as a brutal critic to provide rigorous feedback on pitches, plans, or offers.\n4.  **First Principles:** Claude AI breaks down ideas into fundamental truths to provide solutions based on what is actually true, avoiding generic advice.\n\n**Webinar:**\n*   **Date/Time:** May 25th, 3 PM\n*   **Location:** Online (details to be shared)\n*   **Format:** Webinar with supplementary text notes.",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ],
+  "3e7e0ed3-9709-4855-83cb-eb6a09fd8d8c": [
+    {
+      "timestamp": "2026-05-19T02:44:35.742469",
+      "query": "Tell me about the upcoming AI workshop",
+      "response": "The upcoming AI workshop is the \"Next-Gen AI Orchestration Workshop.\" It is scheduled for **May 28, 2026, at 10:00 AM** and will be streamed live on **YouTube**. The workshop will feature a live interactive programming stream and a hands-on coding lab. Key topics to be covered include building multi-agent systems with Google Gemini, offline-first Flutter local caching strategies, and vector index tuning with ChromaDB.",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ],
+  "6dd1ac3a-d0de-454f-9a13-ff3ac7b8996f": [
+    {
+      "timestamp": "2026-05-19T02:45:52.458635",
+      "query": "Tell me about the upcoming AI workshop",
+      "response": "Based on the notes, there are a few upcoming AI-related events:\n\n*   **Next-Gen AI Orchestration Workshop:** This is a live interactive programming stream on **May 28, 2026, at 10:00 AM**, hosted live on **YouTube**. It will cover building multi-agent systems with Google Gemini, Flutter local caching strategies, and vector index tuning with ChromaDB. There will be a hands-on coding lab.\n\n*   **Webinar on May 25th at 3 PM:** This is an online webinar with supplementary text notes. The specific topic of this webinar is not detailed in the provided notes.\n\nIt's also worth noting that **Google AI Studio** is presented as an \"AI playground\" for experimenting with AI models like Gemini and Gemma, and is mentioned in the context of building chatbots and generating creative text.",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ],
+  "d584e8c8-8b8b-4cfa-8161-8ae53cf6009c": [
+    {
+      "timestamp": "2026-05-19T03:02:15.677086",
+      "query": "open it in browser and test it",
+      "response": "Based on the provided notes, here's how you would design and build a web scraper, incorporating the actionable advice and general approach:\n\n1.  **Inspect Network Traffic:**\n    *   Open the target website in your browser (e.g., Chrome).\n    *   Open the browser's developer tools (usually by pressing F12 or right-clicking and selecting \"Inspect\").\n    *   Navigate to the \"Network\" tab.\n    *   Observe how the website fetches its data as you interact with it (scroll, click, etc.). This helps identify if data is loaded via API calls or directly in the HTML.\n\n2.  **Prioritize APIs:**\n    *   If you see API requests in the network tab that return structured data (like JSON), this is the preferred method. Using an API bypasses the need for complex HTML parsing.\n\n3.  **Respect `robots.txt`:**\n    *   Before scraping, check the website's `robots.txt` file (e.g., `www.example.com/robots.txt`). This file outlines which parts of the site web crawlers are allowed to access. Always adhere to these rules.\n\n4.  **Choose the Right Tools (Python Libraries):**\n    *   **For simple HTML parsing:** Use Python's `requests` library to fetch the raw HTML content and `Beautiful Soup` to parse it and extract the desired information.\n    *   **For complex websites (JavaScript rendering, user interactions):** Utilize `Playwright`. This library can automate browser actions, render JavaScript, and handle dynamic content, making it suitable for more advanced scraping.\n\n5.  **Develop the Scraping Logic:**\n    *   Write a Python script.\n    *   If using `requests` and `Beautiful Soup`:\n        *   Fetch the HTML with `requests`.\n        *   Parse the HTML with `Beautiful Soup`.\n        *   Locate the specific elements containing the data you need (e.g., using CSS selectors or element tags).\n        *   Extract the text or attributes from these elements.\n    *   If using `Playwright`:\n        *   Launch a browser instance.\n        *   Navigate to the target page.\n        *   Perform necessary interactions (e.g., clicking buttons, scrolling).\n        *   Wait for the content to load.\n        *   Extract the data from the rendered page.\n\n6.  **Store Data Efficiently:**\n    *   To avoid re-scraping and reduce the risk of being blocked, store the extracted data in a database (e.g., SQL, NoSQL). This also allows for easier querying and analysis later.\n\n7.  **Build Resilient Systems:**\n    *   **Error Handling:** Implement `try-except` blocks to catch potential errors during requests or parsing.\n    *   **Retries and Exponential Backoff:** If a request fails, set up a system to retry it multiple times, with increasing delays between retries (exponential backoff). This helps manage temporary network issues or server load.\n    *   **Change Alerts:** Monitor the scraped data for unexpected changes. If the website structure changes, your scraper might break. Implementing alerts can notify you when this happens.\n\n**In essence, the process involves:**\n\n*   **Understanding the target website's data retrieval methods.**\n*   **Respecting ethical guidelines (`robots.txt`).**\n*   **Selecting appropriate Python libraries (`requests`, `Beautiful Soup`, `Playwright`).**\n*   **Implementing robust data extraction and storage.**\n*   **Ensuring the scraper can handle errors and adapt to changes.**",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ],
+  "179d6249-3f51-4a97-82b5-3c4a1373faa5": [
+    {
+      "timestamp": "2026-05-19T03:12:33.123258",
+      "query": "Tell me about the upcoming AI workshop",
+      "response": "Based on the provided notes, there is an upcoming **\"Next-Gen AI Orchestration Workshop\"**.\n\nHere are the details:\n\n*   **Date/Time:** May 28, 2026, 10:00 AM\n*   **Location:** Live on [[YouTube]]\n*   **Format:** Live interactive programming stream with a hands-on coding lab.\n*   **Key Topics:**\n    *   Building multi-agent systems with [[Google Gemini]].\n    *   Offline-first [[Flutter]] local caching strategies.\n    *   Vector index tuning with [[ChromaDB]].",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ],
+  "7199dbc6-3fe4-4361-bb1a-e58b19bbbc5c": [
+    {
+      "timestamp": "2026-05-19T03:14:28.482313",
+      "query": "Tell me about the upcoming AI workshop",
+      "response": "Based on the provided notes, there are two upcoming AI-related events:\n\n1.  **Next-Gen AI Orchestration Workshop:**\n    *   **Date/Time:** May 28, 2026, 10:00 AM\n    *   **Platform:** Live on YouTube\n    *   **Format:** Live interactive programming stream with a hands-on coding lab.\n    *   **Key Topics:** Building multi-agent systems with Google Gemini, offline-first Flutter local caching strategies, and vector index tuning with ChromaDB.\n\n2.  **Webinar:**\n    *   **Date/Time:** May 25th at 3 PM\n    *   **Location:** Online (details to be shared)\n    *   **Format:** A webinar with supplementary text notes.",
+      "model_used": "models/gemini-2.5-flash-lite"
+    }
+  ]
+}

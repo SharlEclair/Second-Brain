@@ -58,42 +58,45 @@ export default function TagManager() {
       </div>
       <div className="p-4 max-h-[300px] overflow-y-auto">
         <div className="flex flex-wrap gap-2">
-          {tags.map((tag, i) => (
-            <div key={i} className="flex items-center">
-              {editingTag === tag ? (
-                <div className="flex items-center gap-1 bg-slate-900 border border-emerald-500/50 rounded-sm px-2 py-1">
-                  <input
-                    type="text"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    className="bg-transparent text-xs font-mono text-white outline-none w-24"
-                    autoFocus
-                    disabled={actionLoading}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSaveRename(tag)}
-                  />
-                  <button onClick={() => handleSaveRename(tag)} disabled={actionLoading} className="text-emerald-500 hover:text-emerald-400">
-                    {actionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                  </button>
-                  <button onClick={() => setEditingTag(null)} disabled={actionLoading} className="text-slate-500 hover:text-red-400">
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ) : (
-                <div className="group flex items-center gap-2 bg-slate-900/50 border border-slate-800 rounded-sm px-2 py-1 hover:border-slate-700 transition-colors">
-                  <span className="text-xs font-mono text-slate-300">#{tag}</span>
-                  <button
-                    onClick={() => {
-                      setEditingTag(tag);
-                      setEditValue(tag);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-white transition-all"
-                  >
-                    <Edit2 className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
+          {tags.map((rawTag, i) => {
+            const displayTag = rawTag.replace(/^#+/, '');
+            return (
+              <div key={i} className="flex items-center">
+                {editingTag === rawTag ? (
+                  <div className="flex items-center gap-1 bg-slate-900 border border-emerald-500/50 rounded-sm px-2 py-1">
+                    <input
+                      type="text"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      className="bg-transparent text-xs font-mono text-white outline-none w-24"
+                      autoFocus
+                      disabled={actionLoading}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveRename(rawTag)}
+                    />
+                    <button onClick={() => handleSaveRename(rawTag)} disabled={actionLoading} className="text-emerald-500 hover:text-emerald-400">
+                      {actionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                    </button>
+                    <button onClick={() => setEditingTag(null)} disabled={actionLoading} className="text-slate-500 hover:text-red-400">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="group flex items-center gap-2 bg-slate-900/50 border border-slate-800 rounded-sm px-2 py-1 hover:border-slate-700 transition-colors">
+                    <span className="text-xs font-mono text-slate-300">#{displayTag}</span>
+                    <button
+                      onClick={() => {
+                        setEditingTag(rawTag);
+                        setEditValue(displayTag);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-white transition-all"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
           {tags.length === 0 && <span className="text-xs text-slate-500 font-mono">No tags found.</span>}
         </div>
       </div>

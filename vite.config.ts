@@ -20,11 +20,11 @@ export default defineConfig(({mode}) => {
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: {
-        ignored: ['**/flutter_client/**', '**/chroma_db/**', '**/vault/**'],
+        ignored: ['**/flutter_client/**', '**/chroma_db/**', '**/vault/**', '**/chat_history.json', '**/url_index.json', '**/tags.txt'],
       },
       proxy: {
         '/api': {
-          target: 'http://localhost:8000',
+          target: 'http://127.0.0.1:8000',
           changeOrigin: true,
         },
       },

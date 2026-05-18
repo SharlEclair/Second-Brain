@@ -18,7 +18,8 @@ import {
   Copy,
   Check,
   ChevronDown,
-  Activity
+  Activity,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -369,7 +370,7 @@ export default function App() {
         };
         setMessages(prev => [...prev, aiMsg]);
       } else {
-        throw new Error(data.error || "Unknown AI error");
+        throw new Error(data.detail || data.error || "Unknown AI error");
       }
     } catch (e: any) {
       console.error("Chat failed", e);
@@ -609,13 +610,22 @@ export default function App() {
                       </button>
                     </div>
                     
-                    <button 
-                      onClick={() => noteContent && handleCopy(noteContent)}
-                      className="p-1.5 rounded-sm hover:bg-slate-800 transition-colors text-slate-500 hover:text-white"
-                      title="Copy Markdown"
-                    >
-                      {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => noteContent && handleCopy(noteContent)}
+                        className="p-1.5 rounded-sm hover:bg-slate-800 transition-colors text-slate-500 hover:text-white"
+                        title="Copy Markdown"
+                      >
+                        {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                      <button 
+                        onClick={() => setSelectedNote(null)}
+                        className="p-1.5 rounded-sm hover:bg-red-500/20 hover:text-red-400 transition-colors text-slate-500"
+                        title="Close Note"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="p-8 pb-32">
@@ -641,8 +651,45 @@ export default function App() {
                     </AnimatePresence>
 
                     {noteContent ? (
-                      <div className="prose prose-invert prose-slate max-w-none prose-headings:font-display prose-headings:font-light prose-headings:italic markdown-body">
-                        <ReactMarkdown>{noteContent}</ReactMarkdown>
+                      <div className="flex flex-col gap-6">
+                        {(() => {
+                          let processedContent = noteContent;
+                          let frontmatter: Record<string, string> = {};
+                          
+                          if (processedContent.startsWith('---\n')) {
+                            const endIdx = processedContent.indexOf('\n---\n', 4);
+                            if (endIdx !== -1) {
+                              const fmString = processedContent.substring(4, endIdx);
+                              fmString.split('\n').forEach(line => {
+                                const colonIdx = line.indexOf(':');
+                                if (colonIdx !== -1) {
+                                  frontmatter[line.substring(0, colonIdx).trim()] = line.substring(colonIdx + 1).trim();
+                                }
+                              });
+                              processedContent = processedContent.substring(endIdx + 5);
+                            }
+                          }
+
+                          processedContent = processedContent.replace(/\[\[(.*?)\]\]/g, '**`$1`**');
+
+                          return (
+                            <>
+                              {Object.keys(frontmatter).length > 0 && (
+                                <div className="flex flex-wrap gap-2 p-4 bg-[#111] border border-slate-800 rounded-sm">
+                                  {Object.entries(frontmatter).map(([k, v]) => (
+                                    <div key={k} className="flex items-center gap-2 bg-black px-2 py-1 rounded-sm border border-slate-800">
+                                      <span className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">{k}</span>
+                                      <span className="text-xs text-slate-300 font-mono">{v}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="prose prose-invert prose-slate max-w-none prose-headings:font-display prose-headings:font-light prose-headings:italic markdown-body">
+                                <ReactMarkdown>{processedContent}</ReactMarkdown>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     ) : (
                       <div className="h-full flex items-center justify-center py-20">
@@ -709,28 +756,14 @@ export default function App() {
           </div>
 
           {/* AI Chat Sidebar Area */}
-          <section className={cn(
-            "transition-all duration-500 ease-in-out flex shadow-2xl relative",
-            isChatMinimized ? "h-12 w-[640px] translate-y-[calc(100%-3rem)] absolute bottom-0 right-8 bg-[#111] flex-row" : "w-[640px] bg-[#111] border-l border-slate-800 flex-row"
-          )}>
-            {!isChatMinimized && (
-              <ChatSidebar
-                onSelectSession={loadChatSession}
-                currentSessionId={currentSessionId}
-                onNewSession={handleNewSession}
-              />
-            )}
-            <div className="flex-1 flex flex-col hardware-border border-l border-slate-800">
-            {isChatMinimized ? (
-              <button 
-                onClick={() => setIsChatMinimized(false)}
-                className="w-full h-full flex items-center justify-center bg-orange-500 text-black rounded-sm hover:bg-orange-400 transition-colors shadow-[0_0_15px_rgba(249,115,22,0.4)]"
-                title="Restore Terminal"
+          <AnimatePresence>
+            {!isChatMinimized ? (
+              <motion.section 
+                initial={{ x: 400 }}
+                animate={{ x: 0 }}
+                exit={{ x: 400 }}
+                className="w-[400px] shadow-2xl relative bg-[#111] border-l border-slate-800 flex flex-col z-20 shrink-0"
               >
-                <Send className="w-5 h-5 -rotate-45" />
-              </button>
-            ) : (
-              <>
                 <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-black/40 min-h-[57px]">
                   <div className="flex items-center gap-3">
                     <h2 className="text-xs uppercase text-slate-500 tracking-widest font-bold">Terminal / Chat</h2>
@@ -745,7 +778,7 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono text-sm">
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono text-sm relative">
                   {messages.length === 0 && (
                     <div className="text-left text-slate-500">
                       <p>{">"} Ask questions about your ingested knowledge.</p>
@@ -796,10 +829,19 @@ export default function App() {
                     </button>
                   </form>
                 </div>
-              </>
+              </motion.section>
+            ) : (
+              <motion.button
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                onClick={() => setIsChatMinimized(false)}
+                className="fixed bottom-8 right-8 w-14 h-14 bg-orange-500 text-black rounded-full flex items-center justify-center hover:bg-orange-400 transition-transform hover:scale-110 shadow-[0_0_15px_rgba(249,115,22,0.4)] z-50 cursor-pointer"
+                title="Restore Terminal"
+              >
+                <Send className="w-5 h-5 -rotate-45" />
+              </motion.button>
             )}
-            </div>
-          </section>
+          </AnimatePresence>
         </div>
       </main>
     </div>

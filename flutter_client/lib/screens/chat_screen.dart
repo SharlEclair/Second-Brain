@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../services/api_service.dart';
 import '../services/queue_service.dart';
+import '../services/widget_service.dart';
 import '../screens/debug_logs_screen.dart';
 import 'settings_screen.dart';
 import 'notes_browser_screen.dart';
@@ -136,6 +137,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
 
     try {
       final result = await _apiService.ingestUrl(url);
+      // Update widgets on success
+      WidgetService.syncAllWidgets(_apiService);
       if (mounted) {
         _urlController.clear();
         final status = result['status'];
@@ -203,6 +206,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     try {
       final result = await _queueService.processQueue(_apiService);
       await _refreshQueue();
+      // Update widgets on success
+      WidgetService.syncAllWidgets(_apiService);
       if (mounted) {
         setState(() {
           _queueErrors = result.errors;

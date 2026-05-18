@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../widgets/events_carousel.dart';
 import 'note_viewer_screen.dart';
 
 class NotesBrowserScreen extends StatefulWidget {
@@ -18,12 +19,14 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
   
   List<FileSystemEntity> _localNotes = [];
   List<FileSystemEntity> _filteredNotes = [];
+  List<Map<String, dynamic>> _upcomingEvents = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadNotes();
+    _loadUpcomingEvents();
     _searchController.addListener(_filterNotes);
   }
 
@@ -41,6 +44,19 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
       _filteredNotes = notes;
       _isLoading = false;
     });
+  }
+
+  Future<void> _loadUpcomingEvents() async {
+    try {
+      final events = await _apiService.fetchUpcomingEvents();
+      if (mounted) {
+        setState(() {
+          _upcomingEvents = events;
+        });
+      }
+    } catch (_) {
+      // Best-effort load
+    }
   }
 
   void _filterNotes() {
@@ -65,6 +81,7 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
         }
       }
       await _loadNotes();
+      await _loadUpcomingEvents();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Sync complete. Local vault updated.')),
@@ -125,6 +142,41 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
               ),
             ),
           ),
+          if (_upcomingEvents.isNotEmpty)
+            EventsCarousel(
+              events: _upcomingEvents,
+              onEventTap: (fileName, title) async {
+                setState(() => _isLoading = true);
+                try {
+                  var content = await _storageService.readNote(fileName);
+                  if (content == null) {
+                    content = await _apiService.fetchNoteContent(fileName);
+                    await _storageService.saveNote(fileName, content);
+                  }
+                  
+                  if (context.mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => NoteViewerScreen(
+                          title: title,
+                          content: content!,
+                          fileName: fileName,
+                        ),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to load note: $e')),
+                    );
+                  }
+                } finally {
+                  setState(() => _isLoading = false);
+                }
+              },
+            ),
           Expanded(
             child: _isLoading 
               ? const Center(child: CircularProgressIndicator(color: Color(0xFFF97316)))
