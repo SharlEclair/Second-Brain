@@ -29,7 +29,6 @@
             android:layout_height="20dp"
             android:layout_alignParentEnd="true"
             android:layout_centerVertical="true"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/stat_notify_sync"
             android:contentDescription="Refresh Insight"
             android:tint="#88FFFFFF" />
@@ -76,7 +75,6 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="?android:attr/selectableItemBackground"
             android:gravity="center"
             android:orientation="horizontal">
             <TextView
@@ -101,7 +99,6 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="?android:attr/selectableItemBackground"
             android:gravity="center"
             android:orientation="horizontal">
             <TextView
@@ -126,7 +123,6 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="?android:attr/selectableItemBackground"
             android:gravity="center"
             android:orientation="horizontal">
             <TextView

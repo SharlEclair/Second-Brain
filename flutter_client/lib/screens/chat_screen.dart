@@ -151,37 +151,22 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
           ),
         );
       }
-    } on NetworkException {
-      // Truly can't reach the server — queue for later
-      await _queueService.addToQueue(url);
-      await _refreshQueue();
-      if (mounted) {
-        _urlController.clear();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('📌 Queued — will process when connected'),
-            backgroundColor: Color(0xFFF97316),
-          ),
-        );
-      }
-    } on ServerException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Server error: ${e.message}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 6),
-          ),
-        );
-      }
     } catch (e) {
       await _queueService.addToQueue(url);
       await _refreshQueue();
       if (mounted) {
         _urlController.clear();
+        String message = '📌 Queued';
+        if (e is NetworkException) {
+          message = '📌 Queued — will process when connected';
+        } else if (e is ServerException) {
+          message = '📌 Queued (Server error: ${e.message})';
+        } else {
+          message = '📌 Queued (error: ${e.toString().split("\n").first})';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('📌 Queued (error: ${e.toString().split("\n").first})'),
+            content: Text(message),
             backgroundColor: const Color(0xFFF97316),
           ),
         );
