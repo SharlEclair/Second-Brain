@@ -20,3 +20,6 @@ temp_*/
 chroma_db/
 vector_db.json
 url_index.json
+
+# Configuration / Credentials
+ngrok.yml
