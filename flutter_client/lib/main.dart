@@ -243,7 +243,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
   void _showScratchpadDialog() {
     final textController = TextEditingController();
     final titleController = TextEditingController();
-    final BuildContext? dialogContext = _scaffoldMessengerKey.currentContext;
+    final BuildContext? dialogContext = _navigatorKey.currentContext;
     if (dialogContext == null) return;
 
     showDialog(

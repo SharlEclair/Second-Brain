@@ -7,7 +7,7 @@
 .instagram.com	TRUE	/	TRUE	1806904025	ig_nrcb	1
 .instagram.com	TRUE	/	TRUE	1812611480	datr	l-n6aVUZUcqH7p0DLNy7u3B4
 .instagram.com	TRUE	/	TRUE	1812611480	mid	afrplwALAAHjxV4rOw5IwRNoVU32
-.instagram.com	TRUE	/	TRUE	1813715195	csrftoken	5HZnofGarL5wFtbxLIPwEQjDD9MQRnTg
+.instagram.com	TRUE	/	TRUE	1813734536	csrftoken	5HZnofGarL5wFtbxLIPwEQjDD9MQRnTg
 .instagram.com	TRUE	/	TRUE	1786871832	ds_user_id	4963583628
 .instagram.com	TRUE	/	TRUE	1779700629	dpr	1.25
 .instagram.com	TRUE	/	TRUE	1779700629	wd	1536x730
