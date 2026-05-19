@@ -12,14 +12,14 @@ class OperationManager:
         self.error_logs_file = "error_log.json"
         self._lock = threading.Lock()
         
-    def start_task(self, task_id, url, initial_status="Starting", platform=None, progress=0):
+    def start_task(self, task_id, url, initial_status="Starting", platform=None, progress=0, state="active"):
         now = datetime.datetime.now().isoformat()
         task = {
             "task_id": task_id,
             "url": url,
             "platform": platform,
             "status": initial_status,
-            "state": "active",
+            "state": state,
             "progress": progress,
             "start_time": now,
             "updated_at": now,
