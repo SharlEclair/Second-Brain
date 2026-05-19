@@ -14,7 +14,7 @@ import chromadb
 from core.config import OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH, AI_MODEL, AI_MODEL_PRIMARY, AI_MODEL_FALLBACK, AI_MODEL_CHAIN, TAGS_FILE
 from core.state import ops_manager, get_url_index, save_url_index
 from core.utils import clean_url, chunk_text, cleanup_temp_files, get_platform_from_url
-from core.processors import process_reel, process_image_post, generate_content_with_fallback, process_pdf, process_web_article, process_text_file, process_raw_text
+from core.processors import process_reel, process_image_post, generate_content_with_fallback, process_pdf, process_web_article, process_text_file, process_raw_text, process_audio_file
 
 
 import asyncio
@@ -446,8 +446,8 @@ async def chat(request: AskRequest):
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
     filename_lower = file.filename.lower()
-    if not (filename_lower.endswith(".pdf") or filename_lower.endswith(".txt") or filename_lower.endswith(".md")):
-        raise HTTPException(status_code=400, detail="Only PDF, TXT, and MD files are currently supported")
+    if not (filename_lower.endswith(".pdf") or filename_lower.endswith(".txt") or filename_lower.endswith(".md") or filename_lower.endswith(".mp3")):
+        raise HTTPException(status_code=400, detail="Only PDF, TXT, MD, and MP3 files are currently supported")
 
     task_id = f"task_{uuid.uuid4().hex[:8]}"
     ops_manager.start_task(task_id, file.filename, "Uploading file", platform="local", progress=5)
@@ -461,6 +461,8 @@ async def upload_file(file: UploadFile = File(...)):
 
         if filename_lower.endswith(".pdf"):
             data = await process_pdf(temp_path, safe_filename, task_id)
+        elif filename_lower.endswith(".mp3"):
+            data = await process_audio_file(temp_path, safe_filename, task_id)
         else:
             data = await process_text_file(temp_path, safe_filename, task_id)
 

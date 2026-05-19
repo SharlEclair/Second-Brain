@@ -6,7 +6,8 @@ import '../widgets/events_carousel.dart';
 import 'note_viewer_screen.dart';
 
 class NotesBrowserScreen extends StatefulWidget {
-  const NotesBrowserScreen({super.key});
+  final bool focusSearch;
+  const NotesBrowserScreen({super.key, this.focusSearch = false});
 
   @override
   State<NotesBrowserScreen> createState() => _NotesBrowserScreenState();
@@ -16,6 +17,7 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
   final ApiService _apiService = ApiService();
   final StorageService _storageService = StorageService();
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   
   List<FileSystemEntity> _localNotes = [];
   List<FileSystemEntity> _filteredNotes = [];
@@ -28,11 +30,18 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
     _loadNotes();
     _loadUpcomingEvents();
     _searchController.addListener(_filterNotes);
+    
+    if (widget.focusSearch) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _searchFocusNode.requestFocus();
+      });
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -127,6 +136,7 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
             padding: const EdgeInsets.all(16.0),
             child: TextField(
               controller: _searchController,
+              focusNode: _searchFocusNode,
               style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: InputDecoration(
                 hintText: "Search your knowledge...",

@@ -720,3 +720,37 @@ async def process_raw_text(text: str, title: str, task_id: str = None, status_ca
         }
     except Exception:
         raise
+
+async def process_audio_file(filepath: str, original_filename: str, task_id: str = None, status_callback=None) -> dict:
+    if status_callback:
+        await status_callback("Transcribing audio file")
+    if task_id:
+        ops_manager.update_task(task_id, "Transcribing audio file", progress=30)
+
+    try:
+        raw_text = await asyncio.to_thread(_sync_transcribe, filepath)
+        transcript_status = "complete" if raw_text else "empty"
+
+        if status_callback:
+            await status_callback("AI analyzing transcript")
+        if task_id:
+            ops_manager.update_task(task_id, "AI analyzing transcript", progress=70)
+
+        import hashlib
+        content_hash = hashlib.md5(raw_text.encode('utf-8')).hexdigest() if raw_text else hashlib.md5(original_filename.encode('utf-8')).hexdigest()
+        ai_data = await asyncio.to_thread(_sync_analyze_text, raw_text or "No transcribed text.", original_filename)
+
+        return {
+            "uploader": "Local Audio File",
+            "description": original_filename,
+            "url": f"file://{original_filename}",
+            "type": "audio-document",
+            "platform": "local",
+            "ai_data": ai_data,
+            "content_hash": content_hash,
+            "raw_transcript": raw_text,
+            "transcript_status": transcript_status,
+            "processor": "whisper-transcriber"
+        }
+    except Exception:
+        raise
