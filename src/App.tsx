@@ -36,6 +36,7 @@ import SerendipityWidget from './components/SerendipityWidget';
 import VaultGraph from './components/VaultGraph';
 import ActivityHeatmap from './components/ActivityHeatmap';
 import { LibraryDirectory } from './components/LibraryDirectory';
+import InboxCompileWidget from './components/InboxCompileWidget';
 
 
 
@@ -949,6 +950,7 @@ export default function App() {
 
                     <div className="w-full max-w-5xl mx-auto px-8 grid grid-cols-1 md:grid-cols-4 gap-6">
                       <div className="md:col-span-1 space-y-6">
+                        <InboxCompileWidget onCompileComplete={fetchNotes} />
                         <LibraryDirectory onSelectCategory={handleSelectNoteByName} />
                         <SerendipityWidget onSelectNote={handleSelectNote} />
                         <EventsWidget onSelectEvent={handleSelectNote} />

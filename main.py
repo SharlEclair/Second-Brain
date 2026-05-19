@@ -80,6 +80,20 @@ class AppendTasksRequest(BaseModel):
 
 
 CATEGORY_SUMMARIES_CACHE = {}
+SYSTEM_CONFIG_FILE = "system_config.json"
+
+def get_system_config():
+    if os.path.exists(SYSTEM_CONFIG_FILE):
+        try:
+            with open(SYSTEM_CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"inbox_mode": False}
+
+def save_system_config(config):
+    with open(SYSTEM_CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=2)
 
 def extract_summary_from_md(filepath):
     try:
@@ -234,13 +248,25 @@ async def get_note_content(filename: str):
 @app.get("/api/config")
 async def get_config():
     index = get_url_index()
+    sys_config = get_system_config()
     return {
         "model": AI_MODEL,
         "primary_model": AI_MODEL_PRIMARY,
         "fallback_model": AI_MODEL_FALLBACK,
         "model_chain": AI_MODEL_CHAIN,
         "note_count": len(index),
+        "inbox_mode": sys_config.get("inbox_mode", False)
     }
+
+class ToggleInboxModeRequest(BaseModel):
+    inbox_mode: bool
+
+@app.post("/api/config/inbox_mode")
+async def toggle_inbox_mode(request: ToggleInboxModeRequest):
+    config = get_system_config()
+    config["inbox_mode"] = request.inbox_mode
+    save_system_config(config)
+    return {"status": "success", "inbox_mode": config["inbox_mode"]}
 
 @app.post("/api/sync")
 async def sync_vault():
@@ -517,6 +543,9 @@ async def _run_ingestion_logic(url: str, task_id: str, status_callback=None):
         date_str = datetime.datetime.now().strftime("%Y-%m-%d")
         safe_uploader = re.sub(r'[\\/*?:"<>|]', "", data['uploader'])
         raw_category = data['ai_data'].get('category', 'Post')
+        sys_config = get_system_config()
+        if sys_config.get("inbox_mode", False):
+            raw_category = "raw"
         safe_category = re.sub(r'[\\/*?:"<>|]', "-", raw_category)
         filename = get_unique_filename(f"{date_str} - {safe_category} from {data['platform'].capitalize()} ({safe_uploader}).md", category=safe_category)
 
@@ -735,6 +764,9 @@ async def upload_file(file: UploadFile = File(...)):
         date_str = datetime.datetime.now().strftime("%Y-%m-%d")
         safe_uploader = re.sub(r'[\/*?:"<>|]', "", data['uploader'])
         raw_category = data['ai_data'].get('category', 'Document')
+        sys_config = get_system_config()
+        if sys_config.get("inbox_mode", False):
+            raw_category = "raw"
         safe_category = re.sub(r'[\/*?:"<>|]', "-", raw_category)
         filename = get_unique_filename(f"{date_str} - {safe_category} ({safe_uploader}).md", category=safe_category)
 
@@ -802,6 +834,9 @@ processor: {data.get('processor', '')}
                 ids=[f"{data.get('content_hash') or uuid.uuid4().hex}_chunk_{i}" for i in range(len(chunks))]
             )
 
+        # Update AI Librarian indexes
+        update_hierarchical_indexes()
+
         ops_manager.end_task(task_id, "Completed", state="completed")
         return {"status": "success", "task_id": task_id, "note": note_data}
 
@@ -834,6 +869,9 @@ async def ingest_text(request: IngestTextRequest):
         ops_manager.update_task(task_id, "Saving to vaults", progress=85)
         date_str = datetime.datetime.now().strftime("%Y-%m-%d")
         raw_category = data['ai_data'].get('category', 'General')
+        sys_config = get_system_config()
+        if sys_config.get("inbox_mode", False):
+            raw_category = "raw"
         safe_category = re.sub(r'[\/*?:"<>|]', "-", raw_category)
         filename = get_unique_filename(f"{date_str} - {safe_category} (Shared Text).md", category=safe_category)
 
@@ -900,6 +938,9 @@ processor: {data.get('processor', '')}
                 metadatas=[{"filename": relative_filename, "url": data['url'], "content_hash": data.get("content_hash")} for _ in chunks],
                 ids=[f"{data.get('content_hash') or uuid.uuid4().hex}_chunk_{i}" for i in range(len(chunks))]
             )
+
+        # Update AI Librarian indexes
+        update_hierarchical_indexes()
 
         ops_manager.end_task(task_id, "Completed", state="completed")
         return {"status": "success", "task_id": task_id, "note": note_data}
@@ -1477,28 +1518,313 @@ tags: ["#inbox"]
 @app.post("/api/save_answer")
 async def save_answer(request: SaveAnswerRequest):
     try:
+        # Get existing categories and note titles to pass to the LLM
+        existing_categories = []
+        existing_titles = []
+        if os.path.exists(PROJECT_VAULT_PATH):
+            for item in os.listdir(PROJECT_VAULT_PATH):
+                cat_path = os.path.join(PROJECT_VAULT_PATH, item)
+                if os.path.isdir(cat_path) and not item.startswith("_") and item != "raw":
+                    existing_categories.append(item)
+                    for f in os.listdir(cat_path):
+                        if f.endswith(".md") and not f.startswith("_"):
+                            existing_titles.append(f.replace(".md", ""))
+
+        existing_categories_str = ", ".join(existing_categories)
+        existing_titles_str = "\n".join([f"- {t}" for t in existing_titles])
+
+        prompt = f"""
+You are an expert AI Librarian organizing a knowledge base.
+We are saving a synthesized chat answer to our wiki. 
+
+Title of the article: {request.title}
+Content:
+{request.content}
+
+Here are the existing categories in our vault: {existing_categories_str}
+Here are the existing note titles in our vault:
+{existing_titles_str}
+
+Please perform the following operations:
+1. Select the most appropriate category for this note. Choose from the existing categories, or define a new category if none fits.
+2. Refine the note: format it with clear, professional markdown (headers, lists, tables).
+3. Identify and inject Obsidian-style wiki links like [[Note Title]] for any concepts, topics, or terms in the content that match any of our existing note titles. Ensure links are injected naturally and accurately.
+
+Format your response as a valid JSON object matching the following structure:
+{{
+  "category": "Selected Category",
+  "formatted_content": "The refined markdown content with appropriate [[wiki links]]"
+}}
+
+Ensure the output is ONLY valid JSON, with no markdown code fences, leading/trailing backticks, or extra text.
+"""
+        category = "Synthesis"
+        formatted_content = request.content
+        model_used = AI_MODEL
+
+        try:
+            response, model_used = generate_content_with_fallback(prompt, purpose="save_answer")
+            cleaned_text = response.text.strip()
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+            cleaned_text = cleaned_text.strip()
+            ai_data = json.loads(cleaned_text)
+
+            category = ai_data.get("category", "Synthesis")
+            formatted_content = ai_data.get("formatted_content", request.content)
+        except Exception as e:
+            print(f"Error calling LLM for save_answer: {e}")
+
         date_str = datetime.datetime.now().strftime("%Y-%m-%d")
         safe_title = re.sub(r'[\\/*?:"<>|]', "", request.title)
-        filename = f"Synthesis - {safe_title}.md"
-        filepath = os.path.join(OBSIDIAN_INBOX_PATH, filename)
-        content = f"---\ntype: saved_answer\ndate: {date_str}\ncategory: Synthesis\n---\n# {request.title}\n\n{request.content}"
-        with open(filepath, "w", encoding="utf-8") as f: f.write(content)
+        safe_category = re.sub(r'[\\/*?:"<>|]', "-", category)
         
+        project_category_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
+        obsidian_category_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
+        os.makedirs(project_category_path, exist_ok=True)
+        os.makedirs(obsidian_category_path, exist_ok=True)
+
+        filename = get_unique_filename(f"Synthesis - {safe_title}.md", category=safe_category)
+        project_filepath = os.path.join(project_category_path, filename)
+        obsidian_filepath = os.path.join(obsidian_category_path, filename)
+
+        full_content = f"""---
+type: synthesized_note
+date: {date_str}
+category: {category}
+ai_model: {model_used}
+---
+# {request.title}
+
+{formatted_content}
+"""
+        with open(project_filepath, "w", encoding="utf-8") as f:
+            f.write(full_content)
+        with open(obsidian_filepath, "w", encoding="utf-8") as f:
+            f.write(full_content)
+
+        relative_filename = os.path.join(safe_category, filename).replace("\\", "/")
+        note_data = {
+            "title": filename.replace(".md", ""),
+            "fileName": relative_filename,
+            "date": datetime.datetime.now().isoformat(),
+            "url": f"local://{relative_filename}",
+            "category": category
+        }
+
         # Add to index mapping
         index = get_url_index()
-        index[filename] = {
-            "title": request.title,
-            "fileName": filename,
-            "date": date_str,
-            "category": "Synthesis"
-        }
+        index[f"local://{relative_filename}"] = note_data
         save_url_index(index)
-        
-        # Trigger hierarchical indexing update
+
+        # Also index in ChromaDB
+        chunks = [chunk for chunk in chunk_text(formatted_content) if chunk.strip()]
+        if chunks:
+            vault_collection.add(
+                documents=chunks,
+                metadatas=[{"filename": relative_filename, "url": f"local://{relative_filename}", "content_hash": ""} for _ in chunks],
+                ids=[f"synthesis_{uuid.uuid4().hex}_chunk_{i}" for i in range(len(chunks))]
+            )
+
         update_hierarchical_indexes()
-        
-        return {"status": "success", "fileName": filename}
+
+        return {"status": "success", "fileName": relative_filename, "note": note_data}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/inbox/pending")
+async def get_pending_inbox():
+    try:
+        raw_dir = os.path.join(PROJECT_VAULT_PATH, "raw")
+        if not os.path.exists(raw_dir):
+            return {"count": 0, "files": []}
+        files = [f for f in os.listdir(raw_dir) if f.endswith(".md") and not f.startswith("_")]
+        return {"count": len(files), "files": files}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/compile")
+async def compile_inbox():
+    try:
+        raw_dir = os.path.join(PROJECT_VAULT_PATH, "raw")
+        if not os.path.exists(raw_dir):
+            return {"status": "success", "compiled_count": 0, "notes": []}
+
+        compiled_notes = []
+        files = [f for f in os.listdir(raw_dir) if f.endswith(".md") and not f.startswith("_")]
+
+        if not files:
+            return {"status": "success", "compiled_count": 0, "notes": []}
+
+        # Get existing categories and note titles to pass to the LLM
+        existing_categories = []
+        existing_titles = []
+        if os.path.exists(PROJECT_VAULT_PATH):
+            for item in os.listdir(PROJECT_VAULT_PATH):
+                cat_path = os.path.join(PROJECT_VAULT_PATH, item)
+                if os.path.isdir(cat_path) and not item.startswith("_") and item != "raw":
+                    existing_categories.append(item)
+                    for f in os.listdir(cat_path):
+                        if f.endswith(".md") and not f.startswith("_"):
+                            existing_titles.append(f.replace(".md", ""))
+
+        existing_categories_str = ", ".join(existing_categories)
+        existing_titles_str = "\n".join([f"- {t}" for t in existing_titles])
+
+        for file in files:
+            filepath = os.path.join(raw_dir, file)
+            obsidian_filepath = os.path.join(OBSIDIAN_INBOX_PATH, "raw", file)
+
+            with open(filepath, "r", encoding="utf-8") as f:
+                raw_content = f.read()
+
+            prompt = f"""
+You are an expert AI Librarian. Clean up, refine, and compile this raw note/clipping into a structured, categorized wiki article.
+
+Note content:
+{raw_content}
+
+Here are the existing categories in our vault: {existing_categories_str}
+Here are the existing note titles in our vault:
+{existing_titles_str}
+
+Please perform the following operations:
+1. Select the most appropriate category for this note. Choose from the existing categories, or define a new category if none fits.
+2. Refine the note: format it with clear, professional markdown. Start the content with a short summary section using format: > **AI Summary:** [Brief summary]
+3. Extract relevant tags (e.g. ["#tag1", "#tag2"]).
+4. Identify and inject Obsidian-style wiki links like [[Note Title]] for any concepts, topics, or terms in the content that match any of our existing note titles.
+
+Format your response as a valid JSON object matching the following structure:
+{{
+  "category": "Selected Category",
+  "title": "Optimized Note Title",
+  "tags": ["#tag1", "#tag2"],
+  "summary": "Brief 1-sentence summary",
+  "formatted_content": "The refined markdown content with appropriate [[wiki links]]"
+}}
+
+Ensure the output is ONLY valid JSON, with no markdown code fences, leading/trailing backticks, or extra text.
+"""
+            category = "General"
+            title = file.replace(".md", "")
+            tags = ["#inbox"]
+            summary = "Compiled note."
+            formatted_content = raw_content
+            model_used = AI_MODEL
+
+            try:
+                response, model_used = generate_content_with_fallback(prompt, purpose="compile_note")
+                cleaned_text = response.text.strip()
+                if cleaned_text.startswith("```json"):
+                    cleaned_text = cleaned_text[7:]
+                if cleaned_text.endswith("```"):
+                    cleaned_text = cleaned_text[:-3]
+                cleaned_text = cleaned_text.strip()
+                ai_data = json.loads(cleaned_text)
+
+                category = ai_data.get("category", "General")
+                title = ai_data.get("title", title)
+                tags = ai_data.get("tags", tags)
+                summary = ai_data.get("summary", summary)
+                formatted_content = ai_data.get("formatted_content", formatted_content)
+            except Exception as e:
+                print(f"Error parsing compile response for {file}: {e}")
+
+            date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+            safe_category = re.sub(r'[\\/*?:"<>|]', "-", category)
+            project_category_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
+            obsidian_category_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
+            os.makedirs(project_category_path, exist_ok=True)
+            os.makedirs(obsidian_category_path, exist_ok=True)
+
+            new_filename = get_unique_filename(f"{date_str} - {safe_category} ({title}).md", category=safe_category)
+            new_project_filepath = os.path.join(project_category_path, new_filename)
+            new_obsidian_filepath = os.path.join(obsidian_category_path, new_filename)
+
+            full_content = f"""---
+type: note
+date: {date_str}
+category: {category}
+tags: {tags}
+ai_model: {model_used}
+---
+# {title}
+
+> **AI Summary:** {summary}
+
+## Extracted Content
+{formatted_content}
+"""
+            with open(new_project_filepath, "w", encoding="utf-8") as f:
+                f.write(full_content)
+            with open(new_obsidian_filepath, "w", encoding="utf-8") as f:
+                f.write(full_content)
+
+            relative_filename = os.path.join(safe_category, new_filename).replace("\\", "/")
+
+            # Find the original URL from index mapping if it exists
+            index = get_url_index()
+            original_url = None
+            for url, val in index.items():
+                if isinstance(val, dict) and val.get("fileName") == f"raw/{file}":
+                    original_url = url
+                    break
+
+            # Remove old index entry
+            if original_url:
+                index.pop(original_url, None)
+
+            # Add new index entry
+            new_url = original_url or f"local://{relative_filename}"
+            note_data = {
+                "title": new_filename.replace(".md", ""),
+                "fileName": relative_filename,
+                "date": datetime.datetime.now().isoformat(),
+                "url": new_url,
+                "category": category,
+                "tags": tags
+            }
+            index[new_url] = note_data
+            save_url_index(index)
+
+            # Update Vector DB (Delete raw note chunks and add compiled note chunks)
+            try:
+                # Delete by filename
+                vault_collection.delete(where={"filename": f"raw/{file}"})
+            except Exception as e:
+                print(f"Error deleting old chunks from vector db: {e}")
+
+            chunks = [chunk for chunk in chunk_text(formatted_content) if chunk.strip()]
+            if chunks:
+                vault_collection.add(
+                    documents=chunks,
+                    metadatas=[{"filename": relative_filename, "url": new_url, "content_hash": ""} for _ in chunks],
+                    ids=[f"compile_{uuid.uuid4().hex}_chunk_{i}" for i in range(len(chunks))]
+                )
+
+            # Clean up the raw files
+            try:
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                if os.path.exists(obsidian_filepath):
+                    os.remove(obsidian_filepath)
+            except Exception as e:
+                print(f"Error removing raw files: {e}")
+
+            compiled_notes.append(note_data)
+
+        update_hierarchical_indexes()
+
+        return {
+            "status": "success",
+            "compiled_count": len(compiled_notes),
+            "notes": compiled_notes
+        }
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
