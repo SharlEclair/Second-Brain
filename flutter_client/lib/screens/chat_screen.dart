@@ -17,6 +17,7 @@ class ChatMessage {
 }
 
 class ChatScreen extends StatefulWidget {
+  static final ValueNotifier<String?> widgetActionNotifier = ValueNotifier<String?>(null);
   const ChatScreen({super.key});
 
   @override
@@ -49,10 +50,12 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       if (mounted) setState(() {}); // Refresh for FAB visibility
     });
     _refreshQueue();
+    ChatScreen.widgetActionNotifier.addListener(_handleWidgetNotifier);
   }
 
   @override
   void dispose() {
+    ChatScreen.widgetActionNotifier.removeListener(_handleWidgetNotifier);
     _statusTimer?.cancel();
     _tabController.dispose();
     _textController.dispose();
@@ -732,6 +735,195 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
               ),
         ),
       ],
+    );
+  }
+
+  void _sendDirectMessage(String text) async {
+    if (text.isEmpty) return;
+
+    setState(() {
+      _messages.add(ChatMessage(text: text, isUser: true));
+      _isLoading = true;
+    });
+
+    try {
+      final answer = await _apiService.ask(text);
+      if (mounted) {
+        setState(() {
+          _messages.add(ChatMessage(text: answer, isUser: false));
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _messages.add(ChatMessage(
+              text: "Cannot connect. Check IP in Settings.\n\n${e.toString()}",
+              isUser: false));
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _handleWidgetNotifier() {
+    final action = ChatScreen.widgetActionNotifier.value;
+    if (action == 'action/voice' && mounted) {
+      _showVoiceModeDialog();
+    }
+  }
+
+  void _showVoiceModeDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return _VoiceAssistantDialog(onSend: _sendDirectMessage);
+      },
+    );
+  }
+}
+
+class _VoiceAssistantDialog extends StatefulWidget {
+  final Function(String) onSend;
+  const _VoiceAssistantDialog({required this.onSend});
+
+  @override
+  State<_VoiceAssistantDialog> createState() => _VoiceAssistantDialogState();
+}
+
+class _VoiceAssistantDialogState extends State<_VoiceAssistantDialog> with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+  final TextEditingController _inputController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.25).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    _inputController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF0F0F0F),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24.0),
+        side: const BorderSide(color: Color(0xFF222222), width: 1),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "🎙️ CORTEX VOICE ASSISTANT",
+              style: TextStyle(
+                color: Color(0xFFF97316),
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2.0,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Pulsing Mic Icon
+            AnimatedBuilder(
+              animation: _pulseAnimation,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: _pulseAnimation.value,
+                  child: child,
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF97316).withOpacity(0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFF97316).withOpacity(0.4), width: 2),
+                ),
+                child: const Icon(
+                  Icons.mic,
+                  size: 40,
+                  color: Color(0xFFF97316),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              "Listening...",
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              "Use the keyboard mic to dictate, or type directly.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white38, fontSize: 11),
+            ),
+            const SizedBox(height: 20),
+            // Autofocused input field to bring up keyboard instantly
+            TextField(
+              controller: _inputController,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: "Speak or type your query...",
+                hintStyle: const TextStyle(color: Colors.white24),
+                filled: true,
+                fillColor: const Color(0xFF050505),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF222222)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFF97316)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel", style: TextStyle(color: Colors.white54)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    final text = _inputController.text.trim();
+                    if (text.isNotEmpty) {
+                      widget.onSend(text);
+                    }
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF97316),
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text("Ask Cortex", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            )
+          ],
+        ),
+      ),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'screens/chat_screen.dart';
+import 'screens/notes_browser_screen.dart';
 import 'screens/debug_logs_screen.dart';
 import 'services/api_service.dart';
 import 'services/queue_service.dart';
@@ -23,6 +24,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
   static const _channel = MethodChannel('com.example.second_brain/actions');
   late StreamSubscription _intentDataStreamSubscription;
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   final ApiService _apiService = ApiService();
   final QueueService _queueService = QueueService();
   Timer? _sharedStatusTimer;
@@ -204,13 +206,20 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
   void _handleWidgetAction(String action) async {
     DebugLogger.log('Triggering Widget Action: $action', type: 'WIDGET');
     
+    // Pop any open sub-screens/overlays to ensure we are at the root context
+    _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+
     switch (action) {
       case 'action/voice':
-        _showToast('🎙️ Widget Shortcut: RAG Voice Chat focused.');
-        // Bring app to foreground and show a friendly toast
+        _showToast('🎙️ Voice Assistant Mode');
+        ChatScreen.widgetActionNotifier.value = 'action/voice';
+        // Reset the value immediately so the listener triggers on consecutive taps
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ChatScreen.widgetActionNotifier.value = null;
+        });
         break;
       case 'action/clipboard':
-        _showToast('📋 Widget Shortcut: Ingesting link from Clipboard...');
+        _showToast('📋 Ingesting link from Clipboard...');
         final data = await Clipboard.getData(Clipboard.kTextPlain);
         if (data?.text != null && data!.text!.isNotEmpty) {
           _handleSharedData(data.text!);
@@ -219,12 +228,14 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
         }
         break;
       case 'action/scratchpad':
-        _showToast('✏️ Widget Shortcut: Launching Quick Scratchpad...');
-        // We defer layout opening slightly to ensure context is ready
+        _showToast('✏️ Launching Quick Scratchpad...');
         Future.delayed(const Duration(milliseconds: 300), () => _showScratchpadDialog());
         break;
       case 'action/search':
-        _showToast('🔍 Widget Shortcut: Focus Search Vault...');
+        _showToast('🔍 Notes Browser focused');
+        _navigatorKey.currentState?.push(
+          MaterialPageRoute(builder: (context) => const NotesBrowserScreen(focusSearch: true))
+        );
         break;
     }
   }
@@ -322,6 +333,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Second Brain',
+      navigatorKey: _navigatorKey,
       scaffoldMessengerKey: _scaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
