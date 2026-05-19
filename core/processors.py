@@ -754,3 +754,34 @@ async def process_audio_file(filepath: str, original_filename: str, task_id: str
         }
     except Exception:
         raise
+
+async def process_uploaded_image(filepath: str, original_filename: str, task_id: str = None, status_callback=None) -> dict:
+    if status_callback:
+        await status_callback("Analyzing image file")
+    if task_id:
+        ops_manager.update_task(task_id, "Analyzing image file", progress=30)
+
+    try:
+        if status_callback:
+            await status_callback("AI analyzing image content")
+        if task_id:
+            ops_manager.update_task(task_id, "AI analyzing image content", progress=70)
+
+        content_hash = calculate_md5(filepath)
+        ai_data = await asyncio.to_thread(_sync_analyze_images, [filepath], original_filename)
+
+        return {
+            "uploader": "Local Image File",
+            "description": original_filename,
+            "url": f"file://{original_filename}",
+            "type": "image-document",
+            "platform": "local",
+            "ai_data": ai_data,
+            "content_hash": content_hash,
+            "raw_transcript": "",
+            "transcript_status": "not_applicable",
+            "processor": "gemini-vision"
+        }
+    except Exception:
+        raise
+

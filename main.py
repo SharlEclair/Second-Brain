@@ -14,7 +14,7 @@ import chromadb
 from core.config import OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH, AI_MODEL, AI_MODEL_PRIMARY, AI_MODEL_FALLBACK, AI_MODEL_CHAIN, TAGS_FILE
 from core.state import ops_manager, get_url_index, save_url_index
 from core.utils import clean_url, chunk_text, cleanup_temp_files, get_platform_from_url
-from core.processors import process_reel, process_image_post, generate_content_with_fallback, process_pdf, process_web_article, process_text_file, process_raw_text, process_audio_file
+from core.processors import process_reel, process_image_post, generate_content_with_fallback, process_pdf, process_web_article, process_text_file, process_raw_text, process_audio_file, process_uploaded_image
 
 
 import asyncio
@@ -65,10 +65,108 @@ class IngestRequest(BaseModel):
 class AskRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
+    note_context: Optional[str] = None
 
 class SaveAnswerRequest(BaseModel):
     title: str
     content: str
+
+class ReviewRequest(BaseModel):
+    fileName: str
+
+class AppendTasksRequest(BaseModel):
+    tasks: str
+
+
+
+CATEGORY_SUMMARIES_CACHE = {}
+
+def extract_summary_from_md(filepath):
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+        match = re.search(r'> \*\*AI Summary:\*\* (.*)', content)
+        if match:
+            return match.group(1).strip()
+        body = content
+        if content.startswith("---\n"):
+            end_idx = content.find("\n---\n", 4)
+            if end_idx != -1:
+                body = content[end_idx+5:]
+        
+        lines = [l.strip() for l in body.split("\n") if l.strip() and not l.strip().startswith("#") and not l.strip().startswith(">")]
+        if lines:
+            summary = lines[0]
+            if len(summary) > 100:
+                summary = summary[:97] + "..."
+            return summary
+    except Exception:
+        pass
+    return "No summary available."
+
+def update_hierarchical_indexes():
+    """Generates _master-index.md and _index.md for each category to maintain the AI Librarian structure."""
+    global CATEGORY_SUMMARIES_CACHE
+    for vault_path in [PROJECT_VAULT_PATH, OBSIDIAN_INBOX_PATH]:
+        if not os.path.exists(vault_path):
+            continue
+            
+        categories = {}
+        for item in os.listdir(vault_path):
+            cat_path = os.path.join(vault_path, item)
+            if os.path.isdir(cat_path):
+                md_files = [f for f in os.listdir(cat_path) if f.endswith('.md') and f != '_index.md']
+                if not md_files:
+                    continue
+                categories[item] = len(md_files)
+                
+                # Extract summaries for each file in this category
+                file_summaries = {}
+                for md in md_files:
+                    filepath = os.path.join(cat_path, md)
+                    summary = extract_summary_from_md(filepath)
+                    file_summaries[md.replace(".md", "")] = summary
+                
+                # Get or generate category summary
+                cache_key = f"{item}:{','.join(sorted(md_files))}"
+                if cache_key in CATEGORY_SUMMARIES_CACHE:
+                    cat_summary = CATEGORY_SUMMARIES_CACHE[cache_key]
+                else:
+                    prompt = (
+                        f"Describe the category/topic '{item}' in one brief, engaging sentence based on "
+                        f"the following articles inside it:\n"
+                        + "\n".join([f"- {title}: {sum_val}" for title, sum_val in file_summaries.items()])
+                    )
+                    try:
+                        res, _ = generate_content_with_fallback(prompt, purpose="category_summary")
+                        cat_summary = res.text.strip()
+                    except Exception:
+                        cat_summary = f"Articles related to {item}."
+                    CATEGORY_SUMMARIES_CACHE[cache_key] = cat_summary
+                
+                index_content = f"# {item} Index\n\n{cat_summary}\n\nThis folder contains {len(md_files)} articles related to {item}.\n\n## Articles\n"
+                for title, summary in file_summaries.items():
+                    index_content += f"- [[{title}]]: {summary}\n"
+                
+                with open(os.path.join(cat_path, "_index.md"), "w", encoding="utf-8") as f:
+                    f.write(index_content)
+        
+        master_content = "# Knowledge Base Master Index\n\nTopics appear here as they're created.\n\n"
+        for cat, count in categories.items():
+            # Try to get the category summary from cache
+            cat_summary = ""
+            for k, val in CATEGORY_SUMMARIES_CACHE.items():
+                if k.startswith(f"{cat}:"):
+                    cat_summary = val
+                    break
+            if not cat_summary:
+                cat_summary = f"Articles related to {cat}."
+                
+            master_content += f"- **[[{cat}/_index|{cat}]]**: {count} articles\n  *{cat_summary}*\n"
+            
+        with open(os.path.join(vault_path, "_master-index.md"), "w", encoding="utf-8") as f:
+            f.write(master_content)
+
 
 def get_unique_filename(filename: str, category: str = None) -> str:
     stem, ext = os.path.splitext(filename)
@@ -155,7 +253,7 @@ async def sync_vault():
     except Exception as e:
         return {"status": "warning", "message": f"Sync attempted: {str(e)}"}
 
-@app.post("/api/notes/{filename}/summarize")
+@app.post("/api/notes/{filename:path}/summarize")
 async def summarize_note(filename: str):
     paths = [os.path.join(OBSIDIAN_INBOX_PATH, filename), os.path.join(PROJECT_VAULT_PATH, filename)]
     content = None
@@ -171,7 +269,7 @@ async def summarize_note(filename: str):
     response, model_used = generate_content_with_fallback(prompt, purpose="note_summary")
     return {"summary": response.text, "model": model_used}
 
-@app.post("/api/notes/{filename}/deep_dive")
+@app.post("/api/notes/{filename:path}/deep_dive")
 async def deep_dive_note(filename: str):
     paths = [os.path.join(OBSIDIAN_INBOX_PATH, filename), os.path.join(PROJECT_VAULT_PATH, filename)]
     content = None
@@ -186,6 +284,137 @@ async def deep_dive_note(filename: str):
     prompt = f"Provide a detailed analysis of this note. Include: (1) Key concepts explained, (2) Connections to broader topics, (3) Questions worth exploring further, (4) Practical applications. Format with markdown headers:\n\n{content}"
     response, model_used = generate_content_with_fallback(prompt, purpose="note_deep_dive")
     return {"deep_dive": response.text, "model": model_used}
+
+@app.post("/api/notes/{filename:path}/extract_tasks")
+async def extract_tasks(filename: str):
+    paths = [os.path.join(OBSIDIAN_INBOX_PATH, filename), os.path.join(PROJECT_VAULT_PATH, filename)]
+    content = None
+    for p in paths:
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                content = f.read()
+            break
+    if not content:
+        raise HTTPException(status_code=404, detail="Note not found")
+    
+    prompt = (
+        "Analyze the following note content and extract a clean list of actionable checklist items (tasks/next steps). "
+        "Format them using Obsidian Markdown task syntax (- [ ] Task description). "
+        "Keep them highly specific and concise. Respond ONLY with the list of tasks (no headers, intro, or wrap-up text):\n\n"
+        f"{content}"
+    )
+    response, model_used = generate_content_with_fallback(prompt, purpose="task_extraction")
+    return {"tasks": response.text.strip(), "model": model_used}
+
+@app.post("/api/notes/{filename:path}/append_tasks")
+async def append_tasks(filename: str, request: AppendTasksRequest):
+    paths = [os.path.join(OBSIDIAN_INBOX_PATH, filename), os.path.join(PROJECT_VAULT_PATH, filename)]
+    filepaths_found = [p for p in paths if os.path.exists(p)]
+    if not filepaths_found:
+        raise HTTPException(status_code=404, detail="Note not found")
+    
+    for path in filepaths_found:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        # Append tasks before the original caption or at the end
+        new_content = content + f"\n\n## Actionable Tasks\n{request.tasks}\n"
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+            
+    return {"status": "success", "message": "Tasks successfully appended to note"}
+
+@app.get("/api/weekly_brief")
+async def generate_weekly_brief():
+    # 1. Gather all notes created in the last 7 days
+    index = get_url_index()
+    seven_days_ago = datetime.datetime.now() - datetime.timedelta(days=7)
+    
+    recent_notes = []
+    for url, data in index.items():
+        if isinstance(data, dict):
+            try:
+                note_date = datetime.datetime.fromisoformat(data.get('date'))
+                if note_date >= seven_days_ago:
+                    recent_notes.append(data)
+            except Exception:
+                pass
+                
+    if not recent_notes:
+        raise HTTPException(status_code=400, detail="No new notes ingested in the last 7 days to generate a brief.")
+        
+    # 2. Build summary of recent notes
+    brief_content = ""
+    for note in recent_notes:
+        brief_content += f"- **{note.get('title')}** (Category: {note.get('category')})\n  * Link: [[{note.get('title')}]]\n"
+        
+    prompt = (
+        "Generate a professional, beautiful, and structured 'Weekly Brief' summarizing the following newly ingested knowledge entries. "
+        "Create sections based on categories (e.g., Recipe, Spot to Visit, Job/Career, etc.), summarize the key learnings/takeaways from these entries, "
+        "and suggest connections or action steps. Use elegant markdown styling with headers and bullet points:\n\n"
+        f"{brief_content}"
+    )
+    
+    response, model_used = generate_content_with_fallback(prompt, purpose="weekly_brief")
+    brief_text = response.text.strip()
+    
+    # 3. Save the weekly brief note to vault
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    brief_filename = f"Weekly Brief - {date_str}.md"
+    safe_category = "Weekly Brief"
+    
+    project_category_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
+    obsidian_category_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
+    os.makedirs(project_category_path, exist_ok=True)
+    os.makedirs(obsidian_category_path, exist_ok=True)
+    
+    project_filepath = os.path.join(project_category_path, brief_filename)
+    obsidian_filepath = os.path.join(obsidian_category_path, brief_filename)
+    
+    full_content = f"""---
+type: weekly-brief
+date: {date_str}
+category: Weekly Brief
+tags: ["#weekly-brief", "#intelligence"]
+ai_model: {model_used}
+---
+# Weekly Brief - {date_str}
+
+{brief_text}
+"""
+    
+    with open(project_filepath, "w", encoding="utf-8") as f:
+        f.write(full_content)
+    with open(obsidian_filepath, "w", encoding="utf-8") as f:
+        f.write(full_content)
+        
+    relative_filename = os.path.join(safe_category, brief_filename).replace("\\", "/")
+    
+    note_data = {
+        "title": brief_filename.replace(".md", ""),
+        "fileName": relative_filename,
+        "date": datetime.datetime.now().isoformat(),
+        "url": f"local://weekly-brief-{date_str}",
+        "category": "Weekly Brief",
+        "tags": ["#weekly-brief", "#intelligence"],
+        "ai_model": model_used
+    }
+    
+    index[f"local://weekly-brief-{date_str}"] = note_data
+    save_url_index(index)
+    
+    # Also index the Weekly Brief in ChromaDB
+    chunks = [chunk for chunk in chunk_text(brief_text) if chunk.strip()]
+    if chunks:
+        vault_collection.add(
+            documents=chunks,
+            metadatas=[{"filename": relative_filename, "url": f"local://weekly-brief-{date_str}", "content_hash": ""} for _ in chunks],
+            ids=[f"weekly_brief_{date_str}_chunk_{i}" for i in range(len(chunks))]
+        )
+        
+    return {"status": "success", "note": note_data}
+
+
 
 @app.post("/api/ingest")
 async def ingest_url(request: Request):
@@ -378,6 +607,10 @@ processor: {data.get('processor', '')}
                 metadatas=[{"filename": relative_filename, "url": url, "content_hash": data.get("content_hash")} for _ in chunks],
                 ids=[f"{content_hash or uuid.uuid4().hex}_chunk_{i}" for i in range(len(chunks))]
             )
+        
+        # Update AI Librarian indexes
+        update_hierarchical_indexes()
+        
         ops_manager.end_task(task_id, "Completed", state="completed")
         return {"status": "success", "task_id": task_id, "note": note_data}
     except Exception as e:
@@ -416,10 +649,26 @@ async def chat(request: AskRequest):
                 history_context += f"User: {msg['query']}\nAI: {msg['response']}\n"
             history_context += "\n"
 
+        note_context_text = ""
+        if request.note_context:
+            paths = [
+                os.path.join(OBSIDIAN_INBOX_PATH, request.note_context),
+                os.path.join(PROJECT_VAULT_PATH, request.note_context)
+            ]
+            for p in paths:
+                if os.path.exists(p):
+                    try:
+                        with open(p, "r", encoding="utf-8") as f:
+                            note_content = f.read()
+                            note_context_text = f"Context from active note ({request.note_context}):\n{note_content}\n\n"
+                    except Exception:
+                        pass
+                    break
+
         results = vault_collection.query(query_texts=[request.message], n_results=5)
         ctx = "\n".join(results['documents'][0]) if results['documents'] and results['documents'][0] else ""
 
-        prompt = f"Answer based on these notes:\n\n{ctx}\n\n{history_context}Question: {request.message}"
+        prompt = f"Answer based on these notes:\n\n{note_context_text}{ctx}\n\n{history_context}Question: {request.message}\n\nIMPORTANT INSTRUCTION: When referencing important concepts, people, or topics in your answer, wrap them in Obsidian-style wiki links like [[Concept Name]]."
         response, model_used = generate_content_with_fallback(prompt, purpose="rag_chat")
 
         # Save to history
@@ -446,8 +695,21 @@ async def chat(request: AskRequest):
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
     filename_lower = file.filename.lower()
-    if not (filename_lower.endswith(".pdf") or filename_lower.endswith(".txt") or filename_lower.endswith(".md") or filename_lower.endswith(".mp3")):
-        raise HTTPException(status_code=400, detail="Only PDF, TXT, MD, and MP3 files are currently supported")
+    IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+    AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".ogg", ".aac")
+    TEXT_EXTS = (".txt", ".md")
+    
+    is_valid = (
+        filename_lower.endswith(".pdf") or
+        any(filename_lower.endswith(ext) for ext in IMAGE_EXTS) or
+        any(filename_lower.endswith(ext) for ext in AUDIO_EXTS) or
+        any(filename_lower.endswith(ext) for ext in TEXT_EXTS)
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=400, 
+            detail="Unsupported format. Only PDF, images (JPG/PNG/WEBP), audio (MP3/WAV/M4A), and text (TXT/MD) files are supported."
+        )
 
     task_id = f"task_{uuid.uuid4().hex[:8]}"
     ops_manager.start_task(task_id, file.filename, "Uploading file", platform="local", progress=5)
@@ -461,7 +723,9 @@ async def upload_file(file: UploadFile = File(...)):
 
         if filename_lower.endswith(".pdf"):
             data = await process_pdf(temp_path, safe_filename, task_id)
-        elif filename_lower.endswith(".mp3"):
+        elif any(filename_lower.endswith(ext) for ext in IMAGE_EXTS):
+            data = await process_uploaded_image(temp_path, safe_filename, task_id)
+        elif any(filename_lower.endswith(ext) for ext in AUDIO_EXTS):
             data = await process_audio_file(temp_path, safe_filename, task_id)
         else:
             data = await process_text_file(temp_path, safe_filename, task_id)
@@ -719,38 +983,204 @@ async def get_suggestions():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/serendipity")
+async def get_serendipity():
+    try:
+        index = get_url_index()
+        all_notes = []
+        now = datetime.datetime.now()
+        
+        for url, data in index.items():
+            if isinstance(data, dict):
+                date_str = data.get("date")
+                if date_str:
+                    try:
+                        dt = datetime.datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                    except Exception:
+                        dt = now
+                else:
+                    dt = now
+                
+                all_notes.append({
+                    "url": url,
+                    "title": data.get("title", ""),
+                    "fileName": data.get("fileName", ""),
+                    "date": date_str,
+                    "last_reviewed": data.get("last_reviewed"),
+                    "dt": dt
+                })
+        
+        if not all_notes:
+            return []
+            
+        def sort_key(note):
+            last_rev = note["last_reviewed"]
+            has_rev = 1 if last_rev else 0
+            rev_time = last_rev if last_rev else ""
+            return (has_rev, rev_time, note["date"])
+            
+        sorted_notes = sorted(all_notes, key=sort_key)
+        
+        import random
+        pool = sorted_notes[:min(15, len(sorted_notes))]
+        selected = random.sample(pool, min(3, len(pool)))
+        
+        results = []
+        for note in selected:
+            summary = ""
+            filename = note["fileName"]
+            paths = [
+                os.path.join(OBSIDIAN_INBOX_PATH, filename),
+                os.path.join(PROJECT_VAULT_PATH, filename)
+            ]
+            for p in paths:
+                if os.path.exists(p):
+                    try:
+                        with open(p, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        match = re.search(r'> \*\*AI Summary:\*\* (.*)', content)
+                        if match:
+                            summary = match.group(1).strip()
+                        else:
+                            match_body = re.search(r'# .*\n\n> (.*)', content)
+                            if match_body:
+                                summary = match_body.group(1).strip()
+                    except Exception:
+                        pass
+                    break
+            
+            results.append({
+                "url": note["url"],
+                "title": note["title"],
+                "fileName": filename,
+                "date": note["date"],
+                "last_reviewed": note["last_reviewed"],
+                "summary": summary
+            })
+            
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/notes/reviewed")
+async def mark_note_reviewed(request: ReviewRequest):
+    try:
+        index = get_url_index()
+        target_url = None
+        for url, data in index.items():
+            if isinstance(data, dict) and data.get("fileName") == request.fileName:
+                target_url = url
+                break
+                
+        if not target_url:
+            raise HTTPException(status_code=404, detail="Note not found in index")
+            
+        now_str = datetime.datetime.now().isoformat()
+        index[target_url]["last_reviewed"] = now_str
+        save_url_index(index)
+        
+        paths = [
+            os.path.join(OBSIDIAN_INBOX_PATH, request.fileName),
+            os.path.join(PROJECT_VAULT_PATH, request.fileName)
+        ]
+        for p in paths:
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    content = f.read()
+                
+                if content.startswith("---\n"):
+                    end_idx = content.find("\n---\n", 4)
+                    if end_idx != -1:
+                        frontmatter = content[4:end_idx]
+                        body = content[end_idx+5:]
+                        
+                        if "last_reviewed:" in frontmatter:
+                            frontmatter = re.sub(r'last_reviewed:.*', f'last_reviewed: {now_str}', frontmatter)
+                        else:
+                            frontmatter += f"\nlast_reviewed: {now_str}"
+                            
+                        new_content = f"---\n{frontmatter}\n---\n{body}"
+                        with open(p, "w", encoding="utf-8") as f:
+                            f.write(new_content)
+                            
+        return {"status": "success", "message": "Note marked as reviewed"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/graph")
 async def get_vault_graph():
     try:
-        nodes = []
+        nodes_dict = {}
         edges = []
-        node_ids = set()
-
-        def add_node(node_id, group=1):
-            if node_id not in node_ids:
-                nodes.append({"id": node_id, "group": group})
-                node_ids.add(node_id)
+        category_map = {}
+        cat_counter = 1
 
         import glob
         for root, _, files in os.walk(PROJECT_VAULT_PATH):
             for file in files:
                 if file.endswith(".md"):
                     filepath = os.path.join(root, file)
-                    node_id = file.replace(".md", "")
-                    add_node(node_id, group=1)
+                    rel_path = os.path.relpath(filepath, PROJECT_VAULT_PATH)
+                    parts = rel_path.split(os.sep)
+                    if len(parts) > 1:
+                        category = parts[0]
+                    else:
+                        category = "General"
 
+                    if category not in category_map:
+                        category_map[category] = cat_counter
+                        cat_counter += 1
+
+                    node_id = file.replace(".md", "")
+                    nodes_dict[node_id] = {
+                        "id": node_id,
+                        "group": category_map[category],
+                        "val": 1,
+                        "category": category
+                    }
+
+        connection_counts = {}
+        for root, _, files in os.walk(PROJECT_VAULT_PATH):
+            for file in files:
+                if file.endswith(".md"):
+                    node_id = file.replace(".md", "")
+                    filepath = os.path.join(root, file)
+                    
                     with open(filepath, "r", encoding="utf-8") as f:
                         content = f.read()
 
                         links = re.findall(r'\[\[(.*?)\]\]', content)
                         for link in links:
-                            link_target = link.split("|")[0]
-                            add_node(link_target, group=2)
+                            link_target = link.split("|")[0].strip()
+                            if not link_target:
+                                continue
+                                
+                            if link_target not in nodes_dict:
+                                if "Linked" not in category_map:
+                                    category_map["Linked"] = 0
+                                nodes_dict[link_target] = {
+                                    "id": link_target,
+                                    "group": 0,
+                                    "val": 1,
+                                    "category": "Reference"
+                                }
+                            
                             edges.append({"source": node_id, "target": link_target})
+                            connection_counts[node_id] = connection_counts.get(node_id, 0) + 1
+                            connection_counts[link_target] = connection_counts.get(link_target, 0) + 1
 
-        return {"nodes": nodes, "links": edges}
+        for node_id, count in connection_counts.items():
+            if node_id in nodes_dict:
+                nodes_dict[node_id]["val"] = 1 + count * 2
+
+        return {
+            "nodes": list(nodes_dict.values()),
+            "links": edges,
+            "categories": list(category_map.keys())
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 class RenameTagRequest(BaseModel):
     old_tag: str
@@ -807,6 +1237,243 @@ async def rename_tag(request: RenameTagRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def find_ghost_topics():
+    existing_titles = set()
+    note_to_path = {}
+    
+    for root, _, files in os.walk(PROJECT_VAULT_PATH):
+        for file in files:
+            if file.endswith(".md") and not file.startswith("_"):
+                title = file.replace(".md", "")
+                existing_titles.add(title.lower())
+                existing_titles.add(title)
+                note_to_path[title.lower()] = os.path.relpath(os.path.join(root, file), PROJECT_VAULT_PATH).replace("\\", "/")
+                
+    ghost_topics = {}
+    
+    for root, _, files in os.walk(PROJECT_VAULT_PATH):
+        for file in files:
+            if file.endswith(".md") and not file.startswith("_"):
+                filepath = os.path.join(root, file)
+                rel_path = os.path.relpath(filepath, PROJECT_VAULT_PATH).replace("\\", "/")
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    
+                    links = re.findall(r'\[\[(.*?)\]\]', content)
+                    for link in links:
+                        target = link.split("|")[0].strip()
+                        if not target or target.endswith("_index") or target == "_master-index":
+                            continue
+                        
+                        target_clean = target.split("/")[-1]
+                        if target_clean.lower() not in existing_titles and target.lower() not in existing_titles:
+                            if target_clean not in ghost_topics:
+                                ghost_topics[target_clean] = []
+                            if rel_path not in ghost_topics[target_clean]:
+                                ghost_topics[target_clean].append(rel_path)
+                except Exception as e:
+                    print(f"Error scanning links in {file}: {e}")
+                    
+    ghost_list = []
+    for title, sources in ghost_topics.items():
+        ghost_list.append({
+            "title": title,
+            "sources": sources
+        })
+    return ghost_list
+
+@app.post("/api/audit")
+async def audit_vault():
+    try:
+        # Find ghost topics programmatically
+        ghost_list = find_ghost_topics()
+        
+        # Gather note titles and summaries
+        notes_summary_list = []
+        for root, _, files in os.walk(PROJECT_VAULT_PATH):
+            for file in files:
+                if file.endswith(".md") and not file.startswith("_"):
+                    title = file.replace(".md", "")
+                    filepath = os.path.join(root, file)
+                    summary = extract_summary_from_md(filepath)
+                    notes_summary_list.append(f"Title: {title}\nSummary: {summary}\n---")
+                    
+        notes_summary_str = "\n".join(notes_summary_list)
+        
+        prompt = f"""
+You are an expert AI Librarian. Analyze the following list of articles and summaries from our Knowledge Base Vault.
+
+Check for:
+1. Conflicting claims or outdated information across articles (e.g. contradictions in facts, dates, advice).
+2. Gaps in coverage (suggest 3-5 specific articles to add to round out the topics).
+
+Articles list:
+{notes_summary_str}
+
+Format your response as a valid JSON object matching the following structure:
+{{
+  "inconsistencies": [
+    {{
+      "articles": ["Article Title A", "Article Title B"],
+      "conflict": "Description of the contradiction or outdated info"
+    }}
+  ],
+  "gaps": [
+    {{
+      "suggested_title": "Suggested Article Title",
+      "reason": "Why this is a gap and what it should cover"
+    }}
+  ]
+}}
+
+Ensure the output is ONLY valid JSON, with no markdown code fences, leading/trailing backticks, or extra text.
+"""
+        response, model_used = generate_content_with_fallback(prompt, purpose="vault_audit")
+        
+        # Parse JSON
+        ai_analysis = {"inconsistencies": [], "gaps": []}
+        try:
+            cleaned_text = response.text.strip()
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+            cleaned_text = cleaned_text.strip()
+            ai_analysis = json.loads(cleaned_text)
+        except Exception as e:
+            print(f"Error parsing AI audit JSON: {e}")
+            
+        inconsistencies = ai_analysis.get("inconsistencies", [])
+        gaps = ai_analysis.get("gaps", [])
+        
+        # Save results to output/Vault-Audit-[Date].md
+        date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        os.makedirs("output", exist_ok=True)
+        filepath = os.path.join("output", f"Vault-Audit-{date_str}.md")
+        
+        # Build markdown report
+        ghosts_md = ""
+        if not ghost_list:
+            ghosts_md = "*No missing articles referenced via [[links]] found.*\n"
+        else:
+            for g in ghost_list:
+                sources_str = ", ".join([f"[[{s.replace('.md', '')}]]" for s in g['sources']])
+                ghosts_md += f"- [ ] **[[{g['title']}]]** - referenced in: {sources_str}\n"
+                
+        inconsistencies_md = ""
+        if not inconsistencies:
+            inconsistencies_md = "*No conflicting claims or outdated information detected.*\n"
+        else:
+            for inc in inconsistencies:
+                articles_str = " and ".join([f"[[{art}]]" for art in inc['articles']])
+                inconsistencies_md += f"- **Conflict between {articles_str}**: {inc['conflict']}\n"
+                
+        gaps_md = ""
+        if not gaps:
+            gaps_md = "*No significant coverage gaps detected.*\n"
+        else:
+            for gap in gaps:
+                gaps_md += f"- **[[{gap['suggested_title']}]]**: {gap['reason']}\n"
+                
+        markdown_content = f"""---
+type: audit-report
+date: {date_str}
+category: Audit
+---
+# Vault Audit Report - {date_str}
+
+## Programmatic Analysis
+
+### Ghost Topics (Missing Articles referenced via [[links]])
+{ghosts_md}
+
+## AI Analysis
+
+### Conflicting Claims & Outdated Information
+{inconsistencies_md}
+
+### Gaps in Coverage (Suggested Articles to Add)
+{gaps_md}
+"""
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(markdown_content)
+            
+        update_hierarchical_indexes()
+        
+        return {
+            "status": "success",
+            "fileName": f"output/Vault-Audit-{date_str}.md",
+            "ghost_topics": ghost_list,
+            "inconsistencies": inconsistencies,
+            "gaps": gaps
+        }
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+class CreateNoteRequest(BaseModel):
+    title: str
+    category: str
+    content: Optional[str] = ""
+
+@app.post("/api/notes/create")
+async def create_note(request: CreateNoteRequest):
+    try:
+        date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        safe_title = re.sub(r'[\\/*?:"<>|]', "", request.title)
+        safe_category = re.sub(r'[\\/*?:"<>|]', "-", request.category)
+        
+        filename = f"{safe_title}.md"
+        project_category_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
+        obsidian_category_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
+        os.makedirs(project_category_path, exist_ok=True)
+        os.makedirs(obsidian_category_path, exist_ok=True)
+        
+        project_filepath = os.path.join(project_category_path, filename)
+        obsidian_filepath = os.path.join(obsidian_category_path, filename)
+        
+        if os.path.exists(project_filepath) or os.path.exists(obsidian_filepath):
+             raise HTTPException(status_code=400, detail="Note already exists")
+             
+        content = f"""---
+type: note
+date: {date_str}
+category: {request.category}
+tags: ["#inbox"]
+---
+# {request.title}
+
+{request.content or "Draft article created via Vault Audit."}
+"""
+        with open(project_filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+        with open(obsidian_filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+            
+        relative_filename = os.path.join(safe_category, filename).replace("\\", "/")
+        note_data = {
+            "title": request.title,
+            "fileName": relative_filename,
+            "date": datetime.datetime.now().isoformat(),
+            "url": f"local://{relative_filename}",
+            "category": request.category,
+            "tags": ["#inbox"]
+        }
+        
+        index = get_url_index()
+        index[f"local://{relative_filename}"] = note_data
+        save_url_index(index)
+        
+        update_hierarchical_indexes()
+        
+        return {"status": "success", "note": note_data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/save_answer")
 async def save_answer(request: SaveAnswerRequest):
     try:
@@ -816,6 +1483,20 @@ async def save_answer(request: SaveAnswerRequest):
         filepath = os.path.join(OBSIDIAN_INBOX_PATH, filename)
         content = f"---\ntype: saved_answer\ndate: {date_str}\ncategory: Synthesis\n---\n# {request.title}\n\n{request.content}"
         with open(filepath, "w", encoding="utf-8") as f: f.write(content)
+        
+        # Add to index mapping
+        index = get_url_index()
+        index[filename] = {
+            "title": request.title,
+            "fileName": filename,
+            "date": date_str,
+            "category": "Synthesis"
+        }
+        save_url_index(index)
+        
+        # Trigger hierarchical indexing update
+        update_hierarchical_indexes()
+        
         return {"status": "success", "fileName": filename}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

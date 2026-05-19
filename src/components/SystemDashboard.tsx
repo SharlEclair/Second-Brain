@@ -50,6 +50,114 @@ interface Note {
   ai_model?: string;
 }
 
+interface GhostTopic {
+  title: string;
+  sources: string[];
+}
+
+const GhostTopicItem: React.FC<{ topic: GhostTopic; onCreated: () => void }> = ({ topic, onCreated }) => {
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCreate = async () => {
+    setIsCreating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/notes/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: topic.title,
+          category: 'General',
+          content: `This article was automatically created to resolve a missing reference.\n\nIt is referenced by:\n${topic.sources.map(src => `- [[${src.replace('.md', '')}]]`).join('\n')}`
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        onCreated();
+      } else {
+        setError(data.detail || 'Creation failed');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error occurred');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  return (
+    <div className="p-3 bg-orange-500/5 border border-orange-500/10 rounded-sm flex flex-col gap-2 hover:border-orange-500/30 transition-colors">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold text-orange-200 font-mono truncate">{topic.title}</span>
+        <button
+          onClick={handleCreate}
+          disabled={isCreating}
+          className="text-[9px] uppercase font-mono bg-orange-500 hover:bg-orange-400 text-black px-2 py-0.5 rounded-sm font-bold transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+        >
+          {isCreating ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : 'Create'}
+        </button>
+      </div>
+      <div className="text-[9px] text-zinc-500 font-mono truncate">
+        Refs: {topic.sources.map(s => s.split('/').pop()?.replace('.md', '')).join(', ')}
+      </div>
+      {error && <span className="text-[8px] font-mono text-red-500">{error}</span>}
+    </div>
+  );
+};
+
+interface Gap {
+  suggested_title: string;
+  reason: string;
+}
+
+const GapItem: React.FC<{ gap: Gap; onCreated: () => void }> = ({ gap, onCreated }) => {
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCreate = async () => {
+    setIsCreating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/notes/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: gap.suggested_title,
+          category: 'General',
+          content: `### Summary\n${gap.reason}\n\n*Draft note created to address knowledge base gap.*`
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        onCreated();
+      } else {
+        setError(data.detail || 'Creation failed');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error occurred');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  return (
+    <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-sm flex flex-col gap-2 hover:border-indigo-500/30 transition-colors">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold text-indigo-200 font-mono truncate">{gap.suggested_title}</span>
+        <button
+          onClick={handleCreate}
+          disabled={isCreating}
+          className="text-[9px] uppercase font-mono bg-indigo-500 hover:bg-indigo-400 text-white px-2 py-0.5 rounded-sm font-bold transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+        >
+          {isCreating ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : 'Create'}
+        </button>
+      </div>
+      <p className="text-[10px] text-zinc-400 leading-relaxed font-sans">{gap.reason}</p>
+      {error && <span className="text-[8px] font-mono text-red-500">{error}</span>}
+    </div>
+  );
+};
+
 const SystemDashboard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [recentTasks, setRecentTasks] = useState<Task[]>([]);
@@ -58,6 +166,13 @@ const SystemDashboard: React.FC = () => {
   const [config, setConfig] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isAuditing, setIsAuditing] = useState(false);
+  const [auditResults, setAuditResults] = useState<{
+    fileName: string;
+    ghost_topics: { title: string; sources: string[] }[];
+    inconsistencies: { articles: string[]; conflict: string }[];
+    gaps: { suggested_title: string; reason: string }[];
+  } | null>(null);
 
   const fetchStatus = async () => {
     try {
@@ -127,6 +242,24 @@ const SystemDashboard: React.FC = () => {
     }
   };
 
+  const handleAudit = async () => {
+    setIsAuditing(true);
+    setAuditResults(null);
+    try {
+      const res = await fetch('/api/audit', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        setAuditResults(data);
+      } else {
+        alert('Audit failed: ' + (data.detail || data.error));
+      }
+    } catch (err: any) {
+      alert('Audit failed: ' + err.message);
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
   // --- Analytics Calculations ---
   const platformStats = notes.reduce((acc: any, note) => {
     const p = note.platform || 'other';
@@ -171,6 +304,14 @@ const SystemDashboard: React.FC = () => {
             <span className={cn("text-lg font-mono font-bold", healthScore > 80 ? "text-emerald-500" : "text-orange-500")}>{healthScore}%</span>
           </div>
           <button 
+            onClick={handleAudit}
+            disabled={isAuditing}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-indigo-400 hover:bg-indigo-500/10 rounded-sm transition-all border border-indigo-500/20 uppercase tracking-widest disabled:opacity-50"
+          >
+            {isAuditing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+            Audit Vault
+          </button>
+          <button 
             onClick={clearLogs}
             className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-red-400 hover:bg-red-500/10 rounded-sm transition-all border border-red-500/20 uppercase tracking-widest"
           >
@@ -188,7 +329,7 @@ const SystemDashboard: React.FC = () => {
             <h3 className="text-xs font-mono uppercase tracking-widest text-zinc-300">Vault Neural Network</h3>
           </div>
         </div>
-        <VaultGraph />
+        <VaultGraph onSelectNote={(noteName) => console.log('Selected node in dashboard:', noteName)} />
       </div>
 
       {/* Analytics Grid */}
@@ -209,6 +350,114 @@ const SystemDashboard: React.FC = () => {
           </div>
         ))}
       </div>
+
+      {/* Audit Results Panel */}
+      {auditResults && (
+        <div className="bg-[#0a0a0a] border border-indigo-500/20 p-6 rounded-sm space-y-6 shadow-[0_0_20px_rgba(99,102,241,0.05)] relative overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="absolute -top-px left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
+          <div className="flex items-center justify-between border-b border-white/5 pb-4">
+            <div className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-indigo-400" />
+              <h3 className="text-sm font-mono uppercase tracking-widest text-white">Vault Audit Findings</h3>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-[10px] font-mono text-zinc-500">Report saved: {auditResults.fileName}</span>
+              <button 
+                onClick={() => setAuditResults(null)}
+                className="text-[10px] uppercase font-mono text-zinc-500 hover:text-white transition-colors"
+              >
+                Close Report
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Ghost Topics */}
+            <div className="bg-black/40 border border-white/5 p-4 rounded-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                  <h4 className="text-[11px] font-mono uppercase tracking-wider text-orange-400 font-bold">Ghost Topics ({auditResults.ghost_topics.length})</h4>
+                </div>
+                <span className="text-[9px] font-mono text-zinc-600">Missing Articles</span>
+              </div>
+
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                {auditResults.ghost_topics.length === 0 ? (
+                  <p className="text-xs text-zinc-600 italic font-mono">No missing links detected.</p>
+                ) : (
+                  auditResults.ghost_topics.map((gt, idx) => (
+                    <GhostTopicItem key={idx} topic={gt} onCreated={() => {
+                      setAuditResults(prev => {
+                        if (!prev) return null;
+                        return {
+                          ...prev,
+                          ghost_topics: prev.ghost_topics.filter(t => t.title !== gt.title)
+                        };
+                      });
+                    }} />
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Conflicting Claims */}
+            <div className="bg-black/40 border border-white/5 p-4 rounded-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <h4 className="text-[11px] font-mono uppercase tracking-wider text-red-400 font-bold">Claim Contradictions ({auditResults.inconsistencies.length})</h4>
+                </div>
+                <span className="text-[9px] font-mono text-zinc-600">AI Verified</span>
+              </div>
+
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                {auditResults.inconsistencies.length === 0 ? (
+                  <p className="text-xs text-zinc-600 italic font-mono">Vault facts are fully aligned.</p>
+                ) : (
+                  auditResults.inconsistencies.map((inc, idx) => (
+                    <div key={idx} className="p-3 bg-red-500/5 border border-red-500/10 rounded-sm space-y-2">
+                      <div className="text-[10px] font-mono text-red-400 uppercase font-semibold">
+                        {inc.articles.join(" ↔ ")}
+                      </div>
+                      <p className="text-xs text-zinc-400 leading-relaxed font-sans">{inc.conflict}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Gaps in Coverage */}
+            <div className="bg-black/40 border border-white/5 p-4 rounded-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                  <h4 className="text-[11px] font-mono uppercase tracking-wider text-indigo-400 font-bold">Suggested Gaps ({auditResults.gaps.length})</h4>
+                </div>
+                <span className="text-[9px] font-mono text-zinc-600">Growth Recommendations</span>
+              </div>
+
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                {auditResults.gaps.length === 0 ? (
+                  <p className="text-xs text-zinc-600 italic font-mono">No gaps flagged.</p>
+                ) : (
+                  auditResults.gaps.map((gap, idx) => (
+                    <GapItem key={idx} gap={gap} onCreated={() => {
+                      setAuditResults(prev => {
+                        if (!prev) return null;
+                        return {
+                          ...prev,
+                          gaps: prev.gaps.filter(g => g.suggested_title !== gap.suggested_title)
+                        };
+                      });
+                    }} />
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Active Operations, Platform Stats, and Tags */}

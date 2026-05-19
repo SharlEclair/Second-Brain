@@ -19,7 +19,10 @@ import {
   Check,
   ChevronDown,
   Activity,
-  X
+  X,
+  Mic,
+  MicOff,
+  CheckSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -29,6 +32,12 @@ import SystemDashboard from './components/SystemDashboard';
 import ChatSidebar from './components/ChatSidebar';
 import EventsWidget from './components/EventsWidget';
 import SuggestionsWidget from './components/SuggestionsWidget';
+import SerendipityWidget from './components/SerendipityWidget';
+import VaultGraph from './components/VaultGraph';
+import ActivityHeatmap from './components/ActivityHeatmap';
+import { LibraryDirectory } from './components/LibraryDirectory';
+
+
 
 interface Note {
   title: string;
@@ -82,6 +91,10 @@ export default function App() {
   const [activeTasks, setActiveTasks] = useState<OperationTask[]>([]);
   const [recentTasks, setRecentTasks] = useState<OperationTask[]>([]);
   const [isChatMinimized, setIsChatMinimized] = useState(false);
+  const [useActiveNoteContext, setUseActiveNoteContext] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -144,10 +157,7 @@ export default function App() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const uploadFileObj = async (file: File) => {
     setLoadingNote(true);
     setError(null);
     setSuccess(null);
@@ -167,14 +177,14 @@ export default function App() {
         throw new Error(data.detail || 'Upload failed');
       }
 
-      setSuccess('PDF successfully ingested');
+      setSuccess('File successfully ingested');
       fetchNotes();
       setUrl('');
       if (data.note) {
         handleSelectNote(data.note);
       }
     } catch (err: any) {
-      setError(err.message || "Failed to process PDF.");
+      setError(err.message || "Failed to process file.");
     } finally {
       setLoadingNote(false);
       setIngestStatus(null);
@@ -183,6 +193,75 @@ export default function App() {
       }
     }
   };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadFileObj(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    await uploadFileObj(file);
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(chunks, { type: 'audio/wav' });
+        const file = new File([audioBlob], `voice_capture_${Date.now()}.wav`, { type: 'audio/wav' });
+        await uploadFileObj(file);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Failed to start voice recording", err);
+      setError("Failed to access microphone.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      setMediaRecorder(null);
+    }
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
 
   const handleIngest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -264,7 +343,7 @@ export default function App() {
     }
   };
 
-  const handleAction = async (type: 'summarize' | 'deep_dive') => {
+  const handleAction = async (type: 'summarize' | 'deep_dive' | 'extract_tasks') => {
     if (!selectedNote) return;
     setActionLoading(type);
     setActionResult(null);
@@ -273,8 +352,8 @@ export default function App() {
       const res = await fetch(`/api/notes/${selectedNote.fileName}/${type}`, { method: 'POST' });
       const data = await res.json();
       setActionResult({ 
-        type: type === 'summarize' ? 'Quick Summary' : 'Deep Dive Analysis', 
-        content: data.summary || data.deep_dive 
+        type: type === 'summarize' ? 'Quick Summary' : type === 'deep_dive' ? 'Deep Dive Analysis' : 'Actionable Tasks', 
+        content: data.summary || data.deep_dive || data.tasks
       });
     } catch (e) {
       setError("Action failed");
@@ -282,6 +361,56 @@ export default function App() {
       setActionLoading(null);
     }
   };
+
+  const handleSaveTasks = async (tasksContent: string) => {
+    if (!selectedNote) return;
+    try {
+      const res = await fetch(`/api/notes/${selectedNote.fileName}/append_tasks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ tasks: tasksContent })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess('Tasks appended to note!');
+        setTimeout(() => setSuccess(null), 3000);
+        // Refresh note content
+        const contentRes = await fetch(`/api/notes/${selectedNote.fileName}`);
+        const text = await contentRes.text();
+        setNoteContent(text);
+        setActionResult(null);
+      } else {
+        setError(data.detail || 'Failed to append tasks');
+      }
+    } catch (e) {
+      setError('Error appending tasks');
+    }
+  };  const handleGenerateWeeklyBrief = async () => {
+    setLoadingNote(true);
+    setError(null);
+    setSuccess(null);
+    setIngestStatus('Compiling Weekly Brief...');
+    try {
+      const res = await fetch('/api/weekly_brief');
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Failed to generate weekly brief');
+      }
+      setSuccess('Weekly Brief successfully compiled!');
+      fetchNotes();
+      if (data.note) {
+        handleSelectNote(data.note);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate weekly brief');
+    } finally {
+      setLoadingNote(false);
+      setIngestStatus(null);
+    }
+  };
+
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -300,6 +429,14 @@ export default function App() {
       console.error("Failed to fetch note content", e);
     }
   };
+
+  const handleSelectNoteByName = (noteName: string) => {
+    const found = notes.find(n => n.title === noteName || n.fileName.endsWith(noteName + '.md') || n.fileName.includes('/' + noteName + '.md'));
+    if (found) {
+      handleSelectNote(found);
+    }
+  };
+
 
   const loadChatSession = async (sessionId: string) => {
     try {
@@ -354,7 +491,11 @@ export default function App() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg.text, session_id: currentSessionId })
+        body: JSON.stringify({ 
+          message: userMsg.text, 
+          session_id: currentSessionId,
+          note_context: useActiveNoteContext && selectedNote ? selectedNote.fileName : undefined
+        })
       });
       const data = await res.json();
       
@@ -377,6 +518,26 @@ export default function App() {
       setError(`Chat failed: ${e.message}`);
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  const handlePromoteToWiki = async (msg: ChatMessage) => {
+    const title = prompt("Enter a title for this new Synthesis note:");
+    if (!title) return;
+    try {
+      const res = await fetch('/api/save_answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, content: msg.text })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        alert("Synthesized into Wiki: " + data.fileName);
+      } else {
+        alert("Failed to promote: " + (data.detail || data.error));
+      }
+    } catch (e: any) {
+      alert("Error: " + e.message);
     }
   };
 
@@ -471,12 +632,23 @@ export default function App() {
         {/* Top Header - Ingestion Bar */}
         <header className="h-16 border-b border-slate-800 bg-black/60 backdrop-blur-md flex items-center px-8 justify-between z-10">
           <div className="flex-1 max-w-2xl flex flex-col relative">
-            <form onSubmit={handleIngest} className="flex items-center gap-2 group">
+            <form 
+              onSubmit={handleIngest} 
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={cn(
+                "flex items-center gap-2 group transition-all duration-200 border rounded-sm p-1",
+                isDragging 
+                  ? "border-orange-500 bg-orange-500/5 ring-1 ring-orange-500/30" 
+                  : "border-transparent bg-transparent"
+              )}
+            >
               <div className="relative flex-1 flex items-center group">
                 <Zap className="absolute left-4 w-4 h-4 text-orange-500 opacity-50 group-focus-within:opacity-100 transition-opacity" />
                 <input
                   type="text"
-                  placeholder="Paste URL (YouTube, TikTok, Instagram, Web) to ingest knowledge..."
+                  placeholder={isDragging ? "Drop file here to ingest..." : "Paste URL (YouTube, TikTok, Instagram, Web) or drop file..."}
                   className="w-full bg-black border border-slate-800 rounded-sm py-2 pl-12 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-orange-500/50 transition-all font-mono placeholder-slate-700"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
@@ -499,7 +671,7 @@ export default function App() {
               </div>
               <input
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.txt,.md,.mp3,.wav,.m4a,.ogg,.aac,.png,.jpg,.jpeg,.webp"
                 className="hidden"
                 ref={fileInputRef}
                 onChange={handleFileUpload}
@@ -509,9 +681,25 @@ export default function App() {
                 onClick={() => fileInputRef.current?.click()}
                 disabled={loadingNote}
                 className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-sm hover:bg-slate-700 transition-colors text-slate-300 font-mono text-xs disabled:opacity-50 flex items-center gap-2"
-                title="Upload PDF Document"
+                title="Upload Document, Audio, or Image"
               >
-                <Plus className="w-4 h-4" /> PDF
+                <Plus className="w-4 h-4" /> Upload
+              </button>
+              
+              <button
+                type="button"
+                onClick={toggleRecording}
+                disabled={loadingNote}
+                className={cn(
+                  "px-4 py-2 border rounded-sm transition-all font-mono text-xs flex items-center gap-2",
+                  isRecording 
+                    ? "bg-red-500/20 border-red-500 text-red-500 animate-pulse font-bold" 
+                    : "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300"
+                )}
+                title={isRecording ? "Stop Recording" : "Record Voice Note"}
+              >
+                {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 text-orange-500" />}
+                {isRecording ? "REC..." : "REC"}
               </button>
             </form>
             
@@ -608,6 +796,24 @@ export default function App() {
                         {actionLoading === 'deep_dive' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 text-orange-500" />}
                         Deep Dive
                       </button>
+                      <button 
+                        onClick={() => handleAction('extract_tasks')}
+                        disabled={!!actionLoading}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-slate-900 border border-slate-800 text-[10px] uppercase font-bold text-slate-400 hover:text-white hover:border-slate-600 transition-all disabled:opacity-50"
+                      >
+                        {actionLoading === 'extract_tasks' ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckSquare className="w-3 h-3 text-orange-500" />}
+                        Extract Tasks
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setIsChatMinimized(false);
+                          setUseActiveNoteContext(true);
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-slate-900 border border-slate-800 text-[10px] uppercase font-bold text-slate-400 hover:text-white hover:border-slate-600 transition-all"
+                      >
+                        <Brain className="w-3 h-3 text-orange-500 animate-pulse" />
+                        Discuss
+                      </button>
                     </div>
                     
                     <div className="flex items-center gap-2">
@@ -640,7 +846,17 @@ export default function App() {
                         >
                           <div className="flex items-center justify-between mb-4">
                             <h4 className="text-[10px] uppercase tracking-[0.2em] font-black text-orange-500">{actionResult.type}</h4>
-                            <button onClick={() => setActionResult(null)} className="text-slate-600 hover:text-white text-xs transition-colors italic">dismiss</button>
+                            <div className="flex items-center gap-3">
+                              {actionResult.type === 'Actionable Tasks' && (
+                                <button
+                                  onClick={() => handleSaveTasks(actionResult.content)}
+                                  className="text-[9px] uppercase font-bold text-emerald-400 hover:text-emerald-300 transition-colors border border-emerald-500/30 px-2 py-0.5 rounded-sm bg-emerald-500/10"
+                                >
+                                  Append to Note
+                                </button>
+                              )}
+                              <button onClick={() => setActionResult(null)} className="text-slate-600 hover:text-white text-xs transition-colors italic">dismiss</button>
+                            </div>
                           </div>
                           <div className="prose prose-invert prose-sm max-w-none text-slate-300 font-serif italic leading-relaxed">
                             <ReactMarkdown>{actionResult.content}</ReactMarkdown>
@@ -727,12 +943,37 @@ export default function App() {
                       </p>
                     </div>
 
+                    <div className="w-full max-w-5xl mx-auto px-8 mb-6">
+                      <VaultGraph onSelectNote={handleSelectNoteByName} />
+                    </div>
+
                     <div className="w-full max-w-5xl mx-auto px-8 grid grid-cols-1 md:grid-cols-4 gap-6">
-                      <div className="md:col-span-1">
+                      <div className="md:col-span-1 space-y-6">
+                        <LibraryDirectory onSelectCategory={handleSelectNoteByName} />
+                        <SerendipityWidget onSelectNote={handleSelectNote} />
                         <EventsWidget onSelectEvent={handleSelectNote} />
+                        
+                        <div className="bg-[#0a0a0a] border border-slate-800 p-4 rounded-sm space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse" />
+                            <h4 className="text-[10px] font-mono uppercase tracking-widest text-slate-300">Weekly Intelligence</h4>
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-mono leading-relaxed">
+                            Aggregate notes and learning materials ingested over the past 7 days into a structured weekly brief.
+                          </p>
+                          <button
+                            onClick={handleGenerateWeeklyBrief}
+                            disabled={loadingNote}
+                            className="w-full py-2 bg-indigo-500/10 border border-indigo-500/30 hover:border-indigo-500 text-indigo-400 hover:text-white font-mono text-[10px] uppercase tracking-wider transition-all rounded-sm flex items-center justify-center gap-2"
+                          >
+                            {loadingNote ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                            Generate Weekly Brief
+                          </button>
+                        </div>
                       </div>
-                      <div className="md:col-span-3">
+                      <div className="md:col-span-3 space-y-6">
                         <SuggestionsWidget onSelectSuggestion={handleSelectNote} />
+                        <ActivityHeatmap notes={notes} />
 
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full mt-6">
                           {[
@@ -778,6 +1019,26 @@ export default function App() {
                   </button>
                 </div>
 
+                {selectedNote && (
+                  <div className="px-4 py-2 border-b border-slate-800 bg-[#0d0d0d] flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Brain className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                      <span className="text-[10px] text-slate-400 font-mono uppercase truncate max-w-[220px]">
+                        Active Context: {selectedNote.title}
+                      </span>
+                    </div>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none shrink-0">
+                      <input 
+                        type="checkbox" 
+                        checked={useActiveNoteContext} 
+                        onChange={(e) => setUseActiveNoteContext(e.target.checked)}
+                        className="rounded border-slate-800 bg-black text-orange-500 focus:ring-0 focus:ring-offset-0 w-3 h-3"
+                      />
+                      <span className="text-[9px] uppercase font-mono text-slate-500 font-bold hover:text-slate-400 transition-colors">Focus Chat</span>
+                    </label>
+                  </div>
+                )}
+
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono text-sm relative">
                   {messages.length === 0 && (
                     <div className="text-left text-slate-500">
@@ -801,6 +1062,14 @@ export default function App() {
                       )}>
                         {msg.isAi ? <ReactMarkdown>{msg.text}</ReactMarkdown> : msg.text}
                       </div>
+                      {msg.isAi && (
+                        <button
+                          onClick={() => handlePromoteToWiki(msg)}
+                          className="mt-2 text-[10px] uppercase font-bold tracking-widest text-orange-500/70 hover:text-orange-500 border border-orange-500/20 hover:border-orange-500/50 px-2 py-1 rounded-sm transition-all"
+                        >
+                          Promote to Wiki Article
+                        </button>
+                      )}
                     </div>
                   ))}
                   {isTyping && (
@@ -844,6 +1113,47 @@ export default function App() {
           </AnimatePresence>
         </div>
       </main>
+
+      {/* Floating Active Operations Queue Widget */}
+      <AnimatePresence>
+        {activeTasks.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 100, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 100, scale: 0.95 }}
+            className="fixed bottom-6 left-6 z-50 bg-[#0d0d0d] border border-orange-500/30 rounded-sm p-4 w-80 shadow-[0_10px_30px_rgba(249,115,22,0.15)] font-mono"
+          >
+            <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                </span>
+                <span className="text-[10px] uppercase font-bold text-white">Active Queue ({activeTasks.length})</span>
+              </div>
+              <span className="text-[9px] text-slate-500">REALTIME</span>
+            </div>
+            
+            <div className="space-y-3">
+              {activeTasks.slice(0, 3).map((task) => (
+                <div key={task.task_id} className="text-xs">
+                  <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                    <span className="truncate max-w-[180px]">{task.url}</span>
+                    <span className="text-orange-500">{task.progress || 0}%</span>
+                  </div>
+                  <div className="w-full bg-black h-1 rounded-full overflow-hidden border border-slate-900">
+                    <div 
+                      className="bg-orange-500 h-full transition-all duration-500" 
+                      style={{ width: `${task.progress || 0}%` }}
+                    />
+                  </div>
+                  <div className="text-[9px] text-slate-500 italic mt-1 truncate">{task.status}...</div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
