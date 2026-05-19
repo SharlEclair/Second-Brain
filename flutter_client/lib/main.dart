@@ -138,11 +138,11 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
       _showToast("Sharing File: $fileName");
       try {
         final lowerName = fileName.toLowerCase();
-        if (lowerName.endsWith('.pdf') || lowerName.endsWith('.txt') || lowerName.endsWith('.md')) {
+        if (lowerName.endsWith('.pdf') || lowerName.endsWith('.txt') || lowerName.endsWith('.md') || lowerName.endsWith('.mp3')) {
           final result = await _apiService.uploadFile(sharedText);
           _showToast("✓ File uploaded and ingested successfully!");
         } else {
-          _showToast("❌ Only PDF, TXT, and MD files are supported");
+          _showToast("❌ Only PDF, TXT, MD, and MP3 files are supported");
         }
       } catch (e) {
         _showToast("❌ Upload Error: $e");

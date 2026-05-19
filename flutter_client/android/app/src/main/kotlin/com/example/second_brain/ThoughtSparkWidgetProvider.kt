@@ -48,13 +48,13 @@ class ThoughtSparkWidgetProvider : HomeWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray, widgetData: SharedPreferences) {
         // Find current thought text
-        val sparksJson = widgetData.getString("thought_sparks", "[]")
+        val sparksJson = widgetData.getString("flutter.thought_sparks", "[]")
         var currentSpark = "Select 'Sync Vault' in Cortex to load insights from your ingested knowledge."
         
         try {
             val sparksArray = JSONArray(sparksJson)
             if (sparksArray.length() > 0) {
-                val currentIndex = widgetData.getInt("thought_spark_index", 0)
+                val currentIndex = widgetData.getInt("flutter.thought_spark_index", 0)
                 // Boundary check
                 val safeIndex = if (currentIndex >= 0 && currentIndex < sparksArray.length()) currentIndex else 0
                 currentSpark = sparksArray.getString(safeIndex)
@@ -75,7 +75,7 @@ class ThoughtSparkWidgetProvider : HomeWidgetProvider() {
                 context, 
                 appWidgetId, // Unique request code per widget
                 refreshIntent, 
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.btn_refresh, refreshPendingIntent)
 

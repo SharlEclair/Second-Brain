@@ -621,5 +621,28 @@
         "transcript_status": "complete",
         "ai_model": "models/gemini-2.5-flash-lite",
         "event_date": null
+    },
+    "local://shared-text-task_53afc75a": {
+        "title": "2026-05-19 - Event (Shared Text) (3)",
+        "fileName": "Event/2026-05-19 - Event (Shared Text) (3).md",
+        "date": "2026-05-19T04:12:10.053335",
+        "url": "local://shared-text-task_53afc75a",
+        "content_hash": "c44453cbb4812de7991fac57ae5534cf",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": "2024-05-25T15:00:00Z"
+    },
+    "https://www.instagram.com/reel/DYcZLOrof6y": {
+        "title": "2026-05-19 - Recipe from Instagram (Dean)",
+        "fileName": "Recipe/2026-05-19 - Recipe from Instagram (Dean).md",
+        "date": "2026-05-19T11:46:43.564585",
+        "url": "https://www.instagram.com/reel/DYcZLOrof6y",
+        "content_hash": "74785e29110f37bad87c1f70ce773ada",
+        "platform": "instagram",
+        "type": "instagram-video",
+        "transcript_status": "complete",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null
     }
 }

@@ -23,15 +23,17 @@
             android:fontFamily="sans-serif-black"
             android:letterSpacing="0.05" />
 
-        <ImageView
+        <TextView
             android:id="@+id/btn_refresh"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:layout_alignParentEnd="true"
             android:layout_centerVertical="true"
-            android:src="@android:drawable/stat_notify_sync"
-            android:contentDescription="Refresh Insight"
-            android:tint="#88FFFFFF" />
+            android:gravity="center"
+            android:text="🔄"
+            android:textColor="#88FFFFFF"
+            android:textSize="14sp"
+            android:contentDescription="Refresh Insight" />
     </RelativeLayout>
 
     <!-- Thought Text Area -->
@@ -52,7 +54,7 @@
         android:lineSpacingMultiplier="1.2" />
 
     <!-- Bottom Divider -->
-    <View
+    <ImageView
         android:id="@+id/bottom_divider"
         android:layout_width="match_parent"
         android:layout_height="1dp"
@@ -88,7 +90,7 @@
         </LinearLayout>
 
         <!-- Vertical Divider -->
-        <View
+        <ImageView
             android:layout_width="1dp"
             android:layout_height="16dp"
             android:background="#1AFFFFFF" />
@@ -112,7 +114,7 @@
         </LinearLayout>
 
         <!-- Vertical Divider -->
-        <View
+        <ImageView
             android:layout_width="1dp"
             android:layout_height="16dp"
             android:background="#1AFFFFFF" />
