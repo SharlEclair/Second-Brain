@@ -26,6 +26,11 @@ if os.path.exists(TAGS_FILE):
     except Exception as e:
         print(f"Error loading tags.txt: {e}")
 
+# Feature toggles
+USE_RAW_INBOX = True
+RAW_INBOX_PATH = os.path.join(OBSIDIAN_INBOX_PATH, "raw")
+
 # Ensure folders exist
 os.makedirs(OBSIDIAN_INBOX_PATH, exist_ok=True)
 os.makedirs(PROJECT_VAULT_PATH, exist_ok=True)
+os.makedirs(RAW_INBOX_PATH, exist_ok=True)

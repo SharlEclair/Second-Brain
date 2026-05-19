@@ -91,6 +91,8 @@ export default function App() {
   const [activeTasks, setActiveTasks] = useState<OperationTask[]>([]);
   const [recentTasks, setRecentTasks] = useState<OperationTask[]>([]);
   const [isChatMinimized, setIsChatMinimized] = useState(false);
+  const [rawCount, setRawCount] = useState<number>(0);
+  const [isCompiling, setIsCompiling] = useState(false);
   const [useActiveNoteContext, setUseActiveNoteContext] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -101,11 +103,15 @@ export default function App() {
   useEffect(() => {
     fetchNotes();
     fetchOperationStatus();
+    fetchRawCount();
     fetch('/api/config').then(r => r.json()).then(d => {
       if (d.model) setActiveModel(d.model.replace('models/', '').toUpperCase());
     }).catch(() => {});
 
-    const interval = setInterval(fetchOperationStatus, 2000);
+    const interval = setInterval(() => {
+      fetchOperationStatus();
+      fetchRawCount();
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -154,6 +160,16 @@ export default function App() {
       setRecentTasks(data.recent_tasks || []);
     } catch (e) {
       console.error("Failed to fetch operation status", e);
+    }
+  };
+
+  const fetchRawCount = async () => {
+    try {
+      const res = await fetch('/api/raw_count');
+      const data = await res.json();
+      setRawCount(data.count || 0);
+    } catch (e) {
+      console.error("Failed to fetch raw count", e);
     }
   };
 
@@ -262,6 +278,26 @@ export default function App() {
     }
   };
 
+
+  const handleCompileInbox = async () => {
+    if (rawCount === 0 || isCompiling) return;
+    setIsCompiling(true);
+    try {
+      const res = await fetch('/api/compile', { method: 'POST' });
+      const data = await res.json();
+      if (data.status === 'success') {
+        alert(`Compiled ${data.compiled_count} items from Inbox.`);
+        setRawCount(0);
+        fetchNotes();
+      } else {
+        alert("Compile failed: " + data.detail);
+      }
+    } catch (e: any) {
+      alert("Compile Error: " + e.message);
+    } finally {
+      setIsCompiling(false);
+    }
+  };
 
   const handleIngest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -761,6 +797,35 @@ export default function App() {
                 <p className="text-[10px] uppercase text-slate-500 tracking-widest leading-none mb-1">Active Model</p>
                 <p className="text-xs font-mono text-white">{activeModel}</p>
               </div>
+
+              {rawCount > 0 && (
+                <motion.button
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleCompileInbox}
+                  disabled={isCompiling}
+                  className="ml-4 flex items-center gap-2 px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/50 rounded-sm text-orange-400 text-[10px] uppercase font-bold tracking-widest transition-colors relative overflow-hidden"
+                >
+                  {isCompiling ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                      Compile Inbox ({rawCount})
+                    </div>
+                  )}
+                  {isCompiling && (
+                    <motion.div
+                      className="absolute inset-0 bg-orange-500/20"
+                      initial={{ x: "-100%" }}
+                      animate={{ x: "100%" }}
+                      transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                    />
+                  )}
+                </motion.button>
+              )}
             </div>
           </div>
         </header>

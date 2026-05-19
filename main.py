@@ -11,7 +11,7 @@ from pydantic import BaseModel
 import chromadb
 
 # Internal Imports
-from core.config import OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH, AI_MODEL, AI_MODEL_PRIMARY, AI_MODEL_FALLBACK, AI_MODEL_CHAIN, TAGS_FILE
+from core.config import OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH, AI_MODEL, AI_MODEL_PRIMARY, AI_MODEL_FALLBACK, AI_MODEL_CHAIN, TAGS_FILE, USE_RAW_INBOX, RAW_INBOX_PATH
 from core.state import ops_manager, get_url_index, save_url_index
 from core.utils import clean_url, chunk_text, cleanup_temp_files, get_platform_from_url
 from core.processors import process_reel, process_image_post, generate_content_with_fallback, process_pdf, process_web_article, process_text_file, process_raw_text, process_audio_file, process_uploaded_image
@@ -209,6 +209,111 @@ async def clear_error_logs():
     if os.path.exists("error_log.json"):
         os.remove("error_log.json")
     return {"status": "cleared"}
+
+@app.get("/api/raw_count")
+async def get_raw_count():
+    try:
+        count = 0
+        if os.path.exists(RAW_INBOX_PATH):
+            for file in os.listdir(RAW_INBOX_PATH):
+                if file.endswith(".md"):
+                    count += 1
+        return {"status": "success", "count": count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/compile")
+async def compile_inbox():
+    try:
+        if not os.path.exists(RAW_INBOX_PATH):
+            return {"status": "success", "compiled_count": 0}
+
+        compiled_count = 0
+        for file in os.listdir(RAW_INBOX_PATH):
+            if not file.endswith(".md"):
+                continue
+
+            filepath = os.path.join(RAW_INBOX_PATH, file)
+            with open(filepath, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            prompt = f"""
+You are an expert Vault Compiler. Analyze this raw un-compiled note.
+1. Determine the best category for it (e.g. Job-Career, Recipe, General, Event).
+2. Clean up and format the content to be a tight, highly readable markdown wiki article. Extract key takeaways.
+3. Inject proper Obsidian back-links `[[Like This]]` for key concepts.
+
+Raw content:
+{content}
+
+Return ONLY a valid JSON object in this format:
+{{
+  "category": "Chosen Category",
+  "title": "A Concise Descriptive Title",
+  "formatted_content": "The cleanly formatted markdown content..."
+}}
+"""
+            response, _ = generate_content_with_fallback(prompt, purpose="compile_inbox")
+            try:
+                cleaned_text = response.text.strip()
+                if cleaned_text.startswith("```json"):
+                    cleaned_text = cleaned_text[7:]
+                if cleaned_text.endswith("```"):
+                    cleaned_text = cleaned_text[:-3]
+                ai_data = json.loads(cleaned_text.strip())
+
+                category = ai_data.get("category", "General")
+                title = ai_data.get("title", file.replace(".md", ""))
+                formatted_content = ai_data.get("formatted_content", content)
+            except Exception:
+                continue # Skip if we can't parse the LLM output properly
+
+            safe_category = re.sub(r'[\\/*?:"<>|]', "-", category)
+            safe_title = re.sub(r'[\\/*?:"<>|]', "", title)
+            new_filename = f"{safe_title}.md"
+
+            # Save to correct folder
+            cat_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
+            os.makedirs(cat_path, exist_ok=True)
+            obsidian_cat_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
+            os.makedirs(obsidian_cat_path, exist_ok=True)
+
+            new_filepath_project = os.path.join(cat_path, new_filename)
+            new_filepath_obsidian = os.path.join(obsidian_cat_path, new_filename)
+
+            date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+            final_content = f"---\ntype: compiled_note\ndate: {date_str}\ncategory: {category}\n---\n# {title}\n\n{formatted_content}"
+
+            with open(new_filepath_project, "w", encoding="utf-8") as f:
+                f.write(final_content)
+            with open(new_filepath_obsidian, "w", encoding="utf-8") as f:
+                f.write(final_content)
+
+            # Remove from raw
+            os.remove(filepath)
+            compiled_count += 1
+
+            # Update index
+            index = get_url_index()
+            db_filename = os.path.join(safe_category, new_filename)
+            index[db_filename] = {
+                "title": title,
+                "fileName": db_filename,
+                "date": date_str,
+                "category": category
+            }
+            # Remove old raw index entry if exists
+            raw_db_filename = os.path.join("raw", file)
+            if raw_db_filename in index:
+                del index[raw_db_filename]
+            save_url_index(index)
+
+        update_hierarchical_indexes()
+        return {"status": "success", "compiled_count": compiled_count}
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/notes")
 async def get_notes():
@@ -521,10 +626,15 @@ async def _run_ingestion_logic(url: str, task_id: str, status_callback=None):
         filename = get_unique_filename(f"{date_str} - {safe_category} from {data['platform'].capitalize()} ({safe_uploader}).md", category=safe_category)
 
         # Subfolder structuring based on category
-        project_category_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
-        obsidian_category_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
-        os.makedirs(project_category_path, exist_ok=True)
-        os.makedirs(obsidian_category_path, exist_ok=True)
+        if USE_RAW_INBOX:
+            project_category_path = RAW_INBOX_PATH
+            obsidian_category_path = RAW_INBOX_PATH
+            safe_category = "raw"
+        else:
+            project_category_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
+            obsidian_category_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
+            os.makedirs(project_category_path, exist_ok=True)
+            os.makedirs(obsidian_category_path, exist_ok=True)
 
         project_filepath = os.path.join(project_category_path, filename)
         obsidian_filepath = os.path.join(obsidian_category_path, filename)
@@ -738,10 +848,15 @@ async def upload_file(file: UploadFile = File(...)):
         safe_category = re.sub(r'[\/*?:"<>|]', "-", raw_category)
         filename = get_unique_filename(f"{date_str} - {safe_category} ({safe_uploader}).md", category=safe_category)
 
-        project_category_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
-        obsidian_category_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
-        os.makedirs(project_category_path, exist_ok=True)
-        os.makedirs(obsidian_category_path, exist_ok=True)
+        if USE_RAW_INBOX:
+            project_category_path = RAW_INBOX_PATH
+            obsidian_category_path = RAW_INBOX_PATH
+            safe_category = "raw"
+        else:
+            project_category_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
+            obsidian_category_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
+            os.makedirs(project_category_path, exist_ok=True)
+            os.makedirs(obsidian_category_path, exist_ok=True)
 
         project_filepath = os.path.join(project_category_path, filename)
         obsidian_filepath = os.path.join(obsidian_category_path, filename)
@@ -837,10 +952,15 @@ async def ingest_text(request: IngestTextRequest):
         safe_category = re.sub(r'[\/*?:"<>|]', "-", raw_category)
         filename = get_unique_filename(f"{date_str} - {safe_category} (Shared Text).md", category=safe_category)
 
-        project_category_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
-        obsidian_category_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
-        os.makedirs(project_category_path, exist_ok=True)
-        os.makedirs(obsidian_category_path, exist_ok=True)
+        if USE_RAW_INBOX:
+            project_category_path = RAW_INBOX_PATH
+            obsidian_category_path = RAW_INBOX_PATH
+            safe_category = "raw"
+        else:
+            project_category_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
+            obsidian_category_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
+            os.makedirs(project_category_path, exist_ok=True)
+            os.makedirs(obsidian_category_path, exist_ok=True)
 
         project_filepath = os.path.join(project_category_path, filename)
         obsidian_filepath = os.path.join(obsidian_category_path, filename)
@@ -1479,25 +1599,67 @@ async def save_answer(request: SaveAnswerRequest):
     try:
         date_str = datetime.datetime.now().strftime("%Y-%m-%d")
         safe_title = re.sub(r'[\\/*?:"<>|]', "", request.title)
+
+        # Use LLM to extract Category and back-links for the synthesis loop
+        prompt = f"""
+You are a Vault Synthesizer. Review the following synthesized knowledge answer.
+1. Determine the single best Category for this knowledge (e.g. Job-Career, Recipe, General, Event).
+2. Rewrite the content to inject proper Obsidian back-links `[[Linked Topic Title]]` for any major concepts, entities, or referenced existing knowledge.
+
+Original Answer:
+{request.content}
+
+Return ONLY a valid JSON object in this format:
+{{
+  "category": "Chosen Category",
+  "linked_content": "The original answer but with [[wiki links]] injected where appropriate."
+}}
+"""
+        response, _ = generate_content_with_fallback(prompt, purpose="save_answer_synthesis")
+        try:
+            cleaned_text = response.text.strip()
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+            ai_data = json.loads(cleaned_text.strip())
+            category = ai_data.get("category", "Synthesis")
+            linked_content = ai_data.get("linked_content", request.content)
+        except Exception:
+            category = "Synthesis"
+            linked_content = request.content
+
+        safe_category = re.sub(r'[\\/*?:"<>|]', "-", category)
+
+        # Determine the correct directory based on the category
+        cat_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
+        if not os.path.exists(cat_path):
+            cat_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
+            if not os.path.exists(cat_path):
+                os.makedirs(cat_path, exist_ok=True)
+
         filename = f"Synthesis - {safe_title}.md"
-        filepath = os.path.join(OBSIDIAN_INBOX_PATH, filename)
-        content = f"---\ntype: saved_answer\ndate: {date_str}\ncategory: Synthesis\n---\n# {request.title}\n\n{request.content}"
+        filepath = os.path.join(cat_path, filename)
+
+        content = f"---\ntype: saved_answer\ndate: {date_str}\ncategory: {category}\n---\n# {request.title}\n\n{linked_content}"
         with open(filepath, "w", encoding="utf-8") as f: f.write(content)
         
         # Add to index mapping
         index = get_url_index()
-        index[filename] = {
+        # Ensure we point to the correct subfolder
+        db_filename = os.path.join(safe_category, filename) if safe_category else filename
+        index[db_filename] = {
             "title": request.title,
-            "fileName": filename,
+            "fileName": db_filename,
             "date": date_str,
-            "category": "Synthesis"
+            "category": category
         }
         save_url_index(index)
         
         # Trigger hierarchical indexing update
         update_hierarchical_indexes()
         
-        return {"status": "success", "fileName": filename}
+        return {"status": "success", "fileName": db_filename}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
