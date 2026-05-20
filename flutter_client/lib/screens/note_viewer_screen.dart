@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 
 class NoteLoaderScreen extends StatefulWidget {
   final String fileName;
@@ -14,6 +15,7 @@ class NoteLoaderScreen extends StatefulWidget {
 
 class _NoteLoaderScreenState extends State<NoteLoaderScreen> {
   final ApiService _apiService = ApiService();
+  final StorageService _storageService = StorageService();
   bool _loading = true;
   String? _error;
   String? _content;
@@ -26,12 +28,33 @@ class _NoteLoaderScreenState extends State<NoteLoaderScreen> {
 
   Future<void> _loadNote() async {
     try {
-      final content = await _apiService.fetchNoteContent(widget.fileName);
-      if (mounted) {
-        setState(() {
-          _content = content;
-          _loading = false;
-        });
+      final localContent = await _storageService.readNote(widget.fileName);
+      if (localContent != null) {
+        if (mounted) {
+          setState(() {
+            _content = localContent;
+            _loading = false;
+          });
+        }
+        // Background fetch to update cache
+        try {
+          final remoteContent = await _apiService.fetchNoteContent(widget.fileName);
+          await _storageService.saveNote(widget.fileName, remoteContent);
+          if (mounted && _content != remoteContent) {
+            setState(() {
+              _content = remoteContent;
+            });
+          }
+        } catch (_) {}
+      } else {
+        final content = await _apiService.fetchNoteContent(widget.fileName);
+        await _storageService.saveNote(widget.fileName, content);
+        if (mounted) {
+          setState(() {
+            _content = content;
+            _loading = false;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {

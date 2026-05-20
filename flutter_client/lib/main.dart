@@ -9,11 +9,14 @@ import 'screens/chat_screen.dart';
 import 'screens/notes_browser_screen.dart';
 import 'screens/debug_logs_screen.dart';
 import 'screens/note_viewer_screen.dart';
+import 'screens/quick_ask_screen.dart';
 import 'services/api_service.dart';
 import 'services/queue_service.dart';
 import 'services/widget_service.dart';
 import 'services/analytics_service.dart';
 import 'services/notification_service.dart';
+import 'services/geofence_service.dart';
+import 'services/offline_queue_service.dart';
 
 class MyHttpOverrides extends HttpOverrides {
   @override
@@ -108,6 +111,12 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
         }
       }
     });
+
+    // Check geofences on startup
+    GeofenceService.checkGeofences(_apiService);
+
+    // Initialize connectivity listener for offline queues
+    OfflineQueueService.initialize();
   }
 
   @override
@@ -115,6 +124,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
     WidgetsBinding.instance.removeObserver(this);
     _intentDataStreamSubscription.cancel();
     _sharedStatusTimer?.cancel();
+    OfflineQueueService.dispose();
     super.dispose();
   }
 
@@ -122,6 +132,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _checkClipboardForIngest();
+      GeofenceService.checkGeofences(_apiService);
     }
   }
 
@@ -404,6 +415,16 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
         _showToast('🔍 Notes Browser focused');
         _navigatorKey.currentState?.push(
           MaterialPageRoute(builder: (context) => const NotesBrowserScreen(focusSearch: true))
+        );
+        break;
+      case 'action/quick_ask':
+        _showToast('🧠 Quick Ask');
+        _navigatorKey.currentState?.push(
+          PageRouteBuilder(
+            opaque: false,
+            barrierColor: Colors.black.withOpacity(0.6),
+            pageBuilder: (context, _, __) => const QuickAskScreen(),
+          ),
         );
         break;
     }

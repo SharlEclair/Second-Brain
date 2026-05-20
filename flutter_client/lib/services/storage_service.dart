@@ -31,6 +31,15 @@ class StorageService {
     return File('$path/$fileName');
   }
 
+  Future<bool> noteExists(String fileName) async {
+    try {
+      final file = await _getLocalFile(fileName);
+      return await file.exists();
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> saveNote(String fileName, String content) async {
     try {
       final file = await _getLocalFile(fileName);
