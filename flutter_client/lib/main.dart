@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'screens/chat_screen.dart';
 import 'screens/notes_browser_screen.dart';
 import 'screens/debug_logs_screen.dart';
+import 'screens/note_viewer_screen.dart';
 import 'services/api_service.dart';
 import 'services/queue_service.dart';
 import 'services/widget_service.dart';
@@ -30,7 +32,7 @@ void main() async {
   final isLight = prefs.getBool('is_light_theme') ?? false;
   themeNotifier.value = isLight ? ThemeMode.light : ThemeMode.dark;
   try {
-    await NotificationService.initialize();
+    await NotificationService().initialize();
   } catch (e) {
     debugPrint("Failed to initialize NotificationService: $e");
   }
@@ -105,6 +107,33 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
         }
       }
     });
+
+    // Firebase Cloud Messaging deep-link handling
+    try {
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        final data = message.data;
+        final route = data['route'];
+        final fileName = data['fileName'];
+        if (route == '/note' && fileName != null) {
+          _openNoteByFilename(fileName);
+        }
+      });
+      
+      FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
+        if (message != null) {
+          final data = message.data;
+          final route = data['route'];
+          final fileName = data['fileName'];
+          if (route == '/note' && fileName != null) {
+            Future.delayed(const Duration(milliseconds: 500), () {
+              _openNoteByFilename(fileName);
+            });
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint("FCM routing registration skipped: $e");
+    }
   }
 
   @override
@@ -140,6 +169,49 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
       }
     } catch (e) {
       debugPrint("Error checking clipboard: $e");
+    }
+  }
+
+  Future<void> _openNoteByFilename(String fileName) async {
+    final context = _navigatorKey.currentContext;
+    if (context == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      final content = await _apiService.fetchNoteContent(fileName);
+      final title = fileName.split('/').last.replaceAll('.md', '');
+      
+      if (context.mounted) {
+        // Pop progress dialog
+        Navigator.of(context).pop();
+        
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => NoteViewerScreen(
+              title: title,
+              content: content,
+              fileName: fileName,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        // Pop progress dialog
+        Navigator.of(context).pop();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load note: $e')),
+        );
+      }
     }
   }
 

@@ -19,6 +19,21 @@ from core.processors import process_reel, process_image_post, generate_content_w
 
 import asyncio
 import shutil
+import firebase_admin
+from firebase_admin import credentials, messaging
+
+# Initialize Firebase Admin SDK
+firebase_app = None
+try:
+    firebase_cred_path = "firebase_credentials.json"
+    if os.path.exists(firebase_cred_path):
+        cred = credentials.Certificate(firebase_cred_path)
+        firebase_app = firebase_admin.initialize_app(cred)
+        print("Firebase Admin SDK initialized successfully.")
+    else:
+        print("firebase_credentials.json not found in root. FCM notifications are disabled.")
+except Exception as e:
+    print(f"Error initializing Firebase Admin SDK: {e}")
 
 # --- QUEUE SYSTEM ---
 task_queue = asyncio.Queue()
@@ -49,12 +64,110 @@ async def weekly_synthesis_scheduler():
             except Exception as e:
                 print(f"Error in scheduled weekly synthesis: {e}")
 
+async def send_serendipity_notifications():
+    try:
+        notes = await get_serendipity()
+        if not notes:
+            print("[Serendipity] No notes available to send.")
+            return
+            
+        tokens_file = "device_tokens.json"
+        if not os.path.exists(tokens_file):
+            print("[Serendipity] No registered device tokens.")
+            return
+            
+        try:
+            with open(tokens_file, "r", encoding="utf-8") as f:
+                devices = json.load(f)
+        except Exception as e:
+            print(f"[Serendipity] Error loading device tokens: {e}")
+            return
+            
+        tokens = [d["token"] for d in devices if d.get("token")]
+        if not tokens:
+            print("[Serendipity] No device tokens available.")
+            return
+            
+        if not firebase_admin._apps:
+            print("[Serendipity] Firebase Admin SDK is not initialized. Cannot send push notifications.")
+            return
+            
+        for note in notes:
+            title = f"🧠 Daily Spark: {note['title']}"
+            body = note.get("summary") or "Review this note from your Second Brain."
+            if len(body) > 150:
+                body = body[:147] + "..."
+                
+            message = messaging.MulticastMessage(
+                notification=messaging.Notification(
+                    title=title,
+                    body=body
+                ),
+                data={
+                    "route": "/note",
+                    "fileName": note["fileName"]
+                },
+                tokens=tokens
+            )
+            
+            try:
+                response = messaging.send_multicast(message)
+                print(f"[Serendipity] Sent notification for {note['title']}: {response.success_count} success, {response.failure_count} failure")
+            except Exception as ex:
+                print(f"[Serendipity] Failed to send multicast message: {ex}")
+    except Exception as e:
+        print(f"[Serendipity] Error in send_serendipity_notifications: {e}")
+
+async def daily_serendipity_scheduler():
+    while True:
+        # Check every 30 minutes
+        await asyncio.sleep(1800)
+        try:
+            now = datetime.datetime.now()
+            # We want to run daily at 08:30 AM local time.
+            if now.hour == 8 and now.minute >= 30:
+                today_str = now.strftime("%Y-%m-%d")
+                state_file = "serendipity_state.json"
+                last_run = ""
+                if os.path.exists(state_file):
+                    try:
+                        with open(state_file, "r") as f:
+                            state = json.load(f)
+                            last_run = state.get("last_run", "")
+                    except Exception:
+                        pass
+                
+                if last_run != today_str:
+                    await send_serendipity_notifications()
+                    try:
+                        with open(state_file, "w") as f:
+                            json.dump({"last_run": today_str}, f)
+                    except Exception as e:
+                        print(f"[Serendipity] Failed to save state: {e}")
+        except Exception as e:
+            print(f"[Serendipity] Error in scheduler loop: {e}")
+
+async def retroactive_backlink_scheduler():
+    while True:
+        # Check every 6 hours
+        await asyncio.sleep(21600)
+        now = datetime.datetime.now()
+        # Run weekly on Sunday at 02:00 AM
+        if now.weekday() == 6 and now.hour == 2:
+            try:
+                from core.retroactive_backlink import run_retroactive_scan
+                await asyncio.to_thread(run_retroactive_scan)
+            except Exception as e:
+                print(f"Error in scheduled retroactive backlink: {e}")
+
 # --- INITIALIZATION ---
 app = FastAPI(title="Second Brain API")
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(background_worker())
     asyncio.create_task(weekly_synthesis_scheduler())
+    asyncio.create_task(daily_serendipity_scheduler())
+    asyncio.create_task(retroactive_backlink_scheduler())
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -629,6 +742,21 @@ processor: {data.get('processor', '')}
         index = get_url_index()
         index[url] = note_data
         save_url_index(index)
+
+        event_date = data.get("ai_data", {}).get("event_date")
+        if event_date and str(event_date).lower() != "null" and data['ai_data'].get('category') == "Event":
+            ops_manager.update_task(task_id, "Syncing to Calendar", progress=90)
+            try:
+                from core.calendar_sync import create_calendar_event
+                await asyncio.to_thread(
+                    create_calendar_event,
+                    title=f"Event: {data['ai_data'].get('summary', 'New Event')[:50]}",
+                    event_date_str=str(event_date),
+                    source_url=data['url'],
+                    description=data['ai_data'].get('formatted_content', '')
+                )
+            except Exception as e:
+                print(f"Calendar sync failed: {e}")
 
         if status_callback: await status_callback("Updating AI index")
         ops_manager.update_task(task_id, "Updating AI index", progress=95)
@@ -1706,6 +1834,9 @@ def update_note_tasks(filename: str, markdown_content: str):
         except Exception as e:
             print(f"Error loading tasks: {e}")
             
+    # Map existing tasks for this filename by text to retain their IDs and Todoist mappings
+    existing_map = {t["text"]: t for t in existing_tasks if t.get("filename") == filename}
+    
     cleaned_tasks = [t for t in existing_tasks if t.get("filename") != filename]
     
     new_tasks = []
@@ -1719,14 +1850,23 @@ def update_note_tasks(filename: str, markdown_content: str):
             if date_match:
                 due_date = date_match.group(1)
             
-            new_tasks.append({
-                "id": str(uuid.uuid4()),
-                "text": task_text,
-                "due_date": due_date,
-                "filename": filename,
-                "completed": False,
-                "created_at": datetime.datetime.now().isoformat()
-            })
+            # Re-use existing task metadata if it was already tracked
+            if task_text in existing_map:
+                new_tasks.append(existing_map[task_text])
+            else:
+                # Push new task to Todoist
+                from core.task_sync import push_task_to_todoist
+                todoist_id = push_task_to_todoist(task_text, due_date, filename)
+                
+                new_tasks.append({
+                    "id": str(uuid.uuid4()),
+                    "text": task_text,
+                    "due_date": due_date,
+                    "filename": filename,
+                    "completed": False,
+                    "todoist_task_id": todoist_id,
+                    "created_at": datetime.datetime.now().isoformat()
+                })
             
     cleaned_tasks.extend(new_tasks)
     try:
@@ -1747,6 +1887,141 @@ async def get_all_tasks():
         print(f"Error loading tasks file: {e}")
         return []
 
+@app.post("/api/webhooks/todoist")
+async def todoist_webhook(request: Request):
+    import hmac
+    import hashlib
+    import base64
+
+    # 1. Enforce signature verification
+    signature = request.headers.get("X-Todoist-Hmac-SHA256")
+    body = await request.body()
+    
+    todoist_client_secret = os.getenv("TODOIST_CLIENT_SECRET")
+    if todoist_client_secret:
+        if not signature:
+            raise HTTPException(status_code=401, detail="X-Todoist-Hmac-SHA256 header missing")
+        
+        # Calculate HMAC
+        computed_hash = hmac.new(todoist_client_secret.encode('utf-8'), body, hashlib.sha256).digest()
+        computed_sig = base64.b64encode(computed_hash).decode('utf-8')
+        if not hmac.compare_digest(computed_sig, signature):
+            raise HTTPException(status_code=401, detail="Invalid HMAC signature")
+    else:
+        print("[Todoist Webhook] Warning: TODOIST_CLIENT_SECRET not configured. Skipping signature validation.")
+
+    # 2. Parse payload
+    try:
+        payload = json.loads(body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    event_name = payload.get("event_name")
+    if event_name != "item:completed":
+        return {"status": "ignored", "event": event_name}
+
+    event_data = payload.get("event_data", {})
+    todoist_task_id = str(event_data.get("id") or event_data.get("item_id", ""))
+    if not todoist_task_id:
+        raise HTTPException(status_code=400, detail="Todoist task ID not found in payload")
+
+    # 3. Read and search tasks
+    tasks_file = os.path.join(PROJECT_VAULT_PATH, "_tasks.json")
+    if not os.path.exists(tasks_file):
+        return {"status": "ignored", "reason": "No tasks database found"}
+
+    try:
+        with open(tasks_file, "r", encoding="utf-8") as f:
+            tasks = json.load(f)
+    except Exception as e:
+        print(f"[Todoist Webhook] Error loading tasks list: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load tasks list")
+
+    target_task = None
+    for task in tasks:
+        # Match todoist task ID (checking string conversion)
+        if task.get("todoist_task_id") and str(task["todoist_task_id"]) == todoist_task_id:
+            target_task = task
+            break
+
+    if not target_task:
+        print(f"[Todoist Webhook] No matching local task found for Todoist ID: {todoist_task_id}")
+        return {"status": "ignored", "reason": f"No task found for Todoist ID {todoist_task_id}"}
+
+    filename = target_task.get("filename")
+    task_text = target_task.get("text")
+    if not filename or not task_text:
+        return {"status": "ignored", "reason": "Invalid task data stored locally"}
+
+    # 4. Modify physical files
+    updated_files = 0
+    # Update files in PROJECT_VAULT_PATH and OBSIDIAN_INBOX_PATH
+    paths = [
+        os.path.join(PROJECT_VAULT_PATH, filename),
+        os.path.join(OBSIDIAN_INBOX_PATH, filename)
+    ]
+    
+    escaped_text = re.escape(task_text)
+    pattern = re.compile(rf'^(\s*-\s*\[)\s*(\]\s*{escaped_text})', re.MULTILINE)
+
+    for p in paths:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    content = f.read()
+                
+                # Replace checkmark
+                new_content = pattern.sub(r'\1x\2', content)
+                if new_content != content:
+                    with open(p, "w", encoding="utf-8") as f:
+                        f.write(new_content)
+                    updated_files += 1
+            except Exception as e:
+                print(f"[Todoist Webhook] Failed to update markdown file at {p}: {e}")
+
+    # 5. Update state in _tasks.json
+    target_task["completed"] = True
+    try:
+        with open(tasks_file, "w", encoding="utf-8") as f:
+            json.dump(tasks, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[Todoist Webhook] Failed to write updated tasks list: {e}")
+
+    return {"status": "success", "task_text": task_text, "updated_files": updated_files}
+
+class DeviceTokenRequest(BaseModel):
+    token: str
+    device: str
+
+@app.post("/api/device_token")
+async def register_device_token(req: DeviceTokenRequest):
+    tokens_file = "device_tokens.json"
+    tokens = []
+    if os.path.exists(tokens_file):
+        try:
+            with open(tokens_file, "r", encoding="utf-8") as f:
+                tokens = json.load(f)
+        except Exception:
+            tokens = []
+            
+    # Prevent duplicates
+    if not any(t.get("token") == req.token for t in tokens):
+        tokens.append({
+            "token": req.token,
+            "device": req.device,
+            "registered_at": datetime.datetime.now().isoformat()
+        })
+        try:
+            with open(tokens_file, "w", encoding="utf-8") as f:
+                json.dump(tokens, f, indent=2)
+        except Exception as e:
+            print(f"Error saving device tokens: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save token")
+            
+    return {"status": "success", "message": "Device token registered"}
+
+
+
 @app.post("/api/synthesis/weekly")
 async def trigger_weekly_synthesis():
     from core.synthesis_loop import run_weekly_synthesis
@@ -1754,6 +2029,18 @@ async def trigger_weekly_synthesis():
     if result["status"] == "error":
         raise HTTPException(status_code=500, detail=result["message"])
     return result
+
+@app.post("/api/maintenance/backlink")
+async def trigger_retroactive_backlink():
+    try:
+        from core.retroactive_backlink import run_retroactive_scan
+        result = await asyncio.to_thread(run_retroactive_scan)
+        if result.get("status") == "error":
+            raise HTTPException(status_code=500, detail=result.get("message"))
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/compile")
 async def compile_inbox():
