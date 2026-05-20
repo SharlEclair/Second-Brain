@@ -1,6 +1,82 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:share_plus/share_plus.dart';
+import '../services/api_service.dart';
+
+class NoteLoaderScreen extends StatefulWidget {
+  final String fileName;
+
+  const NoteLoaderScreen({super.key, required this.fileName});
+
+  @override
+  State<NoteLoaderScreen> createState() => _NoteLoaderScreenState();
+}
+
+class _NoteLoaderScreenState extends State<NoteLoaderScreen> {
+  final ApiService _apiService = ApiService();
+  bool _loading = true;
+  String? _error;
+  String? _content;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNote();
+  }
+
+  Future<void> _loadNote() async {
+    try {
+      final content = await _apiService.fetchNoteContent(widget.fileName);
+      if (mounted) {
+        setState(() {
+          _content = content;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Error')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              'Failed to load note:\n$_error',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.red),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final title = widget.fileName.split('/').last.replaceAll('.md', '');
+    return NoteViewerScreen(
+      title: title,
+      content: _content ?? '',
+      fileName: widget.fileName,
+    );
+  }
+}
 
 class NoteViewerScreen extends StatelessWidget {
   final String title;

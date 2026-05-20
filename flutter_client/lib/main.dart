@@ -24,6 +24,7 @@ class MyHttpOverrides extends HttpOverrides {
 }
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.dark);
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +33,7 @@ void main() async {
   final isLight = prefs.getBool('is_light_theme') ?? false;
   themeNotifier.value = isLight ? ThemeMode.light : ThemeMode.dark;
   try {
-    await NotificationService().initialize();
+    await NotificationService().initialize(navigatorKey);
   } catch (e) {
     debugPrint("Failed to initialize NotificationService: $e");
   }
@@ -50,7 +51,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
   static const _channel = MethodChannel('com.example.second_brain/actions');
   late StreamSubscription _intentDataStreamSubscription;
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> _navigatorKey = navigatorKey;
   String? _lastCheckedClipboardUrl;
   final ApiService _apiService = ApiService();
   final QueueService _queueService = QueueService();
@@ -107,33 +108,6 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
         }
       }
     });
-
-    // Firebase Cloud Messaging deep-link handling
-    try {
-      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        final data = message.data;
-        final route = data['route'];
-        final fileName = data['fileName'];
-        if (route == '/note' && fileName != null) {
-          _openNoteByFilename(fileName);
-        }
-      });
-      
-      FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
-        if (message != null) {
-          final data = message.data;
-          final route = data['route'];
-          final fileName = data['fileName'];
-          if (route == '/note' && fileName != null) {
-            Future.delayed(const Duration(milliseconds: 500), () {
-              _openNoteByFilename(fileName);
-            });
-          }
-        }
-      });
-    } catch (e) {
-      debugPrint("FCM routing registration skipped: $e");
-    }
   }
 
   @override
@@ -171,50 +145,6 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
       debugPrint("Error checking clipboard: $e");
     }
   }
-
-  Future<void> _openNoteByFilename(String fileName) async {
-    final context = _navigatorKey.currentContext;
-    if (context == null) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-
-    try {
-      final content = await _apiService.fetchNoteContent(fileName);
-      final title = fileName.split('/').last.replaceAll('.md', '');
-      
-      if (context.mounted) {
-        // Pop progress dialog
-        Navigator.of(context).pop();
-        
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => NoteViewerScreen(
-              title: title,
-              content: content,
-              fileName: fileName,
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        // Pop progress dialog
-        Navigator.of(context).pop();
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load note: $e')),
-        );
-      }
-    }
-  }
-
   void _showClipboardIngestSheet(String url) {
     final context = _navigatorKey.currentContext;
     if (context == null) return;
@@ -611,6 +541,15 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
             ),
           ),
           home: const ChatScreen(),
+          onGenerateRoute: (settings) {
+            if (settings.name == '/note_viewer') {
+              final fileName = settings.arguments as String;
+              return MaterialPageRoute(
+                builder: (context) => NoteLoaderScreen(fileName: fileName),
+              );
+            }
+            return null;
+          },
         );
       },
     );
