@@ -1,6 +1,7 @@
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/isar_note.dart';
+import '../models/isar_api_request.dart';
 import 'api_service.dart';
 import 'debug_logger.dart';
 
@@ -12,7 +13,7 @@ class SyncService {
     if (_isar != null) return _isar!;
     final dir = await getApplicationDocumentsDirectory();
     _isar = await Isar.open(
-      [IsarNoteSchema],
+      [IsarNoteSchema, ApiRequestSchema],
       directory: dir.path,
     );
     return _isar!;
@@ -116,6 +117,38 @@ class SyncService {
     } catch (e) {
       DebugLogger.log('Downward sync failed: $e', type: 'ERROR');
       rethrow;
+    }
+  }
+
+
+  Future<void> syncUp() async {
+    try {
+      final isarDb = await isar;
+      final requests = await isarDb.apiRequests.where().findAll();
+      if (requests.isEmpty) return;
+
+      DebugLogger.log('Syncing ${requests.length} offline requests...', type: 'SYNC');
+      for (final req in requests) {
+        try {
+          if (req.type == 'url') {
+            await _apiService.ingestUrl(req.payload);
+          } else if (req.type == 'audio') {
+            // await AudioIngestService.uploadAudio(req.payload); // Needs handling if audio was an explicit dependency
+            // Assuming simple text for now or custom handling.
+          } else if (req.type == 'text') {
+            await _apiService.ingestRawText(req.payload);
+          }
+
+          // If successful, delete from Isar
+          await isarDb.writeTxn(() async {
+            await isarDb.apiRequests.delete(req.id);
+          });
+        } catch (e) {
+          DebugLogger.log('Failed to sync request ${req.id}: $e', type: 'ERROR');
+        }
+      }
+    } catch (e) {
+      DebugLogger.log('Error in syncUp: $e', type: 'ERROR');
     }
   }
 

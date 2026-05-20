@@ -109,7 +109,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       'No scanned documents yet',
                       style: TextStyle(
                         fontSize: 16,
-                        color: isDark ? Colors.white55 : Colors.black54,
+                        color: isDark ? Colors.white.withOpacity(0.55) : Colors.black54,
                       ),
                     ),
                     const SizedBox(height: 8),
