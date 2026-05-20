@@ -6,6 +6,8 @@ import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../services/analytics_service.dart';
 import '../services/notification_service.dart';
+import '../services/sync_service.dart';
+import '../models/isar_note.dart';
 import '../widgets/events_carousel.dart';
 import '../widgets/library_directory_widget.dart';
 import 'note_viewer_screen.dart';
@@ -26,6 +28,8 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
   
   List<FileSystemEntity> _localNotes = [];
   List<FileSystemEntity> _filteredNotes = [];
+  List<IsarNote> _isarNotes = [];
+  List<IsarNote> _filteredIsarNotes = [];
   List<Map<String, dynamic>> _upcomingEvents = [];
   bool _isLoading = true;
 
@@ -52,12 +56,22 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
 
   Future<void> _loadNotes() async {
     setState(() => _isLoading = true);
-    final notes = await _storageService.listLocalNotes();
-    setState(() {
-      _localNotes = notes;
-      _filteredNotes = notes;
-      _isLoading = false;
-    });
+    try {
+      final cached = await SyncService().getCachedNotes();
+      setState(() {
+        _isarNotes = cached;
+        _filteredIsarNotes = cached;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Failed to load notes from Isar: $e");
+      final notes = await _storageService.listLocalNotes();
+      setState(() {
+        _localNotes = notes;
+        _filteredNotes = notes;
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadUpcomingEvents() async {
@@ -76,10 +90,16 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
   void _filterNotes() {
     final query = _searchController.text.toLowerCase();
     setState(() {
-      _filteredNotes = _localNotes.where((note) {
-        final fileName = note.path.split('/').last.toLowerCase();
-        return fileName.contains(query);
-      }).toList();
+      if (_isarNotes.isNotEmpty) {
+        _filteredIsarNotes = _isarNotes.where((note) {
+          return note.title.toLowerCase().contains(query) || note.content.toLowerCase().contains(query);
+        }).toList();
+      } else {
+        _filteredNotes = _localNotes.where((note) {
+          final fileName = note.path.split('/').last.toLowerCase();
+          return fileName.contains(query);
+        }).toList();
+      }
     });
     if (query.trim().isNotEmpty) {
       AnalyticsService().logSearch(query.trim());
@@ -89,6 +109,9 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
   Future<void> _syncWithServer() async {
     setState(() => _isLoading = true);
     try {
+      // Sync Down to Isar Database first
+      await SyncService().syncDown();
+
       final prefs = await SharedPreferences.getInstance();
       final String syncMetaRaw = prefs.getString('sync_metadata') ?? '{}';
       final Map<String, dynamic> syncMeta = jsonDecode(syncMetaRaw);
@@ -255,7 +278,7 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
         Expanded(
           child: _isLoading 
             ? const Center(child: CircularProgressIndicator(color: Color(0xFFF97316)))
-            : _filteredNotes.isEmpty
+            : (_isarNotes.isNotEmpty ? _filteredIsarNotes.isEmpty : _filteredNotes.isEmpty)
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -283,11 +306,11 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
                 )
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _filteredNotes.length,
+                  itemCount: _isarNotes.isNotEmpty ? _filteredIsarNotes.length : _filteredNotes.length,
                   itemBuilder: (context, index) {
-                    final note = _filteredNotes[index];
-                    final fileName = note.path.split('/').last;
-                    final title = _formatTitle(fileName);
+                    final isarActive = _isarNotes.isNotEmpty;
+                    final noteTitle = isarActive ? _filteredIsarNotes[index].title : _formatTitle(_filteredNotes[index].path.split('/').last);
+                    final noteFileName = isarActive ? _filteredIsarNotes[index].fileName : _filteredNotes[index].path.split('/').last;
                     
                     return Card(
                       color: isDark ? const Color(0xFF111111) : Colors.white,
@@ -299,24 +322,26 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
                       child: ListTile(
                         leading: Icon(Icons.description_outlined, color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)),
                         title: Text(
-                          title,
+                          noteTitle,
                           style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A), fontWeight: FontWeight.w500, fontSize: 14),
                         ),
                         subtitle: Text(
-                          fileName,
+                          noteFileName,
                           style: TextStyle(color: isDark ? Colors.white24 : Colors.black38, fontSize: 10, fontFamily: 'monospace'),
                         ),
                         onTap: () async {
-                          final content = await _storageService.readNote(fileName);
+                          final content = isarActive 
+                              ? _filteredIsarNotes[index].content 
+                              : await _storageService.readNote(noteFileName);
                           if (content != null && context.mounted) {
-                            AnalyticsService().logRead(title);
+                            AnalyticsService().logRead(noteTitle);
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => NoteViewerScreen(
-                                  title: title,
+                                  title: noteTitle,
                                   content: content,
-                                  fileName: fileName,
+                                  fileName: noteFileName,
                                 ),
                               ),
                             );

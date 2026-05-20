@@ -3,6 +3,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../services/sync_service.dart';
 
 class NoteLoaderScreen extends StatefulWidget {
   final String fileName;
@@ -47,13 +48,26 @@ class _NoteLoaderScreenState extends State<NoteLoaderScreen> {
           }
         } catch (_) {}
       } else {
-        final content = await _apiService.fetchNoteContent(widget.fileName);
-        await _storageService.saveNote(widget.fileName, content);
-        if (mounted) {
-          setState(() {
-            _content = content;
-            _loading = false;
-          });
+        try {
+          final content = await _apiService.fetchNoteContent(widget.fileName);
+          await _storageService.saveNote(widget.fileName, content);
+          if (mounted) {
+            setState(() {
+              _content = content;
+              _loading = false;
+            });
+          }
+        } catch (apiErr) {
+          // If remote fetch fails, try to load from local Isar database cache
+          final cached = await SyncService().getCachedNote(widget.fileName);
+          if (cached != null && mounted) {
+            setState(() {
+              _content = cached.content;
+              _loading = false;
+            });
+          } else {
+            rethrow; // Rethrow original apiErr if not cached
+          }
         }
       }
     } catch (e) {
