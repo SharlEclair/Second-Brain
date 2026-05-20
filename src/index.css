@@ -9,33 +9,53 @@
 
 :root {
   --bg: #050505;
-  --panel: #111111;
+  --panel: #0a0a0a;
   --accent: #f97316; /* Orange 500 */
   --highlight: #f97316;
   --text-dim: #94a3b8; /* Slate 400 */
   --border: #1e293b; /* Slate 800 */
+  --text-main: #cbd5e1; /* Slate 300 */
+  --text-bright: #ffffff;
+  --bg-glow: rgba(249, 115, 22, 0.05);
+  --grid-line: rgba(255, 255, 255, 0.02);
+}
+
+.light {
+  --bg: #fafafa;
+  --panel: #ffffff;
+  --accent: #ea580c; /* Orange 600 */
+  --highlight: #ea580c;
+  --text-dim: #64748b; /* Slate 500 */
+  --border: #e2e8f0; /* Slate 200 */
+  --text-main: #334155; /* Slate 700 */
+  --text-bright: #0f172a; /* Slate 900 */
+  --bg-glow: rgba(234, 88, 12, 0.03);
+  --grid-line: rgba(0, 0, 0, 0.02);
 }
 
 body {
   background-color: var(--bg);
-  color: #cbd5e1; /* Slate 300 */
+  color: var(--text-main);
   margin: 0;
   overflow: hidden;
   background-image: 
-    radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.05) 0%, transparent 50%),
-    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    radial-gradient(circle at 50% 0%, var(--bg-glow) 0%, transparent 50%),
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
   background-size: 100% 100%, 40px 40px, 40px 40px;
+  transition: background-color 0.3s ease, color 0.3s ease, background-image 0.3s ease;
 }
 
 .bg-circuit {
-  background-image: radial-gradient(circle at center, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-image: radial-gradient(circle at center, var(--grid-line) 1px, transparent 1px);
   background-size: 20px 20px;
 }
 
 .hardware-border {
   border: 1px solid var(--border);
   position: relative;
+  background-color: var(--panel);
+  transition: border-color 0.3s ease, background-color 0.3s ease;
 }
 
 .hardware-border::before {
@@ -47,10 +67,15 @@ body {
   height: 2px;
   background: var(--accent);
   opacity: 0.5;
+  transition: background 0.3s ease;
 }
 
 .glow-text {
   text-shadow: 0 0 10px rgba(249, 115, 22, 0.5);
+}
+
+.light .glow-text {
+  text-shadow: none;
 }
 
 /* Scrollbar styling */
@@ -69,17 +94,19 @@ body {
 }
 
 .markdown-body {
-  @apply font-sans leading-relaxed text-slate-300;
+  @apply font-sans leading-relaxed;
+  color: var(--text-main);
+  transition: color 0.3s ease;
 }
-.markdown-body h1 { @apply text-2xl font-display italic font-light mb-4 text-white; }
-.markdown-body h2 { @apply text-xl font-display italic font-light mb-3 mt-6 text-white; }
-.markdown-body h3 { @apply text-lg font-display font-light mb-3 mt-4 text-slate-200; }
+.markdown-body h1 { @apply text-2xl font-display italic font-light mb-4; color: var(--text-bright); }
+.markdown-body h2 { @apply text-xl font-display italic font-light mb-3 mt-6; color: var(--text-bright); }
+.markdown-body h3 { @apply text-lg font-display font-light mb-3 mt-4; color: var(--text-main); }
 .markdown-body p { @apply mb-4; }
 .markdown-body ul { @apply list-disc ml-6 mb-4; }
 .markdown-body li { @apply mb-1 marker:text-orange-500/50; }
-.markdown-body strong { @apply text-white font-bold; }
-.markdown-body a { @apply text-orange-400 hover:text-orange-300 underline decoration-orange-500/30 underline-offset-4; }
-.markdown-body blockquote { @apply border-l-2 border-orange-500/50 pl-4 italic text-slate-400 my-4; }
-.markdown-body code { @apply font-mono text-[0.85em] bg-slate-900/50 text-orange-200 px-1.5 py-0.5 rounded-sm border border-slate-800; }
-.markdown-body pre { @apply bg-black border border-slate-800 p-4 rounded-sm overflow-x-auto my-6; }
-.markdown-body pre code { @apply bg-transparent border-none p-0 text-slate-300; }
+.markdown-body strong { @apply font-bold; color: var(--text-bright); }
+.markdown-body a { color: var(--accent); @apply hover:opacity-80 underline decoration-orange-500/30 underline-offset-4; transition: color 0.3s ease; }
+.markdown-body blockquote { @apply border-l-2 border-orange-500/50 pl-4 italic my-4; color: var(--text-dim); }
+.markdown-body code { @apply font-mono text-[0.85em] px-1.5 py-0.5 rounded-sm border; background-color: var(--panel); border-color: var(--border); color: var(--accent); transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease; }
+.markdown-body pre { @apply p-4 rounded-sm overflow-x-auto my-6 border; background-color: var(--panel); border-color: var(--border); transition: background-color 0.3s ease, border-color 0.3s ease; }
+.markdown-body pre code { @apply bg-transparent border-none p-0; color: var(--text-main); }

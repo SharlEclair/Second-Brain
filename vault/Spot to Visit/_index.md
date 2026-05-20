@@ -1,6 +1,6 @@
 # Spot to Visit Index
 
-Beat the heat with Melbourne's coolest scoops – discover Instagram-worthy ice cream shops perfect for a sunny day.
+Discover Instagram-worthy ice cream havens in Melbourne, serving up unique flavors perfect for beating the heat.
 
 This folder contains 1 articles related to Spot to Visit.
 

@@ -1,6 +1,6 @@
 # Event Index
 
-Mark your calendars for upcoming webinars, tech workshops, and social gatherings to connect and learn!
+Get ready for a mix of informative webinars, engaging workshops, and delightful social gatherings, all designed to connect and inform!
 
 This folder contains 7 articles related to Event.
 

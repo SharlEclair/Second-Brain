@@ -16,10 +16,13 @@ class NoteViewerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title.toUpperCase(), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-        backgroundColor: const Color(0xFF111111),
+        backgroundColor: isDark ? const Color(0xFF111111) : Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.share_outlined, size: 20),
@@ -33,21 +36,25 @@ class NoteViewerScreen extends StatelessWidget {
         data: content,
         selectable: true,
         styleSheet: MarkdownStyleSheet(
-          h1: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, height: 1.5),
-          h2: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, height: 1.4),
-          h3: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-          p: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
-          code: const TextStyle(backgroundColor: Color(0xFF1A1A1A), fontFamily: 'monospace', color: Color(0xFFF97316)),
+          h1: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A), fontSize: 24, fontWeight: FontWeight.bold, height: 1.5),
+          h2: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B), fontSize: 20, fontWeight: FontWeight.bold, height: 1.4),
+          h3: TextStyle(color: isDark ? Colors.white : const Color(0xFF334155), fontSize: 18, fontWeight: FontWeight.bold),
+          p: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF334155), fontSize: 15, height: 1.6),
+          code: TextStyle(
+            backgroundColor: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF1F5F9), 
+            fontFamily: 'monospace', 
+            color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)
+          ),
           codeblockDecoration: BoxDecoration(
-            color: const Color(0xFF111111),
+            color: isDark ? const Color(0xFF111111) : const Color(0xFFF8FAFC),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFF222222)),
+            border: Border.all(color: isDark ? const Color(0xFF222222) : const Color(0xFFE2E8F0)),
           ),
-          blockquote: const TextStyle(color: Colors.white54, fontStyle: FontStyle.italic),
-          blockquoteDecoration: const BoxDecoration(
-            border: Border(left: BorderSide(color: Color(0xFFF97316), width: 4)),
+          blockquote: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontStyle: FontStyle.italic),
+          blockquoteDecoration: BoxDecoration(
+            border: Border(left: BorderSide(color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C), width: 4)),
           ),
-          listBullet: const TextStyle(color: Color(0xFFF97316)),
+          listBullet: TextStyle(color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)),
         ),
       ),
     );

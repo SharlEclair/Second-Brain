@@ -72,8 +72,10 @@ def _build_ytdlp_opts(outtmpl, quiet=True):
         "fragment_retries": 2,
         "windowsfilenames": True,
     }
-    if os.path.exists("cookies.txt"):
-        opts["cookiefile"] = "cookies.txt"
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cookies_file = os.path.join(project_root, "cookies.txt")
+    if os.path.exists(cookies_file):
+        opts["cookiefile"] = cookies_file
     return opts
 
 
@@ -251,9 +253,35 @@ def _sync_download_reel(url, ydl_opts, temp_prefix):
 
 
 def _sync_transcribe(media_path):
-    segments, _ = whisper_model.transcribe(media_path)
-    texts = [segment.text.strip() for segment in segments if segment.text and segment.text.strip()]
-    return " ".join(texts).strip()
+    try:
+        segments, _ = whisper_model.transcribe(media_path)
+        texts = [segment.text.strip() for segment in segments if segment.text and segment.text.strip()]
+        return " ".join(texts).strip()
+    except Exception as e:
+        import subprocess
+        import tempfile
+        print(f"Direct whisper transcribe failed on {media_path}: {e}. Retrying via FFmpeg audio extraction...")
+        
+        temp_wav = tempfile.mktemp(suffix=".wav")
+        try:
+            cmd = ["ffmpeg", "-y", "-i", media_path, "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", temp_wav]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode == 0 and os.path.exists(temp_wav) and os.path.getsize(temp_wav) > 0:
+                segments, _ = whisper_model.transcribe(temp_wav)
+                texts = [segment.text.strip() for segment in segments if segment.text and segment.text.strip()]
+                return " ".join(texts).strip()
+            else:
+                print(f"FFmpeg extraction failed (code {result.returncode}). Stderr: {result.stderr.decode('utf-8', errors='ignore')}")
+                raise e
+        except Exception as ex:
+            print(f"FFmpeg extraction fallback failed: {ex}")
+            raise e
+        finally:
+            if os.path.exists(temp_wav):
+                try:
+                    os.remove(temp_wav)
+                except:
+                    pass
 
 
 def _sync_download_instagram_with_ytdlp(url, download_path):
@@ -282,18 +310,32 @@ def _sync_download_instagram_with_instaloader(post_shortcode, download_path):
         download_video_thumbnails=False,
         save_metadata=False,
         post_metadata_txt_pattern="",
+        quiet=True,
     )
-    cookies_file = "cookies.txt"
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cookies_file = os.path.join(project_root, "cookies.txt")
     if os.path.exists(cookies_file):
         try:
             import http.cookiejar
 
             cookie_jar = http.cookiejar.MozillaCookieJar(cookies_file)
             cookie_jar.load(ignore_discard=True, ignore_expires=True)
-            for cookie in cookie_jar:
-                loader.context._session.cookies.set_cookie(cookie)
+
+            # Convert cookie jar to a flat dict for load_session.
+            # load_session creates an entirely new requests.Session (not the anonymous
+            # one from the constructor), which avoids the duplicate empty-domain cookie
+            # issue that caused Instagram to return null data.
+            cookie_dict = {cookie.name: cookie.value for cookie in cookie_jar}
+            username = cookie_dict.get("ds_user_id", "unknown")
+            loader.context.load_session(username, cookie_dict)
         except Exception as error:
             print(f"Cookie load warning: {error}")
+
+    # Set a realistic browser User-Agent to avoid Instagram blocking
+    loader.context._session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    })
 
     post = instaloader.Post.from_shortcode(loader.context, post_shortcode)
     loader.download_post(post, target=download_path)
@@ -391,8 +433,10 @@ async def process_image_post(url: str, task_id: str = None, status_callback=None
     if task_id:
         ops_manager.update_task(task_id, "Downloading Instagram carousel media", progress=20)
 
-    parts = url.split("/")
-    post_shortcode = parts[-2] if len(parts[-2]) > 3 else parts[-3]
+    # Extract shortcode from Instagram URL - handles both with and without trailing slash
+    # e.g. /p/DYcOwEZCGCX/ or /p/DYcOwEZCGCX
+    shortcode_match = re.search(r'/p/([A-Za-z0-9_-]+)', url)
+    post_shortcode = shortcode_match.group(1) if shortcode_match else url.split("/")[-1]
     download_path = f"temp_{post_shortcode}_{uuid.uuid4().hex[:8]}"
 
     try:
@@ -482,13 +526,21 @@ def _sync_fetch_web_article(url):
     from bs4 import BeautifulSoup
     response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
     response.raise_for_status()
-    soup = BeautifulSoup(response.text, 'html.parser')
 
-    for script in soup(["script", "style"]):
-        script.extract()
-
-    title = soup.title.string if soup.title else "Web Article"
-    text = soup.get_text(separator=' ')
+    try:
+        from readability import Document
+        doc = Document(response.text)
+        title = doc.title() or "Web Article"
+        summary_html = doc.summary()
+        soup = BeautifulSoup(summary_html, 'html.parser')
+        text = soup.get_text(separator=' ')
+    except Exception as e:
+        print(f"Readability-lxml parsing failed: {e}. Falling back to default BeautifulSoup parser.")
+        soup = BeautifulSoup(response.text, 'html.parser')
+        for script in soup(["script", "style"]):
+            script.extract()
+        title = soup.title.string if soup.title else "Web Article"
+        text = soup.get_text(separator=' ')
 
     lines = (line.strip() for line in text.splitlines())
     chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
@@ -593,14 +645,81 @@ async def process_pdf(filepath: str, original_filename: str, task_id: str = None
     except Exception:
         raise
 
+def _extract_youtube_video_id(url: str) -> str | None:
+    patterns = [
+        r'(?:v=|\/embed\/|\/shorts\/|\/e\/|youtu\.be\/)([a-zA-Z0-9_-]{11})'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _fetch_youtube_transcript_api(video_id: str) -> str | None:
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        data = YouTubeTranscriptApi().fetch(video_id)
+        return " ".join([entry.text for entry in data]).strip()
+    except Exception as e:
+        print(f"Failed to fetch YouTube subtitles via API: {e}")
+        return None
+
+
 async def process_reel(url: str, task_id: str = None, status_callback=None) -> dict:
+    platform = get_platform_from_url(url)
+    
+    if platform == "youtube":
+        video_id = _extract_youtube_video_id(url)
+        if video_id:
+            if status_callback:
+                await status_callback("Fetching video transcript")
+            if task_id:
+                ops_manager.update_task(task_id, "Fetching video transcript", progress=30)
+            
+            transcript = await asyncio.to_thread(_fetch_youtube_transcript_api, video_id)
+            if transcript:
+                if status_callback:
+                    await status_callback("AI analyzing transcript")
+                if task_id:
+                    ops_manager.update_task(task_id, "AI analyzing transcript", progress=70)
+                
+                try:
+                    ydl_opts = _build_ytdlp_opts("", quiet=True)
+                    ydl_opts["skip_download"] = True
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = await asyncio.to_thread(ydl.extract_info, url, download=False)
+                    metadata = _metadata_from_info(info)
+                    description = metadata["description"]
+                    uploader = metadata["uploader"]
+                except Exception as e:
+                    print(f"Failed to fetch metadata for YouTube video: {e}")
+                    description = f"YouTube video {video_id}"
+                    uploader = "YouTube"
+
+                ai_data = await asyncio.to_thread(_sync_analyze_text, transcript, description)
+                import hashlib
+                content_hash = hashlib.md5(transcript.encode('utf-8')).hexdigest()
+                
+                return {
+                    "uploader": uploader,
+                    "description": description,
+                    "url": url,
+                    "type": "youtube-video",
+                    "platform": "youtube",
+                    "ai_data": ai_data,
+                    "content_hash": content_hash,
+                    "raw_transcript": transcript,
+                    "transcript_status": "complete",
+                    "media_size": 0,
+                }
+
     if status_callback:
         await status_callback("Downloading audio/video")
     if task_id:
         ops_manager.update_task(task_id, "Downloading audio/video", progress=20)
 
     temp_prefix = f"temp_audio_{uuid.uuid4().hex}"
-    platform = get_platform_from_url(url)
     ydl_opts = _build_ytdlp_opts(f"{temp_prefix}.%(ext)s")
     ydl_opts["format"] = "bestaudio/best"
 

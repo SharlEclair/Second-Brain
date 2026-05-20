@@ -3,14 +3,14 @@
 Topics appear here as they're created.
 
 - **[[Event/_index|Event]]**: 7 articles
-  *Mark your calendars for upcoming webinars, tech workshops, and social gatherings to connect and learn!*
-- **[[General/_index|General]]**: 2 articles
-  *This "General" category explores how AI can leverage structured data warehouses to build more effective memory systems, illustrated through a tech bro's perspective on agent development.*
-- **[[Job-Career/_index|Job-Career]]**: 1 articles
-  *Navigate the competitive Australian graduate job market with insider tips on timely applications and visa insights to secure your dream role.*
+  *Get ready for a mix of informative webinars, engaging workshops, and delightful social gatherings, all designed to connect and inform!*
+- **[[General/_index|General]]**: 4 articles
+  *Explore how tech enthusiasts are using AI and digital tools to navigate travel, build careers, and spark innovative projects, all while sharing their journeys online.*
+- **[[Job-Career/_index|Job-Career]]**: 3 articles
+  *Navigate your professional journey with insider tips on job applications, visa insights, and mastering networking to unlock your next career opportunity.*
 - **[[Recipe/_index|Recipe]]**: 10 articles
-  ***Recipe:** Unlock delicious culinary adventures with inspiring dishes ranging from quick weeknight faves and global street food fusions to decadent gourmet creations, all designed to tantalize your taste buds.*
+  ***Recipe:** Unlock a world of culinary inspiration, from quick weeknight meals and flavorful street food twists to gourmet delights and unexpected breakfast adventures.*
 - **[[Spot to Visit/_index|Spot to Visit]]**: 1 articles
-  *Beat the heat with Melbourne's coolest scoops – discover Instagram-worthy ice cream shops perfect for a sunny day.*
+  *Discover Instagram-worthy ice cream havens in Melbourne, serving up unique flavors perfect for beating the heat.*
 - **[[Weekly Brief/_index|Weekly Brief]]**: 1 articles
-  *This Weekly Brief distills essential takeaways and practical steps from recent knowledge shared.*
+  *The Weekly Brief distills essential knowledge and practical takeaways from recent insights, offering you a concise update to drive your learning and actions.*

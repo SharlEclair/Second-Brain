@@ -1,15 +1,39 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/chat_screen.dart';
 import 'screens/notes_browser_screen.dart';
 import 'screens/debug_logs_screen.dart';
 import 'services/api_service.dart';
 import 'services/queue_service.dart';
 import 'services/widget_service.dart';
+import 'services/analytics_service.dart';
+import 'services/notification_service.dart';
 
-void main() {
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+  }
+}
+
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.dark);
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  HttpOverrides.global = MyHttpOverrides();
+  final prefs = await SharedPreferences.getInstance();
+  final isLight = prefs.getBool('is_light_theme') ?? false;
+  themeNotifier.value = isLight ? ThemeMode.light : ThemeMode.dark;
+  try {
+    await NotificationService.initialize();
+  } catch (e) {
+    debugPrint("Failed to initialize NotificationService: $e");
+  }
   runApp(const SecondBrainApp());
 }
 
@@ -20,11 +44,12 @@ class SecondBrainApp extends StatefulWidget {
   State<SecondBrainApp> createState() => _SecondBrainAppState();
 }
 
-class _SecondBrainAppState extends State<SecondBrainApp> {
+class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObserver {
   static const _channel = MethodChannel('com.example.second_brain/actions');
   late StreamSubscription _intentDataStreamSubscription;
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  String? _lastCheckedClipboardUrl;
   final ApiService _apiService = ApiService();
   final QueueService _queueService = QueueService();
   Timer? _sharedStatusTimer;
@@ -33,6 +58,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     // Set up MethodChannel listener for widget actions
     _channel.setMethodCallHandler((call) async {
@@ -83,9 +109,133 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _intentDataStreamSubscription.cancel();
     _sharedStatusTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkClipboardForIngest();
+    }
+  }
+
+  Future<void> _checkClipboardForIngest() async {
+    try {
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      if (clipboardData != null && clipboardData.text != null) {
+        final text = clipboardData.text!.trim();
+        final urlPattern = RegExp(
+          r'^(https?:\/\/[^\s$.?#].[^\s]*)$',
+          caseSensitive: false,
+        );
+        if (urlPattern.hasMatch(text)) {
+          if (text != _lastCheckedClipboardUrl) {
+            _lastCheckedClipboardUrl = text;
+            _showClipboardIngestSheet(text);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking clipboard: $e");
+    }
+  }
+
+  void _showClipboardIngestSheet(String url) {
+    final context = _navigatorKey.currentContext;
+    if (context == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xE61E1E2E),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+          ),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blueAccent.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.link, color: Colors.blueAccent),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      "Link Detected in Clipboard",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                url,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text(
+                        "Dismiss",
+                        style: TextStyle(color: Colors.white.withOpacity(0.6)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _handleSharedData(url);
+                      },
+                      child: const Text("Ingest Link"),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   String _canonicalUrl(String value) {
@@ -159,10 +309,23 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
     if (match != null) {
       final url = match.group(0)!;
       _showToast("Ingesting URL: $url");
-      _startSharedStatusPolling(url);
+      
+      final context = _navigatorKey.currentContext;
+      bool dialogOpen = false;
+      if (context != null) {
+        dialogOpen = true;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => IngestSpinnerDialog(url: url, apiService: _apiService),
+        ).then((_) {
+          dialogOpen = false;
+        });
+      }
       
       try {
         final result = await _apiService.ingestUrl(url);
+        AnalyticsService().logIngest('url', 'share_intent', details: url);
         if (result['status'] == 'existing') {
           _showToast("✓ Already in your Brain Vault.");
         } else {
@@ -170,6 +333,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
         }
       } catch (e) {
         await _queueService.addToQueue(url);
+        AnalyticsService().logIngest('url_queue', 'share_intent', details: url);
         if (e is NetworkException) {
           _showToast("📌 Queued — will process when connected.");
         } else if (e is ServerException) {
@@ -178,13 +342,16 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
           _showToast("📌 Queued (${e.toString().substring(0, (e.toString().length).clamp(0, 45))})");
         }
       } finally {
-        _stopSharedStatusPolling();
+        if (dialogOpen && _navigatorKey.currentContext != null) {
+          Navigator.of(_navigatorKey.currentContext!).pop();
+        }
       }
     } else {
       // It is raw text without a URL!
       _showToast("Ingesting Shared Text Note...");
       try {
         final result = await _apiService.ingestRawText(sharedText);
+        AnalyticsService().logIngest('text', 'share_intent');
         _showToast("✓ Shared text note saved successfully!");
       } on NetworkException {
         _showToast("❌ Offline: Can't ingest raw text now.");
@@ -313,6 +480,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
                   _showToast("Saving note to Vault...");
                   try {
                     await _apiService.ingestRawText(content, title: title.isNotEmpty ? title : null);
+                    AnalyticsService().logIngest('scratchpad', 'in_app', details: title.isNotEmpty ? title : 'Scratchpad Note');
                     _showToast("✓ Note successfully archived!");
                     // Trigger a sync of widgets
                     WidgetService.syncAllWidgets(_apiService);
@@ -331,21 +499,200 @@ class _SecondBrainAppState extends State<SecondBrainApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Second Brain',
-      navigatorKey: _navigatorKey,
-      scaffoldMessengerKey: _scaffoldMessengerKey,
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFF97316), // Orange 500
-          surface: Color(0xFF111111),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeNotifier,
+      builder: (context, currentMode, _) {
+        return MaterialApp(
+          title: 'Second Brain',
+          navigatorKey: _navigatorKey,
+          scaffoldMessengerKey: _scaffoldMessengerKey,
+          debugShowCheckedModeBanner: false,
+          themeMode: currentMode,
+          theme: ThemeData(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFFEA580C),
+              surface: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+            scaffoldBackgroundColor: const Color(0xFFFAFAFA),
+            useMaterial3: true,
+            fontFamily: 'Roboto',
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Colors.white,
+              foregroundColor: Color(0xFF0F172A),
+              elevation: 0,
+            ),
+          ),
+          darkTheme: ThemeData(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFFF97316),
+              surface: Color(0xFF111111),
+              onSurface: Colors.white,
+            ),
+            scaffoldBackgroundColor: const Color(0xFF050505),
+            useMaterial3: true,
+            fontFamily: 'Roboto',
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Color(0xFF111111),
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+          ),
+          home: const ChatScreen(),
+        );
+      },
+    );
+  }
+}
+
+class IngestSpinnerDialog extends StatefulWidget {
+  final String url;
+  final ApiService apiService;
+
+  const IngestSpinnerDialog({
+    super.key,
+    required this.url,
+    required this.apiService,
+  });
+
+  @override
+  State<IngestSpinnerDialog> createState() => _IngestSpinnerDialogState();
+}
+
+class _IngestSpinnerDialogState extends State<IngestSpinnerDialog> {
+  String _statusMessage = "Preparing knowledge ingestion...";
+  double _progress = 0.0;
+  Timer? _timer;
+  bool _finished = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startPolling();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startPolling() {
+    final target = _canonicalUrl(widget.url);
+    _timer = Timer.periodic(const Duration(milliseconds: 1000), (_) async {
+      if (_finished) return;
+      try {
+        final status = await widget.apiService.getStatus();
+        final activeTasks = status['active_tasks'];
+        if (activeTasks is List) {
+          for (final task in activeTasks) {
+            if (task is Map && _canonicalUrl((task['url'] ?? '').toString()) == target) {
+              final taskStatus = task['status'] ?? 'Processing';
+              final progressVal = task['progress'];
+              if (mounted) {
+                setState(() {
+                  _statusMessage = taskStatus.toString();
+                  if (progressVal is num) {
+                    _progress = progressVal.toDouble() / 100.0;
+                  }
+                });
+              }
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    });
+  }
+
+  String _canonicalUrl(String value) {
+    var cleaned = value.trim();
+    final queryIndex = cleaned.indexOf('?');
+    if (queryIndex >= 0) cleaned = cleaned.substring(0, queryIndex);
+    while (cleaned.endsWith('/')) {
+      cleaned = cleaned.substring(0, cleaned.length - 1);
+    }
+    return cleaned;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          decoration: BoxDecoration(
+            color: const Color(0xEE0A0A0C),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFEA580C).withOpacity(0.4), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFEA580C).withOpacity(0.2),
+                blurRadius: 30,
+                spreadRadius: 2,
+              )
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "KNOWLEDGE INGESTION",
+                style: TextStyle(
+                  color: Color(0xFFEA580C),
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const SizedBox(height: 28),
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: CircularProgressIndicator(
+                      value: _progress > 0 ? _progress : null,
+                      strokeWidth: 4,
+                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFEA580C)),
+                      backgroundColor: Colors.white10,
+                    ),
+                  ),
+                  const Icon(
+                    Icons.psychology,
+                    size: 36,
+                    color: Color(0xFFEA580C),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Text(
+                _statusMessage,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                widget.url,
+                style: const TextStyle(
+                  color: Colors.white30,
+                  fontSize: 10,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
-        scaffoldBackgroundColor: const Color(0xFF050505),
-        useMaterial3: true,
-        fontFamily: 'Roboto',
       ),
-      home: const ChatScreen(),
     );
   }
 }

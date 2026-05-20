@@ -20,19 +20,25 @@ class EventsCarousel extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: Row(
             children: [
-              Icon(Icons.calendar_month, color: Color(0xFFF97316), size: 16),
-              SizedBox(width: 8),
+              Icon(
+                Icons.calendar_month, 
+                color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C), 
+                size: 16
+              ),
+              const SizedBox(width: 8),
               Text(
                 'UPCOMING EVENTS',
                 style: TextStyle(
-                  color: Colors.white70,
+                  color: isDark ? Colors.white70 : Colors.black54,
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 2.0,
@@ -79,12 +85,12 @@ class EventsCarousel extends StatelessWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
                   padding: const EdgeInsets.all(10.0),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF111111),
+                    color: isDark ? const Color(0xFF111111) : Colors.white,
                     borderRadius: BorderRadius.circular(8.0),
-                    border: Border.all(color: const Color(0xFF222222)),
+                    border: Border.all(color: isDark ? const Color(0xFF222222) : const Color(0xFFE2E8F0)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       )
@@ -97,17 +103,17 @@ class EventsCarousel extends StatelessWidget {
                         width: 50,
                         padding: const EdgeInsets.symmetric(vertical: 6.0),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF050505),
+                          color: isDark ? const Color(0xFF050505) : const Color(0xFFF1F5F9),
                           borderRadius: BorderRadius.circular(6.0),
-                          border: Border.all(color: const Color(0xFF1A1A1A)),
+                          border: Border.all(color: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFE2E8F0)),
                         ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
                               month,
-                              style: const TextStyle(
-                                color: Color(0xFFF97316),
+                              style: TextStyle(
+                                color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -115,8 +121,8 @@ class EventsCarousel extends StatelessWidget {
                             const SizedBox(height: 2),
                             Text(
                               day,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 height: 1.1,
@@ -136,8 +142,8 @@ class EventsCarousel extends StatelessWidget {
                               title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -145,12 +151,12 @@ class EventsCarousel extends StatelessWidget {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                const Icon(Icons.access_time, color: Colors.white24, size: 10),
+                                Icon(Icons.access_time, color: isDark ? Colors.white24 : Colors.black38, size: 10),
                                 const SizedBox(width: 3),
                                 Text(
                                   timeStr,
-                                  style: const TextStyle(
-                                    color: Colors.white38,
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white38 : Colors.black45,
                                     fontSize: 10,
                                     fontFamily: 'monospace',
                                   ),
@@ -162,13 +168,13 @@ class EventsCarousel extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.5),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1E1E1E),
+                                color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF1F5F9),
                                 borderRadius: BorderRadius.circular(4.0),
                               ),
                               child: Text(
                                 platform.toUpperCase(),
-                                style: const TextStyle(
-                                  color: Colors.white54,
+                                style: TextStyle(
+                                  color: isDark ? Colors.white54 : Colors.black54,
                                   fontSize: 8,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 0.5,

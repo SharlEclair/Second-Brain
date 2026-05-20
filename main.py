@@ -38,11 +38,23 @@ async def background_worker():
         finally:
             task_queue.task_done()
 
+async def weekly_synthesis_scheduler():
+    while True:
+        await asyncio.sleep(3600)
+        now = datetime.datetime.now()
+        if now.weekday() == 6 and now.hour == 23:
+            try:
+                from core.synthesis_loop import run_weekly_synthesis
+                await run_weekly_synthesis()
+            except Exception as e:
+                print(f"Error in scheduled weekly synthesis: {e}")
+
 # --- INITIALIZATION ---
 app = FastAPI(title="Second Brain API")
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(background_worker())
+    asyncio.create_task(weekly_synthesis_scheduler())
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -1645,6 +1657,104 @@ async def get_pending_inbox():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/raw_count")
+async def get_raw_count():
+    try:
+        raw_dir = os.path.join(PROJECT_VAULT_PATH, "raw")
+        if not os.path.exists(raw_dir):
+            return {"raw_count": 0}
+        files = [f for f in os.listdir(raw_dir) if f.endswith(".md") and not f.startswith("_")]
+        return {"raw_count": len(files)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/analytics")
+async def save_analytics(request: Request):
+    try:
+        data = await request.json()
+        analytics_file = os.path.join(PROJECT_VAULT_PATH, "analytics.json")
+        
+        existing_data = []
+        if os.path.exists(analytics_file):
+            try:
+                with open(analytics_file, "r", encoding="utf-8") as f:
+                    existing_data = json.load(f)
+                    if not isinstance(existing_data, list):
+                        existing_data = []
+            except Exception:
+                existing_data = []
+                
+        if isinstance(data, list):
+            existing_data.extend(data)
+        else:
+            existing_data.append(data)
+            
+        os.makedirs(PROJECT_VAULT_PATH, exist_ok=True)
+        with open(analytics_file, "w", encoding="utf-8") as f:
+            json.dump(existing_data, f, indent=2, ensure_ascii=False)
+            
+        return {"status": "success", "message": "Analytics uploaded successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+def update_note_tasks(filename: str, markdown_content: str):
+    tasks_file = os.path.join(PROJECT_VAULT_PATH, "_tasks.json")
+    existing_tasks = []
+    if os.path.exists(tasks_file):
+        try:
+            with open(tasks_file, "r", encoding="utf-8") as f:
+                existing_tasks = json.load(f)
+        except Exception as e:
+            print(f"Error loading tasks: {e}")
+            
+    cleaned_tasks = [t for t in existing_tasks if t.get("filename") != filename]
+    
+    new_tasks = []
+    lines = markdown_content.splitlines()
+    for line in lines:
+        match = re.search(r'^\s*-\s*\[\s*\]\s*(.+)$', line)
+        if match:
+            task_text = match.group(1).strip()
+            due_date = None
+            date_match = re.search(r'(?:due:|@due|by:?)\s*(\d{4}-\d{2}-\d{2})', task_text, re.IGNORECASE)
+            if date_match:
+                due_date = date_match.group(1)
+            
+            new_tasks.append({
+                "id": str(uuid.uuid4()),
+                "text": task_text,
+                "due_date": due_date,
+                "filename": filename,
+                "completed": False,
+                "created_at": datetime.datetime.now().isoformat()
+            })
+            
+    cleaned_tasks.extend(new_tasks)
+    try:
+        with open(tasks_file, "w", encoding="utf-8") as f:
+            json.dump(cleaned_tasks, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving tasks: {e}")
+
+@app.get("/api/tasks")
+async def get_all_tasks():
+    tasks_file = os.path.join(PROJECT_VAULT_PATH, "_tasks.json")
+    if not os.path.exists(tasks_file):
+        return []
+    try:
+        with open(tasks_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading tasks file: {e}")
+        return []
+
+@app.post("/api/synthesis/weekly")
+async def trigger_weekly_synthesis():
+    from core.synthesis_loop import run_weekly_synthesis
+    result = await run_weekly_synthesis(manual=True)
+    if result["status"] == "error":
+        raise HTTPException(status_code=500, detail=result["message"])
+    return result
+
 @app.post("/api/compile")
 async def compile_inbox():
     try:
@@ -1732,6 +1842,69 @@ Ensure the output is ONLY valid JSON, with no markdown code fences, leading/trai
             except Exception as e:
                 print(f"Error parsing compile response for {file}: {e}")
 
+            # Query vector database for similar notes to generate auto-backlinks
+            related_insights_str = ""
+            try:
+                query_text = summary if (summary and len(summary) > 10) else raw_content[:500]
+                results = vault_collection.query(query_texts=[query_text], n_results=5)
+                
+                similar_notes = []
+                seen_files = set()
+                
+                if results and 'documents' in results and results['documents']:
+                    docs = results['documents'][0]
+                    metas = results['metadatas'][0] if 'metadatas' in results else []
+                    
+                    for idx, doc in enumerate(docs):
+                        meta = metas[idx] if idx < len(metas) else {}
+                        fn = meta.get('filename') if isinstance(meta, dict) else None
+                        if fn and fn != f"raw/{file}" and not fn.startswith("raw/"):
+                            note_title = os.path.basename(fn).replace(".md", "")
+                            if note_title not in seen_files:
+                                seen_files.add(note_title)
+                                similar_notes.append({
+                                    "title": note_title,
+                                    "excerpt": doc[:300]
+                                })
+                
+                if similar_notes:
+                    backlink_prompt = f"""
+You are an expert AI Librarian. Analyze the relationship between the new note and these potentially related notes in the vault:
+
+New Note:
+Title: {title}
+Summary: {summary}
+Content:
+{formatted_content}
+
+Potentially Related Notes:
+"""
+                    for i, sn in enumerate(similar_notes):
+                        backlink_prompt += f"\n{i+1}. Title: {sn['title']}\nExcerpt: {sn['excerpt']}\n"
+                        
+                    backlink_prompt += """
+Decide which of these notes are genuinely relevant and connected. For each relevant connection, generate a single Markdown list item with:
+- The Obsidian backlink to the note (e.g. [[Note Title]])
+- A concise, one-sentence rationale explaining the connection.
+
+Format the output ONLY as a list of bullet points:
+* [[Note Title]]: [Your rationale here]
+
+If none are relevant, output nothing. Do not include markdown code fences, backticks, or other text.
+"""
+                    response_links, _ = generate_content_with_fallback(backlink_prompt, purpose="backlinks")
+                    links_text = response_links.text.strip()
+                    if links_text and not links_text.lower().startswith("none") and "[[url" not in links_text.lower():
+                        clean_links = []
+                        for line in links_text.splitlines():
+                            line_stripped = line.strip()
+                            if line_stripped.startswith("*") or line_stripped.startswith("-"):
+                                clean_links.append(line_stripped)
+                        if clean_links:
+                            related_insights_str = "\n## Related Vault Insights\n" + "\n".join(clean_links) + "\n"
+            except Exception as e:
+                print(f"Error generating auto-backlinks for {file}: {e}")
+
             date_str = datetime.datetime.now().strftime("%Y-%m-%d")
             safe_category = re.sub(r'[\\/*?:"<>|]', "-", category)
             project_category_path = os.path.join(PROJECT_VAULT_PATH, safe_category)
@@ -1756,13 +1929,18 @@ ai_model: {model_used}
 
 ## Extracted Content
 {formatted_content}
-"""
+{related_insights_str}"""
             with open(new_project_filepath, "w", encoding="utf-8") as f:
                 f.write(full_content)
             with open(new_obsidian_filepath, "w", encoding="utf-8") as f:
                 f.write(full_content)
 
             relative_filename = os.path.join(safe_category, new_filename).replace("\\", "/")
+
+            try:
+                update_note_tasks(relative_filename, full_content)
+            except Exception as e:
+                print(f"Error updating tasks for {new_filename}: {e}")
 
             # Find the original URL from index mapping if it exists
             index = get_url_index()
