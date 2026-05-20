@@ -19,10 +19,12 @@ class NotificationService {
   static final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
+  static late final GlobalKey<NavigatorState> navigatorKey;
   bool _initialized = false;
 
-  Future<void> initialize() async {
+  Future<void> initialize(GlobalKey<NavigatorState> navKey) async {
     if (_initialized) return;
+    navigatorKey = navKey;
 
     // 1. Initialize Local Notifications
     try {
@@ -68,7 +70,23 @@ class NotificationService {
         _sendTokenToBackend(newToken);
       });
 
-      // Handle foreground notifications
+      // 1. Handle notification tap when the app is in the Background
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        DebugLogger.log('Notification tapped from background!', type: 'SYSTEM');
+        _handleNotificationRouting(message);
+      });
+
+      // 2. Handle notification tap when the app is completely Terminated
+      FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
+        if (message != null) {
+          DebugLogger.log('Notification tapped from terminated state!', type: 'SYSTEM');
+          Future.delayed(const Duration(milliseconds: 500), () {
+            _handleNotificationRouting(message);
+          });
+        }
+      });
+
+      // 3. Handle foreground notifications
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         DebugLogger.log('Foreground FCM received: ${message.notification?.title}', type: 'SYSTEM');
       });
@@ -128,6 +146,18 @@ class NotificationService {
       }
     } catch (e) {
       DebugLogger.log('Error sending FCM token to backend: $e', type: 'ERROR');
+    }
+  }
+
+  void _handleNotificationRouting(RemoteMessage message) {
+    if (message.data.containsKey('route') && message.data['route'] == '/note') {
+      final fileName = message.data['fileName'];
+      if (fileName != null && fileName.isNotEmpty) {
+        navigatorKey.currentState?.pushNamed(
+          '/note_viewer', 
+          arguments: fileName,
+        );
+      }
     }
   }
 
