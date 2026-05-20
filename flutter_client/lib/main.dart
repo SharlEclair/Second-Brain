@@ -17,6 +17,8 @@ import 'services/analytics_service.dart';
 import 'services/notification_service.dart';
 import 'services/geofence_service.dart';
 import 'services/offline_queue_service.dart';
+import 'services/share_service.dart';
+import 'services/clipboard_service.dart';
 
 class MyHttpOverrides extends HttpOverrides {
   @override
@@ -52,14 +54,10 @@ class SecondBrainApp extends StatefulWidget {
 
 class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObserver {
   static const _channel = MethodChannel('com.example.second_brain/actions');
-  late StreamSubscription _intentDataStreamSubscription;
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   final GlobalKey<NavigatorState> _navigatorKey = navigatorKey;
-  String? _lastCheckedClipboardUrl;
   final ApiService _apiService = ApiService();
   final QueueService _queueService = QueueService();
-  Timer? _sharedStatusTimer;
-  String _lastSharedStatus = "";
 
   @override
   void initState() {
@@ -86,31 +84,11 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
     // Sync all widgets on startup
     WidgetService.syncAllWidgets(_apiService);
 
-    // For sharing or intent containing text/files while app is in memory
-    _intentDataStreamSubscription = ReceiveSharingIntent.instance.getMediaStream().listen((List<SharedMediaFile> value) {
-      if (value.isNotEmpty) {
-        final file = value.first;
-        if (file.type == SharedMediaType.text || 
-            file.type == SharedMediaType.url || 
-            file.type == SharedMediaType.file) {
-          _handleSharedData(file.path, isFile: file.type == SharedMediaType.file);
-        }
-      }
-    }, onError: (err) {
-      debugPrint("getMediaStream error: $err");
-    });
-
-    // For sharing or intent containing text/files while app is closed
-    ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> value) {
-      if (value.isNotEmpty) {
-        final file = value.first;
-        if (file.type == SharedMediaType.text || 
-            file.type == SharedMediaType.url || 
-            file.type == SharedMediaType.file) {
-          _handleSharedData(file.path, isFile: file.type == SharedMediaType.file);
-        }
-      }
-    });
+    // Initialize ShareService
+    ShareService.initialize(
+      navigatorKey: _navigatorKey,
+      scaffoldMessengerKey: _scaffoldMessengerKey,
+    );
 
     // Check geofences on startup
     GeofenceService.checkGeofences(_apiService);
@@ -122,8 +100,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _intentDataStreamSubscription.cancel();
-    _sharedStatusTimer?.cancel();
+    ShareService.dispose();
     OfflineQueueService.dispose();
     super.dispose();
   }
@@ -131,248 +108,8 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _checkClipboardForIngest();
+      ClipboardService.checkClipboardForIngest(context);
       GeofenceService.checkGeofences(_apiService);
-    }
-  }
-
-  Future<void> _checkClipboardForIngest() async {
-    try {
-      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-      if (clipboardData != null && clipboardData.text != null) {
-        final text = clipboardData.text!.trim();
-        final urlPattern = RegExp(
-          r'^(https?:\/\/[^\s$.?#].[^\s]*)$',
-          caseSensitive: false,
-        );
-        if (urlPattern.hasMatch(text)) {
-          if (text != _lastCheckedClipboardUrl) {
-            _lastCheckedClipboardUrl = text;
-            _showClipboardIngestSheet(text);
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint("Error checking clipboard: $e");
-    }
-  }
-  void _showClipboardIngestSheet(String url) {
-    final context = _navigatorKey.currentContext;
-    if (context == null) return;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Container(
-          margin: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xE61E1E2E),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.blueAccent.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.link, color: Colors.blueAccent),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      "Link Detected in Clipboard",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                url,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      onPressed: () => Navigator.pop(ctx),
-                      child: Text(
-                        "Dismiss",
-                        style: TextStyle(color: Colors.white.withOpacity(0.6)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _handleSharedData(url);
-                      },
-                      child: const Text("Ingest Link"),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  String _canonicalUrl(String value) {
-    var cleaned = value.trim();
-    final queryIndex = cleaned.indexOf('?');
-    if (queryIndex >= 0) cleaned = cleaned.substring(0, queryIndex);
-    while (cleaned.endsWith('/')) {
-      cleaned = cleaned.substring(0, cleaned.length - 1);
-    }
-    return cleaned;
-  }
-
-  void _startSharedStatusPolling(String url) {
-    _sharedStatusTimer?.cancel();
-    _lastSharedStatus = "";
-    final target = _canonicalUrl(url);
-    _sharedStatusTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
-      try {
-        final status = await _apiService.getStatus();
-        final activeTasks = status['active_tasks'];
-        if (activeTasks is! List) return;
-
-        for (final task in activeTasks) {
-          if (task is Map && _canonicalUrl((task['url'] ?? '').toString()) == target) {
-            final progress = task['progress'];
-            final progressText = progress is num ? ' ${progress.round()}%' : '';
-            final message = '${(task['status'] ?? 'Processing').toString()}$progressText';
-            if (message != _lastSharedStatus) {
-              _lastSharedStatus = message;
-              _showToast(message);
-            }
-            return;
-          }
-        }
-      } catch (_) {
-        // Status polling is best-effort for shared intents.
-      }
-    });
-  }
-
-  void _stopSharedStatusPolling() {
-    _sharedStatusTimer?.cancel();
-    _sharedStatusTimer = null;
-    _lastSharedStatus = "";
-  }
-
-  void _handleSharedData(String sharedText, {bool isFile = false}) async {
-    if (sharedText.isEmpty) return;
-
-    if (isFile) {
-      final fileName = sharedText.split('/').last;
-      _showToast("Sharing File: $fileName");
-      try {
-        final lowerName = fileName.toLowerCase();
-        if (lowerName.endsWith('.pdf') || lowerName.endsWith('.txt') || lowerName.endsWith('.md') || lowerName.endsWith('.mp3')) {
-          final result = await _apiService.uploadFile(sharedText);
-          _showToast("✓ File uploaded and ingested successfully!");
-        } else {
-          _showToast("❌ Only PDF, TXT, MD, and MP3 files are supported");
-        }
-      } catch (e) {
-        _showToast("❌ Upload Error: $e");
-      }
-      return;
-    }
-    
-    // Extract URL if the shared text contains context (like "Check this out https://...")
-    final RegExp urlRegExp = RegExp(r'(https?:\/\/[^\s]+)');
-    final match = urlRegExp.firstMatch(sharedText);
-    
-    if (match != null) {
-      final url = match.group(0)!;
-      _showToast("Ingesting URL: $url");
-      
-      final context = _navigatorKey.currentContext;
-      bool dialogOpen = false;
-      if (context != null) {
-        dialogOpen = true;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => IngestSpinnerDialog(url: url, apiService: _apiService),
-        ).then((_) {
-          dialogOpen = false;
-        });
-      }
-      
-      try {
-        final result = await _apiService.ingestUrl(url);
-        AnalyticsService().logIngest('url', 'share_intent', details: url);
-        if (result['status'] == 'existing') {
-          _showToast("✓ Already in your Brain Vault.");
-        } else {
-          _showToast("✓ Successfully ingested!");
-        }
-      } catch (e) {
-        await _queueService.addToQueue(url);
-        AnalyticsService().logIngest('url_queue', 'share_intent', details: url);
-        if (e is NetworkException) {
-          _showToast("📌 Queued — will process when connected.");
-        } else if (e is ServerException) {
-          _showToast("📌 Queued (Server Error: ${e.message})");
-        } else {
-          _showToast("📌 Queued (${e.toString().substring(0, (e.toString().length).clamp(0, 45))})");
-        }
-      } finally {
-        if (dialogOpen && _navigatorKey.currentContext != null) {
-          Navigator.of(_navigatorKey.currentContext!).pop();
-        }
-      }
-    } else {
-      // It is raw text without a URL!
-      _showToast("Ingesting Shared Text Note...");
-      try {
-        final result = await _apiService.ingestRawText(sharedText);
-        AnalyticsService().logIngest('text', 'share_intent');
-        _showToast("✓ Shared text note saved successfully!");
-      } on NetworkException {
-        _showToast("❌ Offline: Can't ingest raw text now.");
-      } on ServerException catch (e) {
-        _showToast("❌ Error: ${e.message}");
-      } catch (e) {
-        _showToast("❌ Error: $e");
-      }
     }
   }
 
@@ -402,7 +139,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
         _showToast('📋 Ingesting link from Clipboard...');
         final data = await Clipboard.getData(Clipboard.kTextPlain);
         if (data?.text != null && data!.text!.isNotEmpty) {
-          _handleSharedData(data.text!);
+          ShareService.ingestSharedText(data.text!);
         } else {
           _showToast('❌ Clipboard is empty');
         }
@@ -577,7 +314,6 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
   }
 }
 
-class IngestSpinnerDialog extends StatefulWidget {
   final String url;
   final ApiService apiService;
 

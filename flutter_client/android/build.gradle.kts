@@ -16,6 +16,15 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
+    // Fix namespace for isar_flutter_libs (AGP 8+ requirement)
+    afterEvaluate {
+        if (project.name == "isar_flutter_libs") {
+            extensions.findByType(com.android.build.gradle.LibraryExtension::class.java)?.apply {
+                namespace = "dev.isar.isar_flutter_libs"
+            }
+        }
+    }
+
     // Dynamically match Kotlin's JVM target to the Java compatibility of each subproject
     plugins.withId("kotlin-android") {
         project.tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {

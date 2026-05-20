@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/sync_service.dart';
+import '../models/isar_note.dart';
 import '../screens/note_viewer_screen.dart';
 
 class LibraryDirectoryWidget extends StatefulWidget {
@@ -35,6 +37,19 @@ class _LibraryDirectoryWidgetState extends State<LibraryDirectoryWidget> {
         _isLoading = false;
       });
     } catch (e) {
+      try {
+        final cachedMaster = await SyncService().getCachedNote('_master-index.md');
+        if (cachedMaster != null) {
+          final parsed = _parseMasterIndex(cachedMaster.content);
+          setState(() {
+            _categories = parsed;
+            _isLoading = false;
+          });
+          return;
+        }
+      } catch (ex) {
+        debugPrint("Failed to load master index from cache: $ex");
+      }
       setState(() {
         _errorMessage = 'Failed to load directory: $e';
         _isLoading = false;
@@ -191,6 +206,20 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
         _isLoaded = true;
       });
     } catch (e) {
+      try {
+        final cachedCatIndex = await SyncService().getCachedNote('${widget.category.path}/_index.md');
+        if (cachedCatIndex != null) {
+          final notes = _parseCategoryIndex(cachedCatIndex.content);
+          setState(() {
+            _notes = notes;
+            _isLoadingNotes = false;
+            _isLoaded = true;
+          });
+          return;
+        }
+      } catch (ex) {
+        debugPrint("Failed to load category index from cache: $ex");
+      }
       setState(() {
         _error = e.toString();
         _isLoadingNotes = false;
@@ -349,19 +378,32 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                     );
 
                     try {
-                      final content = await widget.apiService.fetchNoteContent(fileRelativePath);
+                      String? content;
+                      try {
+                        content = await widget.apiService.fetchNoteContent(fileRelativePath);
+                      } catch (_) {
+                        final cachedNote = await SyncService().getCachedNote(fileRelativePath);
+                        content = cachedNote?.content;
+                      }
+
                       if (context.mounted) {
                         Navigator.pop(context); // Close loading dialog
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => NoteViewerScreen(
-                              title: note.title,
-                              content: content,
-                              fileName: fileRelativePath,
+                        if (content != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => NoteViewerScreen(
+                                title: note.title,
+                                content: content!,
+                                fileName: fileRelativePath,
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Note not available offline.')),
+                          );
+                        }
                       }
                     } catch (e) {
                       if (context.mounted) {
