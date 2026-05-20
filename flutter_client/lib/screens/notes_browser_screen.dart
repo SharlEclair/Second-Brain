@@ -11,6 +11,7 @@ import '../models/isar_note.dart';
 import '../widgets/events_carousel.dart';
 import '../widgets/library_directory_widget.dart';
 import 'note_viewer_screen.dart';
+import 'scanner_screen.dart';
 
 class NotesBrowserScreen extends StatefulWidget {
   final bool focusSearch;
@@ -205,6 +206,12 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
               tooltip: "Sync with server",
             ),
           ],
+        ),
+
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScannerScreen())),
+          backgroundColor: const Color(0xFFF97316),
+          child: const Icon(Icons.document_scanner),
         ),
         body: TabBarView(
           children: [

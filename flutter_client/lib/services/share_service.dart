@@ -2,13 +2,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'api_service.dart';
-import 'offline_queue_service.dart';
+import 'queue_service.dart';
 import 'analytics_service.dart';
 import '../widgets/ingest_spinner_dialog.dart';
 
 class ShareService {
   static final ApiService _apiService = ApiService();
-  static final OfflineQueueService _queueService = OfflineQueueService();
+  static final QueueService _queueService = QueueService();
   
   static late final GlobalKey<NavigatorState> _navigatorKey;
   static late final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey;
@@ -147,7 +147,7 @@ class ShareService {
           _showToast("✓ Successfully ingested!");
         }
       } catch (e) {
-        await _queueService.addToQueue(url);
+        await QueueService().addToQueue(url);
         AnalyticsService().logIngest('url_queue', 'share_intent', details: url);
         if (e is NetworkException) {
           _showToast("📌 Queued — will process when connected.");

@@ -3,6 +3,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'queue_service.dart';
 import 'audio_ingest_service.dart';
 import 'api_service.dart';
+import 'sync_service.dart';
 import 'debug_logger.dart';
 
 class OfflineQueueService {
@@ -24,6 +25,13 @@ class OfflineQueueService {
       if (isConnected) {
         DebugLogger.log('Network connected! Syncing offline queues...', type: 'SYSTEM');
         
+        // Process Isar ApiRequests
+        try {
+          await SyncService().syncUp();
+        } catch (e) {
+          DebugLogger.log('Error processing Isar syncUp: $e', type: 'ERROR');
+        }
+
         // 1. Process URL Ingestion queue
         try {
           final res = await _queueService.processQueue(_apiService);

@@ -11,22 +11,24 @@ dependencies:
     sdk: flutter
   http: ^1.1.0
   shared_preferences: ^2.2.1
-  flutter_markdown: ^0.6.17
+  flutter_markdown_plus: ^1.0.7
   receive_sharing_intent: ^1.6.5
   intl: ^0.20.2
   path_provider: ^2.1.2
   record: ^6.0.0
-  share_plus: ^10.1.4
+  share_plus: ^13.1.0
   home_widget: ^0.9.1
-  geolocator: ^11.0.0
+  geolocator: ^14.0.2
   connectivity_plus: ^6.0.3
   cunning_document_scanner: ^1.4.0
   flutter_local_notifications: ^21.0.0
   timezone: ^0.11.0
-  firebase_core: ^3.0.0
-  firebase_messaging: ^15.0.0
+  firebase_core: ^4.9.0
+  firebase_messaging: ^16.2.2
   isar: ^3.1.0+1
   isar_flutter_libs: ^3.1.0+1
+  workmanager: ^0.9.0+3
+  flutter_background_geolocation: ^5.2.0
 
 dev_dependencies:
   flutter_test:
@@ -34,7 +36,8 @@ dev_dependencies:
   flutter_lints: ^2.0.0
   flutter_launcher_icons: ^0.14.3
   isar_generator: ^3.1.0+1
-  build_runner: ^2.4.6
+  # Pin build_runner to 2.4.8 to resolve dependency conflict with isar_generator
+  build_runner: 2.4.8
 
 flutter_launcher_icons:
   android: true
@@ -42,7 +45,7 @@ flutter_launcher_icons:
   image_path: "assets/icon.png"
   adaptive_icon_background: "#050505"
   adaptive_icon_foreground: "assets/icon.png"
-  ios_icon: "assets/icon.png" # Assuming high-res icon exists or will be provided
+  ios_icon: "assets/icon.png"
 
 flutter:
   uses-material-design: true
