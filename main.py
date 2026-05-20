@@ -349,6 +349,27 @@ async def clear_error_logs():
         os.remove("error_log.json")
     return {"status": "cleared"}
 
+@app.get("/api/geofences")
+async def get_geofences():
+    index = get_url_index()
+    spots = []
+    for url, note in index.items():
+        if not isinstance(note, dict):
+            continue
+        category = note.get("category")
+        filename = note.get("fileName", "")
+        if category == "Spot to Visit" or "Spot to Visit" in filename:
+            lat = note.get("latitude")
+            lng = note.get("longitude")
+            if lat is not None and lng is not None:
+                spots.append({
+                    "title": note.get("title"),
+                    "fileName": filename,
+                    "latitude": float(lat),
+                    "longitude": float(lng),
+                })
+    return spots
+
 @app.get("/api/notes")
 async def get_notes():
     index = get_url_index()
@@ -698,6 +719,11 @@ async def _run_ingestion_logic(url: str, task_id: str, status_callback=None):
 
         event_date = data.get('ai_data', {}).get('event_date')
         event_date_str = f"event_date: {event_date}\n" if event_date and str(event_date).lower() != "null" else ""
+        
+        latitude = data.get('ai_data', {}).get('latitude')
+        longitude = data.get('ai_data', {}).get('longitude')
+        lat_str = f"latitude: {latitude}\n" if latitude is not None else ""
+        lng_str = f"longitude: {longitude}\n" if longitude is not None else ""
 
         content = f"""---
 type: {data['type']}
@@ -706,7 +732,7 @@ author: {data['uploader']}
 url: {data['url']}
 category: {raw_category}
 tags: {data['ai_data'].get('tags', [])}
-{event_date_str}content_hash: {data.get('content_hash', '')}
+{event_date_str}{lat_str}{lng_str}content_hash: {data.get('content_hash', '')}
 transcript_status: {transcript_status}
 ai_model: {data['ai_data'].get('_model_used', AI_MODEL)}
 processor: {data.get('processor', '')}
@@ -738,6 +764,9 @@ processor: {data.get('processor', '')}
             "transcript_status": transcript_status,
             "ai_model": data['ai_data'].get('_model_used', AI_MODEL),
             "event_date": data.get("ai_data", {}).get("event_date"),
+            "category": raw_category,
+            "latitude": latitude,
+            "longitude": longitude,
         }
         index = get_url_index()
         index[url] = note_data
@@ -921,6 +950,11 @@ async def upload_file(file: UploadFile = File(...)):
         event_date = data.get('ai_data', {}).get('event_date')
         event_date_str = f"event_date: {event_date}\n" if event_date and str(event_date).lower() != "null" else ""
 
+        latitude = data.get('ai_data', {}).get('latitude')
+        longitude = data.get('ai_data', {}).get('longitude')
+        lat_str = f"latitude: {latitude}\n" if latitude is not None else ""
+        lng_str = f"longitude: {longitude}\n" if longitude is not None else ""
+
         content = f"""---
 type: {data['type']}
 date: {date_str}
@@ -928,7 +962,7 @@ author: {data['uploader']}
 url: {data['url']}
 category: {raw_category}
 tags: {data['ai_data'].get('tags', [])}
-{event_date_str}content_hash: {data.get('content_hash', '')}
+{event_date_str}{lat_str}{lng_str}content_hash: {data.get('content_hash', '')}
 ai_model: {data['ai_data'].get('_model_used', AI_MODEL)}
 processor: {data.get('processor', '')}
 ---
@@ -956,6 +990,9 @@ processor: {data.get('processor', '')}
             "type": data.get("type"),
             "ai_model": data['ai_data'].get('_model_used', AI_MODEL),
             "event_date": data.get("ai_data", {}).get("event_date"),
+            "category": raw_category,
+            "latitude": latitude,
+            "longitude": longitude,
         }
 
         # Update JSON index
@@ -1026,6 +1063,11 @@ async def ingest_text(request: IngestTextRequest):
         event_date = data.get('ai_data', {}).get('event_date')
         event_date_str = f"event_date: {event_date}\n" if event_date and str(event_date).lower() != "null" else ""
 
+        latitude = data.get('ai_data', {}).get('latitude')
+        longitude = data.get('ai_data', {}).get('longitude')
+        lat_str = f"latitude: {latitude}\n" if latitude is not None else ""
+        lng_str = f"longitude: {longitude}\n" if longitude is not None else ""
+
         content = f"""---
 type: {data['type']}
 date: {date_str}
@@ -1033,7 +1075,7 @@ author: {data['uploader']}
 url: {data['url']}
 category: {raw_category}
 tags: {data['ai_data'].get('tags', [])}
-{event_date_str}content_hash: {data.get('content_hash', '')}
+{event_date_str}{lat_str}{lng_str}content_hash: {data.get('content_hash', '')}
 ai_model: {data['ai_data'].get('_model_used', AI_MODEL)}
 processor: {data.get('processor', '')}
 ---
@@ -1061,6 +1103,9 @@ processor: {data.get('processor', '')}
             "type": data.get("type"),
             "ai_model": data['ai_data'].get('_model_used', AI_MODEL),
             "event_date": data.get("ai_data", {}).get("event_date"),
+            "category": raw_category,
+            "latitude": latitude,
+            "longitude": longitude,
         }
 
         # Update JSON index

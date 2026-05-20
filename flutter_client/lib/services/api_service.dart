@@ -184,6 +184,21 @@ class ApiService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> fetchGeofences() async {
+    try {
+      final apiUrl = await _buildUrl('/api/geofences');
+      final response = await http.get(Uri.parse(apiUrl), headers: _getHeaders()).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      }
+      return [];
+    } catch (e) {
+      DebugLogger.log("Failed to fetch geofences: $e");
+      return [];
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchNotes() async {
     try {
       final apiUrl = await _buildUrl('/api/notes');

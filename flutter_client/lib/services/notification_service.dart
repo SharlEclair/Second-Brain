@@ -215,4 +215,28 @@ class NotificationService {
       debugPrint("Error syncing task reminders: $e");
     }
   }
+
+  static Future<void> showImmediateNotification({
+    required int id,
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'geofence_channel',
+      'Geofence Alerts',
+      channelDescription: 'Alerts when near saved spots to visit',
+      importance: Importance.max,
+      priority: Priority.high,
+      ticker: 'ticker',
+    );
+    const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
+    await _notificationsPlugin.show(
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: platformDetails,
+      payload: payload,
+    );
+  }
 }

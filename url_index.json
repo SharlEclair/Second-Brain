@@ -795,5 +795,29 @@
         "transcript_status": "not_applicable",
         "ai_model": "models/gemini-2.5-flash-lite",
         "event_date": null
+    },
+    "https://youtu.be/Ala6PHlYjmw": {
+        "title": "2026-05-20 - General from Youtube (LearnThatStack)",
+        "fileName": "General/2026-05-20 - General from Youtube (LearnThatStack).md",
+        "date": "2026-05-20T18:43:54.630126",
+        "url": "https://youtu.be/Ala6PHlYjmw",
+        "content_hash": "c77db377408390108754c706e698bbee",
+        "platform": "youtube",
+        "type": "youtube-video",
+        "transcript_status": "complete",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null
+    },
+    "https://www.instagram.com/reel/DYf67a8hKGW": {
+        "title": "2026-05-20 - Job-Career from Instagram (Dom)",
+        "fileName": "Job-Career/2026-05-20 - Job-Career from Instagram (Dom).md",
+        "date": "2026-05-20T18:46:09.132989",
+        "url": "https://www.instagram.com/reel/DYf67a8hKGW",
+        "content_hash": "1bea54373f6a34275cff9d16dc032440",
+        "platform": "instagram",
+        "type": "instagram-video",
+        "transcript_status": "complete",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null
     }
 }

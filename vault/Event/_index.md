@@ -1,6 +1,6 @@
 # Event Index
 
-Get ready for a mix of informative webinars, engaging workshops, and delightful social gatherings, all designed to connect and inform!
+Get ready for upcoming webinars, social gatherings, and hands-on workshops covering topics from AI to casual brunches!
 
 This folder contains 7 articles related to Event.
 

@@ -9,6 +9,9 @@ import '../screens/debug_logs_screen.dart';
 import 'settings_screen.dart';
 import 'notes_browser_screen.dart';
 import 'audit_dashboard_screen.dart';
+import '../widgets/brain_dump_button.dart';
+import 'package:cunning_document_scanner/cunning_document_scanner.dart';
+import '../services/audio_ingest_service.dart';
 
 class ChatMessage {
   final String text;
@@ -188,6 +191,48 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       setState(() {
         _currentStatus = "";
       });
+    }
+  }
+
+  Future<void> _scanDocument() async {
+    try {
+      final List<String>? pictures = await CunningDocumentScanner.getPictures();
+      if (pictures == null || pictures.isEmpty) return;
+
+      setState(() => _isIngesting = true);
+      _startStatusPolling();
+
+      int successCount = 0;
+      for (final path in pictures) {
+        final success = await AudioIngestService.uploadAudio(path);
+        if (success) {
+          successCount++;
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Scanned and uploaded $successCount/${pictures.length} document page(s).'),
+            backgroundColor: const Color(0xFF22C55E),
+          ),
+        );
+      }
+    } catch (e) {
+      DebugLogger.log('Scanning failed: $e', type: 'ERROR');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Scan error: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isIngesting = false);
+        _stopStatusPolling();
+      }
     }
   }
 
@@ -444,20 +489,22 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
           _buildQueueTab(),
         ],
       ),
-      floatingActionButton: _tabController.index == 1 && _queueCount > 0
-          ? FloatingActionButton.extended(
-              onPressed: _isProcessingQueue ? null : _processQueue,
-              backgroundColor: const Color(0xFFF97316),
-              foregroundColor: Colors.black,
-              icon: _isProcessingQueue 
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                : const Icon(Icons.bolt),
-              label: Text(_isProcessingQueue 
-                ? (_currentStatus.isNotEmpty ? _currentStatus : "PROCESSING...") 
-                : "PROCESS ALL", 
-                style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
-            )
-          : null,
+      floatingActionButton: _tabController.index == 1
+          ? (_queueCount > 0
+              ? FloatingActionButton.extended(
+                  onPressed: _isProcessingQueue ? null : _processQueue,
+                  backgroundColor: const Color(0xFFF97316),
+                  foregroundColor: Colors.black,
+                  icon: _isProcessingQueue 
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    : const Icon(Icons.bolt),
+                  label: Text(_isProcessingQueue 
+                    ? (_currentStatus.isNotEmpty ? _currentStatus : "PROCESSING...") 
+                    : "PROCESS ALL", 
+                    style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                )
+              : null)
+          : const BrainDumpButton(),
     );
   }
 
@@ -502,6 +549,10 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                     prefixIcon: IconButton(
                       icon: Icon(Icons.content_paste, color: isDark ? Colors.white30 : Colors.black38, size: 18),
                       onPressed: _pasteFromClipboard,
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(Icons.document_scanner_outlined, color: isDark ? Colors.white30 : Colors.black38, size: 18),
+                      onPressed: _scanDocument,
                     ),
                   ),
                   onSubmitted: (_) => _ingestUrl(),

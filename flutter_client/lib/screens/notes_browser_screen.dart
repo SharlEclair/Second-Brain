@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../services/analytics_service.dart';
@@ -87,14 +89,37 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
   Future<void> _syncWithServer() async {
     setState(() => _isLoading = true);
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final String syncMetaRaw = prefs.getString('sync_metadata') ?? '{}';
+      final Map<String, dynamic> syncMeta = jsonDecode(syncMetaRaw);
+
       final remoteNotes = await _apiService.fetchNotes();
+      bool modified = false;
+
       for (final note in remoteNotes) {
         final fileName = note['fileName'];
+        final date = note['date'] ?? '';
         if (fileName != null) {
-          final content = await _apiService.fetchNoteContent(fileName);
-          await _storageService.saveNote(fileName, content);
+          final exists = await _storageService.noteExists(fileName);
+          final cachedDate = syncMeta[fileName];
+          
+          if (!exists || cachedDate != date) {
+            try {
+              final content = await _apiService.fetchNoteContent(fileName);
+              await _storageService.saveNote(fileName, content);
+              syncMeta[fileName] = date;
+              modified = true;
+            } catch (e) {
+              debugPrint("Failed to sync note $fileName: $e");
+            }
+          }
         }
       }
+
+      if (modified) {
+        await prefs.setString('sync_metadata', jsonEncode(syncMeta));
+      }
+
       await _loadNotes();
       await _loadUpcomingEvents();
       try {
@@ -114,7 +139,9 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

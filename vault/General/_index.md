@@ -1,11 +1,12 @@
 # General Index
 
-Explore how tech enthusiasts are using AI and digital tools to navigate travel, build careers, and spark innovative projects, all while sharing their journeys online.
+Dive into the ever-evolving world of tech with this "General" category, exploring AI's real-world applications, strategic career building, and essential developer tools.
 
-This folder contains 4 articles related to General.
+This folder contains 5 articles related to General.
 
 ## Articles
 - [[2026-05-20 - General from Instagram (Angus The (Nontechnical) Tech Bro) (2)]]: An AI founder shares their experience with travel technology, finding that while many tools are overhyped, AI assistants like Claude and Perplexity, along with a specific translation app, have proven useful. They are seeking recommendations for other effective travel tech.
 - [[2026-05-20 - General from Instagram (Angus The (Nontechnical) Tech Bro)]]: This content discusses agent memory systems for AI, advocating for structured data warehouses like PostHog over simpler solutions for better data retrieval and organization.
 - [[2026-05-20 - General from Instagram (aykhanium)]]: This content provides a guide for winning in your 20s by leveraging technology and entrepreneurship. It emphasizes building a strong GitHub portfolio, documenting everything with tools like Obsidian, and sharing progress on platforms like LinkedIn and X. The guide also suggests starting to post content on Instagram and TikTok as a public dev log.
 - [[2026-05-20 - General from Instagram (samesh.l)]]: Discover 5 AI project ideas to enhance your AI skills, ranging from habit trackers and content creation workflows to using AI as a life coach, building a personal portfolio, and creating AI-generated videos.
+- [[2026-05-20 - General from Youtube (LearnThatStack)]]: This content explains the fundamental concepts of Git, including commits, branches, HEAD, the staging area, and the differences between checkout, reset, revert, and rebase. It aims to demystify Git for developers to prevent fear and confusion during troubleshooting.

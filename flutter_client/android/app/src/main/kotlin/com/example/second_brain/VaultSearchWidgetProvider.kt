@@ -19,7 +19,7 @@ class VaultSearchWidgetProvider : HomeWidgetProvider() {
             val searchIntent = HomeWidgetLaunchIntent.getActivity(
                 context, 
                 MainActivity::class.java, 
-                Uri.parse("secondbrain://action/search")
+                Uri.parse("secondbrain://action/quick_ask")
             )
             views.setOnClickPendingIntent(R.id.search_input_area, searchIntent)
 
