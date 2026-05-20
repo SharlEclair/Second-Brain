@@ -22,7 +22,9 @@ import {
   X,
   Mic,
   MicOff,
-  CheckSquare
+  CheckSquare,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -96,6 +98,22 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    return 'dark';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('theme', theme);
+    if (theme === 'light') {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
   
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -746,6 +764,14 @@ export default function App() {
             )}
             <div className="h-4 w-px bg-slate-800" />
             <div className="flex items-center gap-4">
+              <button 
+                onClick={toggleTheme}
+                className="flex items-center justify-center p-2 rounded-sm border border-slate-800 hover:border-slate-600 bg-slate-900/50 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={theme === 'light' ? "Switch to Dark Mode" : "Switch to Light Mode"}
+              >
+                {theme === 'light' ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5 text-orange-500 animate-pulse" />}
+              </button>
+
               <button 
                 onClick={() => { setShowDashboard(!showDashboard); if (!showDashboard) setSelectedNote(null); }}
                 className={cn(

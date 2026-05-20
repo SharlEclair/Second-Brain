@@ -24,6 +24,16 @@ class ServerException implements Exception {
 class ApiService {
   static const String _keyBaseUrl = 'base_url';
 
+  Map<String, String> _getHeaders({Map<String, String>? custom}) {
+    final headers = {
+      'ngrok-skip-browser-warning': 'true',
+    };
+    if (custom != null) {
+      headers.addAll(custom);
+    }
+    return headers;
+  }
+
   Future<String?> getBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyBaseUrl);
@@ -55,7 +65,7 @@ class ApiService {
     try {
       final apiUrl = await _buildUrl('/api/health');
       DebugLogger.log('GET $apiUrl', type: 'NETWORK');
-      final response = await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 15));
+      final response = await http.get(Uri.parse(apiUrl), headers: _getHeaders()).timeout(const Duration(seconds: 15));
       DebugLogger.log('Health check: ${response.statusCode}', type: 'NETWORK');
       if (response.statusCode == 200) return null;
       return 'Server returned ${response.statusCode}';
@@ -85,7 +95,7 @@ class ApiService {
       DebugLogger.log('POST $apiUrl URL: $url', type: 'NETWORK');
       response = await http.post(
         Uri.parse(apiUrl),
-        headers: {'Content-Type': 'application/json'},
+        headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
         body: jsonEncode({'url': url}),
       ).timeout(const Duration(seconds: 900));
       DebugLogger.log('Ingest response: ${response.statusCode}', type: 'NETWORK');
@@ -114,7 +124,11 @@ class ApiService {
     }
 
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic> && decoded['status'] == 'error') {
+        throw ServerException(decoded['message'] ?? decoded['error'] ?? 'Ingestion failed on backend', 200);
+      }
+      return decoded;
     } else {
       // Server returned an error — this is NOT a network issue, don't queue
       String errorMsg;
@@ -132,7 +146,7 @@ class ApiService {
     final apiUrl = await _buildUrl('/api/chat');
     final response = await http.post(
       Uri.parse(apiUrl),
-      headers: {'Content-Type': 'application/json'},
+      headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
       body: jsonEncode({'message': query}),
     ).timeout(const Duration(seconds: 60));
 
@@ -148,7 +162,7 @@ class ApiService {
     final apiUrl = await _buildUrl('/api/save_answer');
     final response = await http.post(
       Uri.parse(apiUrl),
-      headers: {'Content-Type': 'application/json'},
+      headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
       body: jsonEncode({'title': title, 'content': content}),
     ).timeout(const Duration(seconds: 15));
 
@@ -161,7 +175,7 @@ class ApiService {
     final apiUrl = await _buildUrl('/api/sync');
     final response = await http.post(
       Uri.parse(apiUrl),
-      headers: {'Content-Type': 'application/json'},
+      headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
       body: jsonEncode({}),
     ).timeout(const Duration(seconds: 20));
 
@@ -173,7 +187,7 @@ class ApiService {
   Future<List<Map<String, dynamic>>> fetchNotes() async {
     try {
       final apiUrl = await _buildUrl('/api/notes');
-      final response = await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 15));
+      final response = await http.get(Uri.parse(apiUrl), headers: _getHeaders()).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.cast<Map<String, dynamic>>();
@@ -187,7 +201,7 @@ class ApiService {
 
   Future<String> fetchNoteContent(String fileName) async {
     final apiUrl = await _buildUrl('/api/notes/$fileName');
-    final response = await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 30));
+    final response = await http.get(Uri.parse(apiUrl), headers: _getHeaders()).timeout(const Duration(seconds: 30));
     if (response.statusCode == 200) {
       return response.body;
     } else {
@@ -198,7 +212,7 @@ class ApiService {
   Future<Map<String, dynamic>> getStatus() async {
     try {
       final apiUrl = await _buildUrl('/api/status');
-      final response = await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 10));
+      final response = await http.get(Uri.parse(apiUrl), headers: _getHeaders()).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         return json.decode(response.body);
       }
@@ -217,7 +231,7 @@ class ApiService {
       DebugLogger.log('POST $apiUrl text length: ${text.length}', type: 'NETWORK');
       response = await http.post(
         Uri.parse(apiUrl),
-        headers: {'Content-Type': 'application/json'},
+        headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
         body: jsonEncode({
           'text': text,
           'title': title ?? 'Shared Text Note'
@@ -254,6 +268,7 @@ class ApiService {
     try {
       DebugLogger.log('POST multipart $apiUrl file: $filePath', type: 'NETWORK');
       final request = http.MultipartRequest('POST', Uri.parse(apiUrl));
+      request.headers.addAll(_getHeaders());
       final file = await http.MultipartFile.fromPath(
         'file',
         filePath,
@@ -290,7 +305,7 @@ class ApiService {
     try {
       final apiUrl = await _buildUrl('/api/events/upcoming');
       DebugLogger.log('GET $apiUrl', type: 'NETWORK');
-      final response = await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 15));
+      final response = await http.get(Uri.parse(apiUrl), headers: _getHeaders()).timeout(const Duration(seconds: 15));
       DebugLogger.log('FetchUpcomingEvents response: ${response.statusCode}', type: 'NETWORK');
 
       if (response.statusCode == 200) {
@@ -301,6 +316,93 @@ class ApiService {
     } catch (e) {
       DebugLogger.log("Failed to fetch upcoming events: $e", type: 'ERROR');
       return [];
+    }
+  }
+
+  Future<int> fetchRawCount() async {
+    try {
+      final apiUrl = await _buildUrl('/api/raw_count');
+      final response = await http.get(Uri.parse(apiUrl), headers: _getHeaders()).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        return data['raw_count'] ?? 0;
+      }
+      return 0;
+    } catch (e) {
+      DebugLogger.log("Failed to fetch raw count: $e", type: 'ERROR');
+      return 0;
+    }
+  }
+
+  Future<void> compileInbox() async {
+    final apiUrl = await _buildUrl('/api/compile');
+    final response = await http.post(
+      Uri.parse(apiUrl),
+      headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
+    ).timeout(const Duration(seconds: 300));
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to compile inbox: ${response.statusCode}');
+    }
+  }
+
+  Future<Map<String, dynamic>> runAudit() async {
+    final apiUrl = await _buildUrl('/api/audit');
+    final response = await http.post(
+      Uri.parse(apiUrl),
+      headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
+    ).timeout(const Duration(seconds: 300));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to run vault audit: ${response.statusCode}');
+    }
+  }
+
+  Future<void> createNote(String title, String category, {String? content}) async {
+    final apiUrl = await _buildUrl('/api/notes/create');
+    final response = await http.post(
+      Uri.parse(apiUrl),
+      headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
+      body: jsonEncode({
+        'title': title,
+        'category': category,
+        'content': content ?? ''
+      }),
+    ).timeout(const Duration(seconds: 15));
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to create note: ${response.statusCode}');
+    }
+  }
+
+  Future<Map<String, dynamic>> postAnalytics(List<Map<String, dynamic>> logs) async {
+    final apiUrl = await _buildUrl('/api/analytics');
+    final response = await http.post(
+      Uri.parse(apiUrl),
+      headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
+      body: jsonEncode(logs),
+    ).timeout(const Duration(seconds: 20));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw ServerException('Failed to upload analytics', response.statusCode);
+    }
+  }
+
+  Future<List<dynamic>> getTasks() async {
+    final apiUrl = await _buildUrl('/api/tasks');
+    final response = await http.get(
+      Uri.parse(apiUrl),
+      headers: _getHeaders(),
+    ).timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw ServerException('Failed to fetch tasks', response.statusCode);
     }
   }
 }

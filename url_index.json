@@ -656,5 +656,144 @@
         "transcript_status": "complete",
         "ai_model": "models/gemini-2.5-flash-lite",
         "event_date": null
+    },
+    "local://shared-text-task_7462f6c7": {
+        "title": "2026-05-19 - Recipe (Shared Text) (2)",
+        "fileName": "Recipe/2026-05-19 - Recipe (Shared Text) (2).md",
+        "date": "2026-05-19T17:31:57.433437",
+        "url": "local://shared-text-task_7462f6c7",
+        "content_hash": "16544315c000c3486ad548d4a1d6a04e",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null
+    },
+    "local://shared-text-task_d6dbd396": {
+        "title": "2026-05-19 - Event (Shared Text) (4)",
+        "fileName": "Event/2026-05-19 - Event (Shared Text) (4).md",
+        "date": "2026-05-19T17:33:44.587846",
+        "url": "local://shared-text-task_d6dbd396",
+        "content_hash": "d79d087d82cf11624c080faa7c012f50",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": "2024-05-17T17:00:00Z"
+    },
+    "local://shared-text-task_a68048b9": {
+        "title": "2026-05-19 - Event (Shared Text) (5)",
+        "fileName": "Event/2026-05-19 - Event (Shared Text) (5).md",
+        "date": "2026-05-19T17:35:03.139127",
+        "url": "local://shared-text-task_a68048b9",
+        "content_hash": "d79d087d82cf11624c080faa7c012f50",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null
+    },
+    "local://weekly-brief-2026-05-19": {
+        "title": "Weekly Brief - 2026-05-19",
+        "fileName": "Weekly Brief/Weekly Brief - 2026-05-19.md",
+        "date": "2026-05-19T18:25:26.349460",
+        "url": "local://weekly-brief-2026-05-19",
+        "category": "Weekly Brief",
+        "tags": [
+            "#weekly-brief",
+            "#intelligence"
+        ],
+        "ai_model": "models/gemini-2.5-flash-lite"
+    },
+    "local://General/Test AI Agent Note.md": {
+        "title": "Test AI Agent Note",
+        "fileName": "General/Test AI Agent Note.md",
+        "date": "2026-05-19T20:33:36.913470",
+        "url": "local://General/Test AI Agent Note.md",
+        "category": "General",
+        "tags": [
+            "#inbox"
+        ]
+    },
+    "https://www.instagram.com/reel/DYhjG-8xoss": {
+        "title": "2026-05-20 - General from Instagram (Angus The (Nontechnical) Tech Bro)",
+        "fileName": "General/2026-05-20 - General from Instagram (Angus The (Nontechnical) Tech Bro).md",
+        "date": "2026-05-20T04:28:06.015792",
+        "url": "https://www.instagram.com/reel/DYhjG-8xoss",
+        "content_hash": "335f8786a5bfeacd5f39e6d984379143",
+        "platform": "instagram",
+        "type": "instagram-video",
+        "transcript_status": "complete",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null
+    },
+    "https://www.instagram.com/reel/DYVw-mlv-Po": {
+        "title": "2026-05-20 - Job-Career from Instagram (KetanAI.dev)",
+        "fileName": "Job-Career/2026-05-20 - Job-Career from Instagram (KetanAI.dev).md",
+        "date": "2026-05-20T05:43:35.130837",
+        "url": "https://www.instagram.com/reel/DYVw-mlv-Po",
+        "content_hash": "e8cf010059004a52947c4c875dfe8568",
+        "platform": "instagram",
+        "type": "instagram-video",
+        "transcript_status": "complete",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null
+    },
+    "https://www.instagram.com/reel/DYhqQIFx0RR": {
+        "title": "2026-05-20 - General from Instagram (Angus The (Nontechnical) Tech Bro) (2)",
+        "fileName": "General/2026-05-20 - General from Instagram (Angus The (Nontechnical) Tech Bro) (2).md",
+        "date": "2026-05-20T05:49:52.414608",
+        "url": "https://www.instagram.com/reel/DYhqQIFx0RR",
+        "content_hash": "e018236f2cdffed6c61465daf4228e7e",
+        "platform": "instagram",
+        "type": "instagram-video",
+        "transcript_status": "complete",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null
+    },
+    "https://www.instagram.com/p/DYcOwEZCGCX": {
+        "title": "2026-05-20 - General from Instagram (aykhanium)",
+        "fileName": "General/2026-05-20 - General from Instagram (aykhanium).md",
+        "date": "2026-05-20T07:07:06.974277",
+        "url": "https://www.instagram.com/p/DYcOwEZCGCX",
+        "content_hash": "3a6684e262cd0a46612fc665d7ae1be0",
+        "platform": "instagram",
+        "type": "instagram-carousel",
+        "transcript_status": "not_applicable",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null
+    },
+    "https://www.instagram.com/p/DYg1e1JE4hS": {
+        "title": "2026-05-20 - General from Instagram (samesh.l)",
+        "fileName": "General/2026-05-20 - General from Instagram (samesh.l).md",
+        "date": "2026-05-20T07:17:04.290849",
+        "url": "https://www.instagram.com/p/DYg1e1JE4hS",
+        "content_hash": "29ff5c4e72c822cc4ce025c5ebeb49ff",
+        "platform": "instagram",
+        "type": "instagram-carousel",
+        "transcript_status": "not_applicable",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null
+    },
+    "https://www.instagram.com/p/DYKULnVlrjE": {
+        "title": "2026-05-20 - Job-Career from Instagram (withlove.sandra)",
+        "fileName": "Job-Career/2026-05-20 - Job-Career from Instagram (withlove.sandra).md",
+        "date": "2026-05-20T07:19:28.797001",
+        "url": "https://www.instagram.com/p/DYKULnVlrjE",
+        "content_hash": "dde2d84f1750279cf279ed02b533495d",
+        "platform": "instagram",
+        "type": "instagram-carousel",
+        "transcript_status": "not_applicable",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null
+    },
+    "https://www.instagram.com/p/DYWO7HjmLnh": {
+        "title": "2026-05-20 - Job-Career from Instagram (msurdeep)",
+        "fileName": "Job-Career/2026-05-20 - Job-Career from Instagram (msurdeep).md",
+        "date": "2026-05-20T07:20:36.773912",
+        "url": "https://www.instagram.com/p/DYWO7HjmLnh",
+        "content_hash": "ddcda784d57dd1e24b6e2ca5fcd1ea3f",
+        "platform": "instagram",
+        "type": "instagram-carousel",
+        "transcript_status": "not_applicable",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null
     }
 }

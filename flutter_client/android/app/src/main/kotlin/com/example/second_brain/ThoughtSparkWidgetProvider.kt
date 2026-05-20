@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
+import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetProvider
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
@@ -63,9 +64,56 @@ class ThoughtSparkWidgetProvider : HomeWidgetProvider() {
             e.printStackTrace()
         }
 
+        // Customizations
+        val theme = widgetData.getString("widget_theme", "System") ?: "System"
+        
+        // Safely extract widget opacity float (which may be saved as a Double/String)
+        var opacity = 0.9f
+        try {
+            if (widgetData.contains("widget_opacity")) {
+                opacity = try {
+                    widgetData.getFloat("widget_opacity", 0.9f)
+                } catch (e: Exception) {
+                    widgetData.getString("widget_opacity", "0.9")?.toFloatOrNull() ?: 0.9f
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Determine if Dark theme should be rendered
+        var isDark = true
+        if (theme == "Clean Lab Light") {
+            isDark = false
+        } else if (theme == "System") {
+            val nightModeFlags = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+            isDark = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        }
+
+        // Programmatic background color painting
+        val baseColor = if (isDark) 0x0A0A0C else 0xFAFAFA
+        val alpha = (opacity * 255).toInt().coerceIn(0, 255)
+        val backgroundColor = (alpha shl 24) or (baseColor and 0x00FFFFFF)
+
+        // Show/hide shortcut buttons toggles
+        val showVoice = widgetData.getBoolean("widget_show_voice", true)
+        val showClipboard = widgetData.getBoolean("widget_show_clipboard", true)
+        val showScratchpad = widgetData.getBoolean("widget_show_scratchpad", true)
+
         for (appWidgetId in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.thought_spark_widget)
             views.setTextViewText(R.id.thought_text, currentSpark)
+
+            // Apply programmatic colors
+            views.setInt(R.id.widget_container, "setBackgroundColor", backgroundColor)
+            
+            val textColor = if (isDark) 0xFFFFFFFF.toInt() else 0xFF0F172A.toInt()
+            views.setTextColor(R.id.thought_text, textColor)
+
+            // Apply buttons visibility
+            views.setViewVisibility(R.id.btn_voice, if (showVoice) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.btn_clipboard, if (showClipboard) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.btn_scratchpad, if (showScratchpad) View.VISIBLE else View.GONE)
 
             // 1. Refresh click target (Broadcast to local receiver)
             val refreshIntent = Intent(context, ThoughtSparkWidgetProvider::class.java).apply {
@@ -73,7 +121,7 @@ class ThoughtSparkWidgetProvider : HomeWidgetProvider() {
             }
             val refreshPendingIntent = PendingIntent.getBroadcast(
                 context, 
-                appWidgetId, // Unique request code per widget
+                appWidgetId, 
                 refreshIntent, 
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )

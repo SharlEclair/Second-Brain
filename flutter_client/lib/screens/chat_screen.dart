@@ -8,6 +8,7 @@ import '../services/widget_service.dart';
 import '../screens/debug_logs_screen.dart';
 import 'settings_screen.dart';
 import 'notes_browser_screen.dart';
+import 'audit_dashboard_screen.dart';
 
 class ChatMessage {
   final String text;
@@ -41,6 +42,9 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   String _currentStatus = "";
   Timer? _statusTimer;
   String? _statusFilterUrl;
+  Timer? _rawCountTimer;
+  int _rawCount = 0;
+  bool _isCompiling = false;
 
   @override
   void initState() {
@@ -50,6 +54,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       if (mounted) setState(() {}); // Refresh for FAB visibility
     });
     _refreshQueue();
+    _startRawCountPolling();
     ChatScreen.widgetActionNotifier.addListener(_handleWidgetNotifier);
   }
 
@@ -57,6 +62,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   void dispose() {
     ChatScreen.widgetActionNotifier.removeListener(_handleWidgetNotifier);
     _statusTimer?.cancel();
+    _rawCountTimer?.cancel();
     _tabController.dispose();
     _textController.dispose();
     _urlController.dispose();
@@ -70,6 +76,62 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         _queuedUrls = queue;
         _queueCount = queue.length;
       });
+    }
+  }
+
+  Future<void> _checkRawCount() async {
+    try {
+      final count = await _apiService.fetchRawCount();
+      if (mounted && count != _rawCount) {
+        setState(() {
+          _rawCount = count;
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _startRawCountPolling() {
+    _checkRawCount();
+    _rawCountTimer?.cancel();
+    _rawCountTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) {
+        _checkRawCount();
+      }
+    });
+  }
+
+  Future<void> _runCompile() async {
+    if (_isCompiling) return;
+    setState(() {
+      _isCompiling = true;
+    });
+
+    try {
+      await _apiService.compileInbox();
+      await _checkRawCount();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("✓ Inbox compiled successfully! Notes sorted into folders."),
+            backgroundColor: Color(0xFF22C55E),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to compile: $e"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCompiling = false;
+        });
+      }
     }
   }
 
@@ -343,6 +405,13 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
               ),
             ),
           IconButton(
+            icon: const Icon(Icons.fact_check_outlined, color: Colors.white70),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const AuditDashboardScreen()));
+            },
+            tooltip: "Vault Audit & Hygiene",
+          ),
+          IconButton(
             icon: const Icon(Icons.psychology_outlined, color: Colors.white70),
             onPressed: () {
               Navigator.push(context, MaterialPageRoute(builder: (context) => const NotesBrowserScreen()));
@@ -394,42 +463,44 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
 
   // ===== CHAT TAB =====
   Widget _buildChatTab() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       children: [
         // --- URL Input ---
         Container(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          decoration: const BoxDecoration(
-            color: Color(0xFF0A0A0A),
-            border: Border(bottom: BorderSide(color: Color(0xFF222222))),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFF8FAFC),
+            border: Border(bottom: BorderSide(color: isDark ? const Color(0xFF222222) : const Color(0xFFE2E8F0))),
           ),
           child: Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _urlController,
-                  style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 13),
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black, fontFamily: 'monospace', fontSize: 13),
                   decoration: InputDecoration(
                     hintText: "Paste URL to ingest...",
-                    hintStyle: const TextStyle(color: Colors.white24, fontFamily: 'monospace', fontSize: 13),
-                    fillColor: const Color(0xFF050505),
+                    hintStyle: TextStyle(color: isDark ? Colors.white24 : Colors.black38, fontFamily: 'monospace', fontSize: 13),
+                    fillColor: isDark ? const Color(0xFF050505) : const Color(0xFFF1F5F9),
                     filled: true,
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8.0),
-                      borderSide: const BorderSide(color: Color(0xFF333333)),
+                      borderSide: BorderSide(color: isDark ? const Color(0xFF333333) : const Color(0xFFCBD5E1)),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8.0),
-                      borderSide: const BorderSide(color: Color(0xFF222222)),
+                      borderSide: BorderSide(color: isDark ? const Color(0xFF222222) : const Color(0xFFE2E8F0)),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8.0),
-                      borderSide: const BorderSide(color: Color(0xFFF97316), width: 1),
+                      borderSide: BorderSide(color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C), width: 1),
                     ),
                     prefixIcon: IconButton(
-                      icon: const Icon(Icons.content_paste, color: Colors.white30, size: 18),
+                      icon: Icon(Icons.content_paste, color: isDark ? Colors.white30 : Colors.black38, size: 18),
                       onPressed: _pasteFromClipboard,
                     ),
                   ),
@@ -442,7 +513,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                 child: ElevatedButton(
                   onPressed: (_isIngesting || _isProcessingQueue) ? null : _ingestUrl,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF97316),
+                    backgroundColor: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
                     foregroundColor: Colors.black,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -455,6 +526,83 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
             ],
           ),
         ),
+
+        // --- Inbox Compile Badge & Button ---
+        if (_rawCount > 0 || _isCompiling)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF111111) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: (isDark ? const Color(0xFFE55B13) : const Color(0xFFEA580C)).withOpacity(0.3),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: (isDark ? const Color(0xFFE55B13) : const Color(0xFFEA580C)).withOpacity(0.05),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                )
+              ],
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.inbox,
+                  color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _isCompiling ? "COMPILING INBOX..." : "PENDING CLIPPINGS IN INBOX",
+                        style: TextStyle(
+                          color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _isCompiling 
+                          ? "Classifying, merging and creating indexes..." 
+                          : "$_rawCount raw note(s) awaiting processing.",
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : Colors.black87,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _isCompiling
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF97316)),
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: _runCompile,
+                      icon: const Icon(Icons.auto_awesome, size: 14),
+                      label: const Text("COMPILE", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                    ),
+              ],
+            ),
+          ),
 
         // --- Messages ---
         Expanded(
@@ -500,8 +648,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                         padding: const EdgeInsets.all(16.0),
                         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.9),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF111111),
-                          border: Border.all(color: const Color(0xFF222222)),
+                          color: isDark ? const Color(0xFF111111) : Colors.white,
+                          border: Border.all(color: isDark ? const Color(0xFF222222) : const Color(0xFFE2E8F0)),
                           borderRadius: BorderRadius.circular(12.0),
                         ),
                         child: Column(
@@ -510,26 +658,68 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                             MarkdownBody(
                               data: message.text,
                               styleSheet: MarkdownStyleSheet(
-                                p: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.5),
-                                code: const TextStyle(backgroundColor: Colors.black38, color: Color(0xFFF97316)),
+                                p: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 15, height: 1.5),
+                                code: TextStyle(
+                                  backgroundColor: isDark ? Colors.black38 : const Color(0xFFF1F5F9),
+                                  color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                                ),
                                 codeblockDecoration: BoxDecoration(
-                                  color: const Color(0xFF050505),
+                                  color: isDark ? const Color(0xFF050505) : const Color(0xFFF8FAFC),
                                   borderRadius: BorderRadius.circular(8.0),
-                                  border: Border.all(color: const Color(0xFF222222)),
+                                  border: Border.all(color: isDark ? const Color(0xFF222222) : const Color(0xFFE2E8F0)),
                                 ),
                               ),
                             ),
                             const SizedBox(height: 16),
-                            OutlinedButton.icon(
-                              onPressed: () => _saveToVault(message.text),
-                              icon: const Icon(Icons.bookmark_add, size: 16),
-                              label: const Text("Save to Vault", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Theme.of(context).colorScheme.primary,
-                                side: BorderSide(color: Theme.of(context).colorScheme.primary.withOpacity(0.5)),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                              ),
+                            Row(
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: () => _saveToVault(message.text),
+                                  icon: Icon(
+                                    Icons.auto_awesome,
+                                    size: 16,
+                                    color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                                  ),
+                                  label: Text(
+                                    "PROMOTE TO WIKI",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                      color: isDark ? Colors.white : Colors.black87,
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: (isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)).withOpacity(0.15),
+                                    shadowColor: (isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)).withOpacity(0.2),
+                                    elevation: 0,
+                                    side: BorderSide(
+                                      color: (isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)).withOpacity(0.5),
+                                      width: 1,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton.icon(
+                                  onPressed: () => _saveToVault(message.text),
+                                  icon: Icon(Icons.bookmark_add_outlined, size: 15, color: isDark ? Colors.white54 : Colors.black54),
+                                  label: Text(
+                                    "Save to Vault",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark ? Colors.white54 : Colors.black54,
+                                    ),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: isDark ? Colors.white70 : Colors.black87,
+                                    side: BorderSide(color: isDark ? const Color(0xFF333333) : const Color(0xFFE2E8F0)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),

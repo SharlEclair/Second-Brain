@@ -24,6 +24,13 @@ subprojects {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
+
+    configurations.all {
+        resolutionStrategy {
+            force("androidx.glance:glance:1.1.1")
+            force("androidx.glance:glance-appwidget:1.1.1")
+        }
+    }
 }
 
 // Force Javac compiler tasks to target Java 17 after all projects are fully evaluated

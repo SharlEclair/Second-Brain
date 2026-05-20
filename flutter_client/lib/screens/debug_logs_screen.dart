@@ -26,8 +26,10 @@ class DebugLogsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF050505),
+      backgroundColor: isDark ? const Color(0xFF050505) : const Color(0xFFFAFAFA),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -46,17 +48,17 @@ class DebugLogsScreen extends StatelessWidget {
         valueListenable: DebugLogger.logCount,
         builder: (context, count, _) {
           if (DebugLogger.logs.isEmpty) {
-            return const Center(child: Text('No logs yet.', style: TextStyle(color: Colors.white24)));
+            return Center(child: Text('No logs yet.', style: TextStyle(color: isDark ? Colors.white24 : Colors.black26)));
           }
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: DebugLogger.logs.length,
-            separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 24),
+            separatorBuilder: (context, index) => Divider(color: isDark ? Colors.white10 : Colors.black12, height: 24),
             itemBuilder: (context, index) {
               final log = DebugLogger.logs[index];
               Color typeColor = Colors.blueAccent;
               if (log.type == 'ERROR') typeColor = Colors.redAccent;
-              if (log.type == 'NETWORK') typeColor = Colors.greenAccent;
+              if (log.type == 'NETWORK') typeColor = isDark ? Colors.greenAccent : const Color(0xFF16A34A);
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,14 +80,14 @@ class DebugLogsScreen extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         DateFormat('HH:mm:ss.SSS').format(log.timestamp),
-                        style: const TextStyle(color: Colors.white24, fontSize: 10),
+                        style: TextStyle(color: isDark ? Colors.white24 : Colors.black38, fontSize: 10),
                       ),
                     ],
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(height: 8),
                   Text(
                     log.message,
-                    style: const TextStyle(color: Colors.white70, fontSize: 13, fontFamily: 'monospace'),
+                    style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 13, fontFamily: 'monospace'),
                   ),
                 ],
               );
