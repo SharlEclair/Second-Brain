@@ -12,6 +12,8 @@ import 'audit_dashboard_screen.dart';
 import '../widgets/brain_dump_button.dart';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import '../services/audio_ingest_service.dart';
+import '../widgets/events_carousel.dart';
+import '../widgets/library_directory_widget.dart';
 
 class ChatMessage {
   final String text;
@@ -28,13 +30,14 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateMixin {
+class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _textController = TextEditingController();
   final TextEditingController _urlController = TextEditingController();
   final List<ChatMessage> _messages = [];
   final ApiService _apiService = ApiService();
   final QueueService _queueService = QueueService();
-  late TabController _tabController;
+  int _selectedIndex = 1; // 0: Calendar, 1: Efforts, 2: Atlas
+  bool _isSpeedDialOpen = false;
 
   bool _isLoading = false;
   bool _isIngesting = false;
@@ -52,10 +55,6 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() {
-      if (mounted) setState(() {}); // Refresh for FAB visibility
-    });
     _refreshQueue();
     _startRawCountPolling();
     ChatScreen.widgetActionNotifier.addListener(_handleWidgetNotifier);
@@ -66,7 +65,6 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     ChatScreen.widgetActionNotifier.removeListener(_handleWidgetNotifier);
     _statusTimer?.cancel();
     _rawCountTimer?.cancel();
-    _tabController.dispose();
     _textController.dispose();
     _urlController.dispose();
     super.dispose();
@@ -430,6 +428,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('CORTEX', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 3.0, fontSize: 16)),
@@ -444,25 +444,11 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                 backgroundColor: const Color(0xFFF97316),
                 child: IconButton(
                   icon: const Icon(Icons.schedule, color: Colors.white70),
-                  onPressed: () => _tabController.animateTo(1),
+                  onPressed: _processQueue,
                   tooltip: "Queued links",
                 ),
               ),
             ),
-          IconButton(
-            icon: const Icon(Icons.fact_check_outlined, color: Colors.white70),
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const AuditDashboardScreen()));
-            },
-            tooltip: "Vault Audit & Hygiene",
-          ),
-          IconButton(
-            icon: const Icon(Icons.psychology_outlined, color: Colors.white70),
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const NotesBrowserScreen()));
-            },
-            tooltip: "Brain Vault",
-          ),
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white70),
             onPressed: () {
@@ -470,46 +456,116 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
             },
           )
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: const Color(0xFFF97316),
-          labelColor: const Color(0xFFF97316),
-          unselectedLabelColor: Colors.white38,
-          labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5),
-          tabs: [
-            const Tab(text: "CHAT"),
-            Tab(text: "QUEUE ($_queueCount)"),
-          ],
-        ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: IndexedStack(
+        index: _selectedIndex,
         children: [
-          _buildChatTab(),
-          _buildQueueTab(),
+          _buildCalendarTab(),
+          _buildEffortsTab(),
+          _buildAtlasTab(),
         ],
       ),
-      floatingActionButton: _tabController.index == 1
-          ? (_queueCount > 0
-              ? FloatingActionButton.extended(
-                  onPressed: _isProcessingQueue ? null : _processQueue,
-                  backgroundColor: const Color(0xFFF97316),
-                  foregroundColor: Colors.black,
-                  icon: _isProcessingQueue 
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                    : const Icon(Icons.bolt),
-                  label: Text(_isProcessingQueue 
-                    ? (_currentStatus.isNotEmpty ? _currentStatus : "PROCESSING...") 
-                    : "PROCESS ALL", 
-                    style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
-                )
-              : null)
-          : const BrainDumpButton(),
+      bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: const Color(0xFF111111),
+        selectedItemColor: const Color(0xFFF97316),
+        unselectedItemColor: Colors.white38,
+        currentIndex: _selectedIndex,
+        onTap: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Calendar'),
+          BottomNavigationBarItem(icon: Icon(Icons.bolt), label: 'Efforts'),
+          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Atlas'),
+        ],
+      ),
+      floatingActionButton: _buildSpeedDial(isDark),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
-  // ===== CHAT TAB =====
-  Widget _buildChatTab() {
+  Widget _buildCalendarTab() {
+    return Column(
+      children: [
+        const SizedBox(height: 16),
+        const Text("UPCOMING EVENTS", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2, color: Color(0xFFF97316))),
+        const SizedBox(height: 16),
+        Expanded(
+          child: EventsCarousel(apiService: _apiService),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAtlasTab() {
+    return const LibraryDirectoryWidget();
+  }
+
+  Widget _buildSpeedDial(bool isDark) {
+    if (!_isSpeedDialOpen) {
+      return FloatingActionButton(
+        onPressed: () {
+          setState(() {
+            _isSpeedDialOpen = true;
+          });
+        },
+        backgroundColor: const Color(0xFFF97316),
+        child: const Icon(Icons.add, color: Colors.black),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        FloatingActionButton.small(
+          heroTag: "fab1",
+          backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
+          onPressed: () {
+            setState(() { _isSpeedDialOpen = false; });
+            _showVoiceModeDialog();
+          },
+          child: const Icon(Icons.mic, color: Color(0xFFF97316)),
+        ),
+        const SizedBox(height: 8),
+        FloatingActionButton.small(
+          heroTag: "fab2",
+          backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
+          onPressed: () {
+            setState(() { _isSpeedDialOpen = false; });
+            _scanDocument();
+          },
+          child: const Icon(Icons.document_scanner, color: Color(0xFFF97316)),
+        ),
+        const SizedBox(height: 8),
+        FloatingActionButton.small(
+          heroTag: "fab3",
+          backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
+          onPressed: () {
+            setState(() { _isSpeedDialOpen = false; });
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const NotesBrowserScreen()));
+          },
+          child: const Icon(Icons.search, color: Color(0xFFF97316)),
+        ),
+        const SizedBox(height: 8),
+        FloatingActionButton(
+          heroTag: "fab_main",
+          onPressed: () {
+            setState(() {
+              _isSpeedDialOpen = false;
+            });
+          },
+          backgroundColor: const Color(0xFF111111),
+          child: const Icon(Icons.close, color: Colors.white),
+        ),
+      ],
+    );
+  }
+
+  // ===== EFFORTS TAB =====
+  Widget _buildEffortsTab() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(

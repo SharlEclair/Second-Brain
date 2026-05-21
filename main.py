@@ -1,3 +1,4 @@
+import math
 import os
 import re
 import datetime
@@ -15,6 +16,16 @@ from core.config import OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH, AI_MODEL, AI_MO
 from core.state import ops_manager, get_url_index, save_url_index
 from core.utils import clean_url, chunk_text, cleanup_temp_files, get_platform_from_url
 from core.processors import process_reel, process_image_post, generate_content_with_fallback, process_pdf, process_web_article, process_text_file, process_raw_text, process_audio_file, process_uploaded_image
+
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate the great-circle distance between two points on Earth (in km)."""
+    R = 6371.0  # Earth's radius in km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
 
 
 import asyncio
@@ -91,9 +102,27 @@ async def send_serendipity_notifications():
         if not firebase_admin._apps:
             print("[Serendipity] Firebase Admin SDK is not initialized. Cannot send push notifications.")
             return
-            
+
+        now = datetime.datetime.now()
+
         for note in notes:
-            title = f"🧠 Daily Spark: {note['title']}"
+            # Determine notification title based on event proximity
+            is_upcoming_event = False
+            note_category = note.get("category", "")
+            note_event_date = note.get("event_date")
+            if note_category == "Event" and note_event_date:
+                try:
+                    evt_dt = datetime.datetime.fromisoformat(str(note_event_date).replace("Z", "+00:00")).replace(tzinfo=None)
+                    days_until = (evt_dt - now).days
+                    if 0 <= days_until <= 7:
+                        is_upcoming_event = True
+                except Exception:
+                    pass
+
+            if is_upcoming_event:
+                title = f"📅 Upcoming Event: {note['title']}"
+            else:
+                title = f"🧠 Daily Spark: {note['title']}"
             body = note.get("summary") or "Review this note from your Second Brain."
             if len(body) > 150:
                 body = body[:147] + "..."
@@ -1214,6 +1243,7 @@ async def get_serendipity():
     try:
         index = get_url_index()
         all_notes = []
+        urgent_event_notes = []
         now = datetime.datetime.now()
         
         for url, data in index.items():
@@ -1227,29 +1257,58 @@ async def get_serendipity():
                 else:
                     dt = now
                 
-                all_notes.append({
+                note_entry = {
                     "url": url,
                     "title": data.get("title", ""),
                     "fileName": data.get("fileName", ""),
                     "date": date_str,
                     "last_reviewed": data.get("last_reviewed"),
+                    "category": data.get("category"),
+                    "event_date": data.get("event_date"),
                     "dt": dt
-                })
+                }
+                all_notes.append(note_entry)
+
+                # Check for urgent event notes (Event category with event_date 0, 3, or 7 days away)
+                if data.get("category") == "Event" and data.get("event_date"):
+                    try:
+                        evt_dt = datetime.datetime.fromisoformat(
+                            str(data["event_date"]).replace("Z", "+00:00")
+                        ).replace(tzinfo=None)
+                        days_away = (evt_dt.date() - now.date()).days
+                        if days_away in (0, 3, 7):
+                            urgent_event_notes.append(note_entry)
+                    except Exception:
+                        pass
         
         if not all_notes:
             return []
-            
-        def sort_key(note):
-            last_rev = note["last_reviewed"]
-            has_rev = 1 if last_rev else 0
-            rev_time = last_rev if last_rev else ""
-            return (has_rev, rev_time, note["date"])
-            
-        sorted_notes = sorted(all_notes, key=sort_key)
-        
-        import random
-        pool = sorted_notes[:min(15, len(sorted_notes))]
-        selected = random.sample(pool, min(3, len(pool)))
+
+        # Build final selection: urgent events first, then fill remaining slots randomly
+        max_results = 3
+        selected = []
+        urgent_urls = set()
+
+        for note in urgent_event_notes[:max_results]:
+            selected.append(note)
+            urgent_urls.add(note["url"])
+
+        remaining_slots = max_results - len(selected)
+        if remaining_slots > 0:
+            # Use the existing prioritization logic for the random pool
+            def sort_key(note):
+                last_rev = note["last_reviewed"]
+                has_rev = 1 if last_rev else 0
+                rev_time = last_rev if last_rev else ""
+                return (has_rev, rev_time, note["date"])
+
+            pool_candidates = [n for n in all_notes if n["url"] not in urgent_urls]
+            sorted_notes = sorted(pool_candidates, key=sort_key)
+
+            import random
+            pool = sorted_notes[:min(15, len(sorted_notes))]
+            random_picks = random.sample(pool, min(remaining_slots, len(pool)))
+            selected.extend(random_picks)
         
         results = []
         for note in selected:
@@ -1281,7 +1340,9 @@ async def get_serendipity():
                 "fileName": filename,
                 "date": note["date"],
                 "last_reviewed": note["last_reviewed"],
-                "summary": summary
+                "summary": summary,
+                "category": note.get("category"),
+                "event_date": note.get("event_date")
             })
             
         return results
@@ -2335,6 +2396,42 @@ ai_model: {model_used}
     except Exception as e:
         import traceback
         print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/nearby")
+async def get_nearby_notes(lat: float, lng: float, radius_km: float = 5.0):
+    """Find notes with geo-coordinates within a given radius of a point."""
+    try:
+        index = get_url_index()
+        nearby = []
+
+        for url, data in index.items():
+            if not isinstance(data, dict):
+                continue
+            note_lat = data.get("latitude")
+            note_lng = data.get("longitude")
+            if note_lat is None or note_lng is None:
+                continue
+            try:
+                note_lat = float(note_lat)
+                note_lng = float(note_lng)
+            except (ValueError, TypeError):
+                continue
+
+            distance = haversine_distance(lat, lng, note_lat, note_lng)
+            if distance <= radius_km:
+                nearby.append({
+                    "title": data.get("title", ""),
+                    "fileName": data.get("fileName", ""),
+                    "category": data.get("category"),
+                    "latitude": note_lat,
+                    "longitude": note_lng,
+                    "distance_km": round(distance, 3)
+                })
+
+        nearby.sort(key=lambda x: x["distance_km"])
+        return nearby
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

@@ -45,6 +45,7 @@ class SyncService {
           try {
             final content = await _apiService.fetchNoteContent(fileName);
             final newNote = IsarNote()
+              ..id = IsarNote.fastHash(fileName)
               ..fileName = fileName
               ..title = title
               ..category = category
@@ -65,6 +66,7 @@ class SyncService {
       try {
         final masterIndexContent = await _apiService.fetchNoteContent('_master-index.md');
         final masterNote = IsarNote()
+          ..id = IsarNote.fastHash('_master-index.md')
           ..fileName = '_master-index.md'
           ..title = 'Master Index'
           ..category = 'System'
@@ -87,6 +89,7 @@ class SyncService {
             try {
               final catIndexContent = await _apiService.fetchNoteContent(catIndexName);
               final catNote = IsarNote()
+                ..id = IsarNote.fastHash(catIndexName)
                 ..fileName = catIndexName
                 ..title = '${match.group(2)} Index'
                 ..category = 'System'

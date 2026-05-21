@@ -131,7 +131,7 @@ Wrap important entities in double brackets for Obsidian wiki-links (e.g., [[Mach
 
 If the content contains a specific upcoming date, time, or deadline (especially for Events or Job/Career items), extract that date and provide it in the 'event_date' field as an ISO 8601 string (e.g., "2024-12-31T19:00:00Z"). If there is no specific date mentioned, leave the field null.
 
-If the category is "Spot to Visit", try to extract the approximate latitude and longitude coordinates of the spot based on your knowledge base.
+If the category is "Spot to Visit" or "Event", try to extract the approximate latitude and longitude coordinates based on any location mentioned in the content, using your knowledge base.
 
 You MUST respond strictly with this JSON structure:
 {{

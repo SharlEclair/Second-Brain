@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
@@ -132,9 +133,10 @@ class NoteViewerScreen extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
       appBar: AppBar(
         title: Text(title.toUpperCase(), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-        backgroundColor: isDark ? const Color(0xFF111111) : Colors.white,
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         elevation: 0,
         actions: [
           IconButton(
@@ -170,6 +172,6 @@ class NoteViewerScreen extends StatelessWidget {
           listBullet: TextStyle(color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)),
         ),
       ),
-    );
+    ).animate().fadeIn(duration: 300.ms);
   }
 }

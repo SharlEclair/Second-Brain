@@ -92,13 +92,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     themeNotifier.value = value ? ThemeMode.light : ThemeMode.dark;
   }
 
+  String _sanitizeUrl(String raw) {
+    var url = raw.trim();
+    // Remove trailing slashes
+    while (url.endsWith('/')) {
+      url = url.substring(0, url.length - 1);
+    }
+    // Prepend http:// if no scheme present
+    if (url.isNotEmpty && !url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'http://$url';
+    }
+    return url;
+  }
+
   void _saveUrl() async {
-    final url = _urlController.text.trim();
-    if (url.isNotEmpty) {
-      await _apiService.setBaseUrl(url);
+    final raw = _urlController.text.trim();
+    if (raw.isNotEmpty) {
+      final sanitized = _sanitizeUrl(raw);
+      _urlController.text = sanitized;
+      await _apiService.setBaseUrl(sanitized);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Backend URL saved successfully')),
+          SnackBar(content: Text('Saved: $sanitized')),
         );
       }
     }

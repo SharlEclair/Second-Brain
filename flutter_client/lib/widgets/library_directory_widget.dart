@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
 import '../services/sync_service.dart';
 import '../screens/note_viewer_screen.dart';
@@ -31,6 +32,7 @@ class _LibraryDirectoryWidgetState extends State<LibraryDirectoryWidget> {
     try {
       final content = await _apiService.fetchNoteContent('_master-index.md');
       final parsed = _parseMasterIndex(content);
+      if (!mounted) return;
       setState(() {
         _categories = parsed;
         _isLoading = false;
@@ -40,6 +42,7 @@ class _LibraryDirectoryWidgetState extends State<LibraryDirectoryWidget> {
         final cachedMaster = await SyncService().getCachedNote('_master-index.md');
         if (cachedMaster != null) {
           final parsed = _parseMasterIndex(cachedMaster.content);
+          if (!mounted) return;
           setState(() {
             _categories = parsed;
             _isLoading = false;
@@ -49,6 +52,7 @@ class _LibraryDirectoryWidgetState extends State<LibraryDirectoryWidget> {
       } catch (ex) {
         debugPrint("Failed to load master index from cache: $ex");
       }
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Failed to load directory: $e';
         _isLoading = false;
@@ -147,7 +151,10 @@ class _LibraryDirectoryWidgetState extends State<LibraryDirectoryWidget> {
         itemCount: _categories.length,
         itemBuilder: (context, index) {
           final category = _categories[index];
-          return CategoryExpansionTile(category: category, apiService: _apiService);
+          return CategoryExpansionTile(category: category, apiService: _apiService)
+              .animate()
+              .fadeIn(duration: 300.ms, delay: (50 * index).ms)
+              .slideY(begin: 0.1, end: 0, duration: 300.ms, curve: Curves.easeOut);
         },
       ),
     );
@@ -199,6 +206,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
     try {
       final content = await widget.apiService.fetchNoteContent('${widget.category.path}/_index.md');
       final notes = _parseCategoryIndex(content);
+      if (!mounted) return;
       setState(() {
         _notes = notes;
         _isLoadingNotes = false;
@@ -209,6 +217,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
         final cachedCatIndex = await SyncService().getCachedNote('${widget.category.path}/_index.md');
         if (cachedCatIndex != null) {
           final notes = _parseCategoryIndex(cachedCatIndex.content);
+          if (!mounted) return;
           setState(() {
             _notes = notes;
             _isLoadingNotes = false;
@@ -219,6 +228,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
       } catch (ex) {
         debugPrint("Failed to load category index from cache: $ex");
       }
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoadingNotes = false;
@@ -250,7 +260,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF111111) : Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? const Color(0xFF222222) : const Color(0xFFE2E8F0),
         ),
