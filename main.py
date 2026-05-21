@@ -407,6 +407,43 @@ async def get_geofences():
                 })
     return spots
 
+@app.get("/api/nearby")
+async def get_nearby(lat: float, lng: float, radius: float = None, radius_km: float = None):
+    try:
+        limit_radius = 5.0
+        if radius_km is not None:
+            limit_radius = radius_km
+        elif radius is not None:
+            limit_radius = radius
+
+        index = get_url_index()
+        nearby = []
+        for url, note in index.items():
+            if not isinstance(note, dict):
+                continue
+            note_lat = note.get("latitude")
+            note_lng = note.get("longitude")
+            if note_lat is not None and note_lng is not None:
+                try:
+                    note_lat_f = float(note_lat)
+                    note_lng_f = float(note_lng)
+                    dist = haversine_distance(lat, lng, note_lat_f, note_lng_f)
+                    if dist <= limit_radius:
+                        note_copy = note.copy()
+                        note_copy["url"] = url
+                        note_copy["distance"] = dist
+                        note_copy["distance_km"] = round(dist, 3)
+                        note_copy["latitude"] = note_lat_f
+                        note_copy["longitude"] = note_lng_f
+                        nearby.append(note_copy)
+                except (ValueError, TypeError):
+                    pass
+        # Sort by distance
+        nearby.sort(key=lambda x: x["distance_km"])
+        return nearby
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/notes")
 async def get_notes():
     index = get_url_index()
@@ -1284,7 +1321,7 @@ async def get_serendipity():
                             str(data["event_date"]).replace("Z", "+00:00")
                         ).replace(tzinfo=None)
                         days_away = (evt_dt.date() - now.date()).days
-                        if days_away in (0, 3, 7):
+                        if 0 <= days_away <= 7:
                             urgent_event_notes.append(note_entry)
                     except Exception:
                         pass
@@ -2406,41 +2443,7 @@ ai_model: {model_used}
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/nearby")
-async def get_nearby_notes(lat: float, lng: float, radius_km: float = 5.0):
-    """Find notes with geo-coordinates within a given radius of a point."""
-    try:
-        index = get_url_index()
-        nearby = []
 
-        for url, data in index.items():
-            if not isinstance(data, dict):
-                continue
-            note_lat = data.get("latitude")
-            note_lng = data.get("longitude")
-            if note_lat is None or note_lng is None:
-                continue
-            try:
-                note_lat = float(note_lat)
-                note_lng = float(note_lng)
-            except (ValueError, TypeError):
-                continue
-
-            distance = haversine_distance(lat, lng, note_lat, note_lng)
-            if distance <= radius_km:
-                nearby.append({
-                    "title": data.get("title", ""),
-                    "fileName": data.get("fileName", ""),
-                    "category": data.get("category"),
-                    "latitude": note_lat,
-                    "longitude": note_lng,
-                    "distance_km": round(distance, 3)
-                })
-
-        nearby.sort(key=lambda x: x["distance_km"])
-        return nearby
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

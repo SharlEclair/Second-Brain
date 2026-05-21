@@ -19,6 +19,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   Future<void> _startScan() async {
     try {
       final pictures = await CunningDocumentScanner.getPictures();
+      if (!mounted) return;
       if (pictures != null && pictures.isNotEmpty) {
         setState(() {
           _scannedPictures = pictures;
@@ -27,6 +28,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       }
     } catch (e) {
       debugPrint("Scanner Error: $e");
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Failed to scan document: $e")),
       );
@@ -44,12 +46,14 @@ class _ScannerScreenState extends State<ScannerScreen> {
     try {
       for (int i = 0; i < _scannedPictures.length; i++) {
         final path = _scannedPictures[i];
+        if (!mounted) return;
         setState(() {
           _uploadStatus = "Uploading document ${i + 1}/${_scannedPictures.length}...";
         });
         await _apiService.uploadFile(path);
       }
       
+      if (!mounted) return;
       setState(() {
         _isUploading = false;
         _uploadStatus = "Upload successful!";
@@ -64,6 +68,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       );
       Navigator.pop(context);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isUploading = false;
         _uploadStatus = "Upload failed: $e";

@@ -10,6 +10,8 @@ import 'settings_screen.dart';
 import 'notes_browser_screen.dart';
 import 'audit_dashboard_screen.dart';
 import 'note_viewer_screen.dart';
+import 'quick_ask_screen.dart';
+import 'scanner_screen.dart';
 import '../services/storage_service.dart';
 import '../widgets/brain_dump_button.dart';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
@@ -40,6 +42,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final QueueService _queueService = QueueService();
   int _selectedIndex = 1; // 0: Calendar, 1: Efforts, 2: Atlas
   bool _isSpeedDialOpen = false;
+  bool _isBrainDumping = false;
 
   bool _isLoading = false;
   bool _isIngesting = false;
@@ -222,6 +225,7 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final List<String>? pictures = await CunningDocumentScanner.getPictures();
       if (pictures == null || pictures.isEmpty) return;
+      if (!mounted) return;
 
       setState(() => _isIngesting = true);
       _startStatusPolling();
@@ -355,6 +359,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _pasteFromClipboard() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
     if (data?.text != null && data!.text!.isNotEmpty) {
       _urlController.text = data.text!;
     }
@@ -507,7 +512,15 @@ class _ChatScreenState extends State<ChatScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Atlas'),
         ],
       ),
-      floatingActionButton: _buildSpeedDial(isDark),
+      floatingActionButton: _isBrainDumping
+          ? BrainDumpButton(
+              onComplete: () {
+                setState(() {
+                  _isBrainDumping = false;
+                });
+              },
+            )
+          : _buildSpeedDial(isDark),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
@@ -665,8 +678,10 @@ class _ChatScreenState extends State<ChatScreen> {
           heroTag: "fab1",
           backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
           onPressed: () {
-            setState(() { _isSpeedDialOpen = false; });
-            _showVoiceModeDialog();
+            setState(() {
+              _isSpeedDialOpen = false;
+              _isBrainDumping = true;
+            });
           },
           child: const Icon(Icons.mic, color: Color(0xFFF97316)),
         ),
@@ -676,7 +691,7 @@ class _ChatScreenState extends State<ChatScreen> {
           backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
           onPressed: () {
             setState(() { _isSpeedDialOpen = false; });
-            _scanDocument();
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const ScannerScreen()));
           },
           child: const Icon(Icons.document_scanner, color: Color(0xFFF97316)),
         ),
@@ -686,9 +701,9 @@ class _ChatScreenState extends State<ChatScreen> {
           backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
           onPressed: () {
             setState(() { _isSpeedDialOpen = false; });
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const NotesBrowserScreen()));
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const QuickAskScreen()));
           },
-          child: const Icon(Icons.search, color: Color(0xFFF97316)),
+          child: const Icon(Icons.text_fields, color: Color(0xFFF97316)),
         ),
         const SizedBox(height: 8),
         FloatingActionButton(

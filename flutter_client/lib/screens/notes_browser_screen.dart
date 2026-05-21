@@ -12,7 +12,6 @@ import '../models/isar_note.dart';
 import '../widgets/events_carousel.dart';
 import '../widgets/library_directory_widget.dart';
 import 'note_viewer_screen.dart';
-import 'scanner_screen.dart';
 
 class NotesBrowserScreen extends StatefulWidget {
   final bool focusSearch;
@@ -255,25 +254,24 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
               title: Text(note['title']),
               subtitle: Text('${note['category']} • $dist km away'),
               onTap: () {
-                Navigator.pop(context);
+                final navigator = Navigator.of(context);
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                navigator.pop();
                 // Open note here if we want to
                 _apiService.fetchNoteContent(note['fileName']).then((content) {
-                  if (mounted) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => NoteViewerScreen(
-                          title: note['title'],
-                          content: content,
-                          fileName: note['fileName'],
-                        ),
+                  if (!mounted) return;
+                  navigator.push(
+                    MaterialPageRoute(
+                      builder: (context) => NoteViewerScreen(
+                        title: note['title'],
+                        content: content,
+                        fileName: note['fileName'],
                       ),
-                    );
-                  }
+                    ),
+                  );
                 }).catchError((_) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to open note')));
-                  }
+                  if (!mounted) return;
+                  scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Failed to open note')));
                 });
               },
             );
@@ -355,7 +353,9 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
         if (_upcomingEvents.isNotEmpty)
           EventsCarousel(
             events: _upcomingEvents,
-            onEventTap: (fileName, title) async {
+             onEventTap: (fileName, title) async {
+              final navigator = Navigator.of(context);
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
               setState(() => _isLoading = true);
               try {
                 var content = await _storageService.readNote(fileName);
@@ -364,27 +364,26 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
                   await _storageService.saveNote(fileName, content);
                 }
                 
-                if (context.mounted) {
-                  AnalyticsService().logRead(title);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => NoteViewerScreen(
-                        title: title,
-                        content: content!,
-                        fileName: fileName,
-                      ),
+                if (!mounted) return;
+                AnalyticsService().logRead(title);
+                navigator.push(
+                  MaterialPageRoute(
+                    builder: (context) => NoteViewerScreen(
+                      title: title,
+                      content: content!,
+                      fileName: fileName,
                     ),
-                  );
-                }
+                  ),
+                );
               } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to load note: $e')),
-                  );
-                }
+                if (!mounted) return;
+                scaffoldMessenger.showSnackBar(
+                  SnackBar(content: Text('Failed to load note: $e')),
+                );
               } finally {
-                setState(() => _isLoading = false);
+                if (mounted) {
+                  setState(() => _isLoading = false);
+                }
               }
             },
           ),
