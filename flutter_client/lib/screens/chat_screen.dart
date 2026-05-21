@@ -9,6 +9,8 @@ import '../screens/debug_logs_screen.dart';
 import 'settings_screen.dart';
 import 'notes_browser_screen.dart';
 import 'audit_dashboard_screen.dart';
+import 'note_viewer_screen.dart';
+import '../services/storage_service.dart';
 import '../widgets/brain_dump_button.dart';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import '../services/audio_ingest_service.dart';
@@ -51,12 +53,23 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _rawCountTimer;
   int _rawCount = 0;
   bool _isCompiling = false;
+  List<Map<String, dynamic>> _upcomingEvents = [];
+  StateSetter? _queueBottomSheetStateSetter;
+
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) {
+      super.setState(fn);
+      _queueBottomSheetStateSetter?.call(() {});
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _refreshQueue();
     _startRawCountPolling();
+    _loadUpcomingEvents();
     ChatScreen.widgetActionNotifier.addListener(_handleWidgetNotifier);
   }
 
@@ -99,6 +112,19 @@ class _ChatScreenState extends State<ChatScreen> {
         _checkRawCount();
       }
     });
+  }
+
+  Future<void> _loadUpcomingEvents() async {
+    try {
+      final events = await _apiService.fetchUpcomingEvents();
+      if (mounted) {
+        setState(() {
+          _upcomingEvents = events;
+        });
+      }
+    } catch (_) {
+      // Best-effort load
+    }
   }
 
   Future<void> _runCompile() async {
@@ -444,7 +470,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 backgroundColor: const Color(0xFFF97316),
                 child: IconButton(
                   icon: const Icon(Icons.schedule, color: Colors.white70),
-                  onPressed: _processQueue,
+                  onPressed: _showQueueBottomSheet,
                   tooltip: "Queued links",
                 ),
               ),
@@ -487,20 +513,135 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildCalendarTab() {
+    if (_upcomingEvents.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.calendar_today, size: 48, color: Colors.white.withOpacity(0.1)),
+            const SizedBox(height: 16),
+            Text(
+              "No upcoming events",
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.2),
+                fontSize: 14,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return Column(
       children: [
         const SizedBox(height: 16),
-        const Text("UPCOMING EVENTS", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2, color: Color(0xFFF97316))),
+        const Text(
+          "UPCOMING EVENTS",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+            color: Color(0xFFF97316),
+          ),
+        ),
         const SizedBox(height: 16),
         Expanded(
-          child: EventsCarousel(apiService: _apiService),
+          child: EventsCarousel(
+            events: _upcomingEvents,
+            onEventTap: (fileName, title) async {
+              setState(() => _isLoading = true);
+              try {
+                final storage = StorageService();
+                var content = await storage.readNote(fileName);
+                if (content == null) {
+                  content = await _apiService.fetchNoteContent(fileName);
+                  await storage.saveNote(fileName, content);
+                }
+                if (mounted) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => NoteViewerScreen(
+                        title: title,
+                        content: content!,
+                        fileName: fileName,
+                      ),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to load note: $e')),
+                  );
+                }
+              } finally {
+                if (mounted) {
+                  setState(() => _isLoading = false);
+                }
+              }
+            },
+          ),
         ),
       ],
     );
   }
 
   Widget _buildAtlasTab() {
-    return const LibraryDirectoryWidget();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const NotesBrowserScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.search, size: 18),
+                  label: const Text("BROWSE NOTES", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
+                    foregroundColor: isDark ? Colors.white : Colors.black,
+                    side: BorderSide(color: isDark ? const Color(0xFF333333) : const Color(0xFFE2E8F0)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AuditDashboardScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.analytics, size: 18),
+                  label: const Text("AUDIT VAULT", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
+                    foregroundColor: isDark ? Colors.white : Colors.black,
+                    side: BorderSide(color: isDark ? const Color(0xFF333333) : const Color(0xFFE2E8F0)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(color: Color(0xFF222222), height: 1),
+        const Expanded(
+          child: LibraryDirectoryWidget(),
+        ),
+      ],
+    );
   }
 
   Widget _buildSpeedDial(bool isDark) {
@@ -890,149 +1031,229 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // ===== QUEUE TAB =====
-  Widget _buildQueueTab() {
-    return Column(
-      children: [
-        // Process button
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: const BoxDecoration(
-            color: Color(0xFF0A0A0A),
-            border: Border(bottom: BorderSide(color: Color(0xFF222222))),
-          ),
-          child: Column(
-            children: [
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: (_isProcessingQueue || _queueCount == 0) ? null : _processQueue,
-                  icon: _isProcessingQueue
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                    : const Icon(Icons.play_arrow),
-                  label: Text(
-                    _isProcessingQueue ? (_currentStatus.isNotEmpty ? _currentStatus : "PROCESSING...") : "PROCESS ALL ($_queueCount)",
-                    style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 13),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _queueCount > 0 ? const Color(0xFFF97316) : const Color(0xFF333333),
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
+  void _showQueueBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF111111),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            _queueBottomSheetStateSetter = setModalState;
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.75,
               ),
-              const SizedBox(height: 8),
-              Text(
-                _queueCount == 0
-                  ? "No pending links. Share or paste URLs and they'll queue here when offline."
-                  : "These links will be processed when you tap the button above.",
-                style: const TextStyle(color: Colors.white30, fontSize: 11, fontFamily: 'monospace'),
-                textAlign: TextAlign.center,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF111111) : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               ),
-            ],
-          ),
-        ),
-
-        // Queue list
-        Expanded(
-          child: _queuedUrls.isEmpty
-            ? Center(
+              child: SafeArea(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.inbox, size: 48, color: Colors.white.withOpacity(0.08)),
-                    const SizedBox(height: 16),
-                    Text("Queue is empty", style: TextStyle(color: Colors.white.withOpacity(0.15), fontSize: 14, fontFamily: 'monospace')),
-                    const SizedBox(height: 8),
+                    // Drag handle
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white24 : Colors.black12,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 48),
-                      child: Text(
-                        "Share Reels or links to Second Brain while you're away. They'll appear here for batch processing.",
-                        style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 12),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: _queuedUrls.length,
-                itemBuilder: (context, index) {
-                  final url = _queuedUrls[index];
-                  // Determine platform icon
-                  IconData platformIcon = Icons.link;
-                  Color platformColor = Colors.white38;
-                  if (url.contains('instagram.com')) {
-                    platformIcon = Icons.camera_alt;
-                    platformColor = const Color(0xFFE1306C);
-                  } else if (url.contains('youtube.com') || url.contains('youtu.be')) {
-                    platformIcon = Icons.play_circle;
-                    platformColor = const Color(0xFFFF0000);
-                  } else if (url.contains('tiktok.com')) {
-                    platformIcon = Icons.music_note;
-                    platformColor = Colors.white70;
-                  }
-
-                  return Dismissible(
-                    key: Key(url),
-                    direction: DismissDirection.endToStart,
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      color: Colors.red.withOpacity(0.2),
-                      child: const Icon(Icons.delete, color: Colors.red, size: 20),
-                    ),
-                    onDismissed: (_) => _removeFromQueue(url),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF111111),
-                        border: Border.all(color: _queueErrors.containsKey(url) ? Colors.red.withOpacity(0.3) : const Color(0xFF222222)),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            children: [
-                              Icon(platformIcon, color: platformColor, size: 20),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  url,
-                                  style: const TextStyle(color: Colors.white54, fontSize: 12, fontFamily: 'monospace'),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.close, color: Colors.white24, size: 16),
-                                onPressed: () => _removeFromQueue(url),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                              ),
-                            ],
-                          ),
-                          if (_queueErrors.containsKey(url))
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8, left: 32),
-                              child: Text(
-                                _queueErrors[url]!,
-                                style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
-                              ),
+                          Text(
+                            "QUEUED LINKS",
+                            style: TextStyle(
+                              color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.5,
+                              fontSize: 13,
                             ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close, color: isDark ? Colors.white70 : Colors.black54, size: 20),
+                            onPressed: () => Navigator.pop(context),
+                          ),
                         ],
                       ),
                     ),
-                  );
-                },
+                    const Divider(color: Color(0xFF222222), height: 1),
+                    // Process button
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      color: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFF8FAFC),
+                      child: Column(
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              onPressed: (_isProcessingQueue || _queueCount == 0) ? null : _processQueue,
+                              icon: _isProcessingQueue
+                                ? SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: isDark ? Colors.white : Colors.black,
+                                    ),
+                                  )
+                                : const Icon(Icons.play_arrow),
+                              label: Text(
+                                _isProcessingQueue
+                                  ? (_currentStatus.isNotEmpty ? _currentStatus : "PROCESSING...")
+                                  : "PROCESS ALL ($_queueCount)",
+                                style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 13),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _queueCount > 0
+                                  ? (isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C))
+                                  : (isDark ? const Color(0xFF333333) : const Color(0xFFE2E8F0)),
+                                foregroundColor: isDark ? Colors.black : Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _queueCount == 0
+                              ? "No pending links. Share or paste URLs and they'll queue here when offline."
+                              : "These links will be processed when you tap the button above.",
+                            style: TextStyle(
+                              color: isDark ? Colors.white30 : Colors.black38,
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Queue list
+                    Flexible(
+                      child: _queuedUrls.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.all(40.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.inbox, size: 48, color: isDark ? Colors.white10 : Colors.black12),
+                                const SizedBox(height: 16),
+                                Text(
+                                  "Queue is empty",
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white24 : Colors.black38,
+                                    fontSize: 14,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            itemCount: _queuedUrls.length,
+                            itemBuilder: (context, index) {
+                              final url = _queuedUrls[index];
+                              IconData platformIcon = Icons.link;
+                              Color platformColor = isDark ? Colors.white38 : Colors.black38;
+                              if (url.contains('instagram.com')) {
+                                platformIcon = Icons.camera_alt;
+                                platformColor = const Color(0xFFE1306C);
+                              } else if (url.contains('youtube.com') || url.contains('youtu.be')) {
+                                platformIcon = Icons.play_circle;
+                                platformColor = const Color(0xFFFF0000);
+                              } else if (url.contains('tiktok.com')) {
+                                platformIcon = Icons.music_note;
+                                platformColor = isDark ? Colors.white70 : Colors.black54;
+                              }
+
+                              return Dismissible(
+                                key: Key(url),
+                                direction: DismissDirection.endToStart,
+                                background: Container(
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 20),
+                                  color: Colors.red.withOpacity(0.2),
+                                  child: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                ),
+                                onDismissed: (_) => _removeFromQueue(url),
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF1F5F9),
+                                    border: Border.all(
+                                      color: _queueErrors.containsKey(url)
+                                        ? Colors.red.withOpacity(0.3)
+                                        : (isDark ? const Color(0xFF222222) : const Color(0xFFE2E8F0)),
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(platformIcon, color: platformColor, size: 20),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Text(
+                                              url,
+                                              style: TextStyle(
+                                                color: isDark ? Colors.white70 : Colors.black87,
+                                                fontSize: 12,
+                                                fontFamily: 'monospace',
+                                              ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          IconButton(
+                                            icon: Icon(Icons.close, color: isDark ? Colors.white24 : Colors.black26, size: 16),
+                                            onPressed: () => _removeFromQueue(url),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                          ),
+                                        ],
+                                      ),
+                                      if (_queueErrors.containsKey(url))
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 8, left: 32),
+                                          child: Text(
+                                            _queueErrors[url]!,
+                                            style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                    ),
+                  ],
+                ),
               ),
-        ),
-      ],
-    );
+            );
+          },
+        );
+      },
+    ).then((_) {
+      _queueBottomSheetStateSetter = null;
+    });
   }
 
   void _sendDirectMessage(String text) async {

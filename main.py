@@ -30,21 +30,29 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 
 import asyncio
 import shutil
-import firebase_admin
-from firebase_admin import credentials, messaging
+
+# Safe Import of Firebase Admin SDK
+try:
+    import firebase_admin
+    from firebase_admin import credentials, messaging
+    HAS_FIREBASE = True
+except ImportError:
+    HAS_FIREBASE = False
+    print("firebase-admin library not installed. FCM notifications are disabled.")
 
 # Initialize Firebase Admin SDK
 firebase_app = None
-try:
-    firebase_cred_path = "firebase_credentials.json"
-    if os.path.exists(firebase_cred_path):
-        cred = credentials.Certificate(firebase_cred_path)
-        firebase_app = firebase_admin.initialize_app(cred)
-        print("Firebase Admin SDK initialized successfully.")
-    else:
-        print("firebase_credentials.json not found in root. FCM notifications are disabled.")
-except Exception as e:
-    print(f"Error initializing Firebase Admin SDK: {e}")
+if HAS_FIREBASE:
+    try:
+        firebase_cred_path = "firebase_credentials.json"
+        if os.path.exists(firebase_cred_path):
+            cred = credentials.Certificate(firebase_cred_path)
+            firebase_app = firebase_admin.initialize_app(cred)
+            print("Firebase Admin SDK initialized successfully.")
+        else:
+            print("firebase_credentials.json not found in root. FCM notifications are disabled.")
+    except Exception as e:
+        print(f"Error initializing Firebase Admin SDK: {e}")
 
 # --- QUEUE SYSTEM ---
 task_queue = asyncio.Queue()
@@ -99,8 +107,8 @@ async def send_serendipity_notifications():
             print("[Serendipity] No device tokens available.")
             return
             
-        if not firebase_admin._apps:
-            print("[Serendipity] Firebase Admin SDK is not initialized. Cannot send push notifications.")
+        if not HAS_FIREBASE or not firebase_app:
+            print("[Serendipity] Firebase Admin SDK is not initialized/installed. Cannot send push notifications.")
             return
 
         now = datetime.datetime.now()
