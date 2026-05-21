@@ -184,7 +184,18 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> fetchConfig() async {
+    final apiUrl = await _buildUrl('/api/config');
+    final response = await http.get(Uri.parse(apiUrl), headers: _getHeaders()).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to fetch config');
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchGeofences() async {
+
     try {
       final apiUrl = await _buildUrl('/api/geofences');
       final response = await http.get(Uri.parse(apiUrl), headers: _getHeaders()).timeout(const Duration(seconds: 15));
@@ -229,6 +240,34 @@ class ApiService {
     }
   }
 
+  Future<bool> hideLocation(String fileName, {String? name, double? lat, double? lng}) async {
+    try {
+      final encodedFileName = Uri.encodeComponent(fileName);
+      final apiUrl = await _buildUrl('/api/notes/$encodedFileName/hide_location');
+      
+      final body = <String, dynamic>{};
+      if (name != null) body['name'] = name;
+      if (lat != null) body['lat'] = lat;
+      if (lng != null) body['lng'] = lng;
+
+      DebugLogger.log('PATCH $apiUrl Body: $body', type: 'NETWORK');
+      final response = await http.patch(
+        Uri.parse(apiUrl),
+        headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 15));
+      
+      if (response.statusCode == 200) {
+        return true;
+      }
+      DebugLogger.log("Failed to hide location: ${response.statusCode} ${response.body}");
+      return false;
+    } catch (e) {
+      DebugLogger.log("Failed to hide location: $e");
+      return false;
+    }
+  }
+
   Future<String> fetchNoteContent(String fileName) async {
     final apiUrl = await _buildUrl('/api/notes/$fileName');
     final response = await http.get(Uri.parse(apiUrl), headers: _getHeaders()).timeout(const Duration(seconds: 30));
@@ -268,6 +307,42 @@ class ApiService {
         }),
       ).timeout(const Duration(seconds: 120));
       DebugLogger.log('IngestRawText response: ${response.statusCode}', type: 'NETWORK');
+    } on SocketException catch (e) {
+      DebugLogger.log('SocketException: $e', type: 'ERROR');
+      throw NetworkException('Cannot reach server: $e');
+    } on TimeoutException {
+      DebugLogger.log('TimeoutException', type: 'ERROR');
+      throw NetworkException('Connection timed out');
+    } catch (e) {
+      throw NetworkException('Connection failed: $e');
+    }
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      String errorMsg;
+      try {
+        final body = jsonDecode(response.body);
+        errorMsg = body['detail'] ?? body['error'] ?? body['message'] ?? 'Unknown server error';
+      } catch (_) {
+        errorMsg = 'Server error (${response.statusCode})';
+      }
+      throw ServerException(errorMsg, response.statusCode);
+    }
+  }
+
+  Future<Map<String, dynamic>> appendToJournal(String content) async {
+    final apiUrl = await _buildUrl('/api/journal/append');
+    
+    http.Response response;
+    try {
+      DebugLogger.log('POST $apiUrl journal append content length: ${content.length}', type: 'NETWORK');
+      response = await http.post(
+        Uri.parse(apiUrl),
+        headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
+        body: jsonEncode({'content': content}),
+      ).timeout(const Duration(seconds: 45));
+      DebugLogger.log('AppendToJournal response: ${response.statusCode}', type: 'NETWORK');
     } on SocketException catch (e) {
       DebugLogger.log('SocketException: $e', type: 'ERROR');
       throw NetworkException('Cannot reach server: $e');
@@ -435,4 +510,33 @@ class ApiService {
       throw ServerException('Failed to fetch tasks', response.statusCode);
     }
   }
+
+  Future<Map<String, dynamic>> updateNoteLocation(String fileName, double lat, double lng) async {
+    // Encodes fileName properly for the URL path
+    final encodedFileName = Uri.encodeComponent(fileName);
+    final apiUrl = await _buildUrl('/api/notes/$encodedFileName/location');
+    
+    final response = await http.patch(
+      Uri.parse(apiUrl),
+      headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
+      body: jsonEncode({
+        'latitude': lat,
+        'longitude': lng,
+      }),
+    ).timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      String errorMsg;
+      try {
+        final body = jsonDecode(response.body);
+        errorMsg = body['detail'] ?? body['error'] ?? body['message'] ?? 'Failed to update location';
+      } catch (_) {
+        errorMsg = 'Server error (${response.statusCode})';
+      }
+      throw ServerException(errorMsg, response.statusCode);
+    }
+  }
 }
+

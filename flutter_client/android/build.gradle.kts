@@ -47,6 +47,7 @@ subprojects {
         resolutionStrategy {
             force("androidx.glance:glance:1.1.1")
             force("androidx.glance:glance-appwidget:1.1.1")
+            force("com.google.android.libraries.places:places:3.5.0")
         }
     }
 }

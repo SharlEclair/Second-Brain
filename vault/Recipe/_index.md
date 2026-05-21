@@ -1,6 +1,6 @@
 # Recipe Index
 
-Explore a world of culinary inspiration, from quick weeknight dinners and street food faves to decadent classics and even a curious 5 PM breakfast!
+Discover mouthwatering culinary inspiration, from quick weeknight dinners and street food favorites to gourmet delights, all designed to tantalize your taste buds.
 
 This folder contains 10 articles related to Recipe.
 

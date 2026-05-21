@@ -2,7 +2,6 @@ import os
 import datetime
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 SCOPES = ['https://www.googleapis.com/auth/calendar.events']
@@ -34,14 +33,8 @@ def get_credentials():
             if not os.path.exists(credentials_path):
                 print("[Calendar] credentials.json not found in project root. Google Calendar sync is disabled.")
                 return None
-            try:
-                flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
-                creds = flow.run_local_server(port=0, open_browser=False)
-                with open(token_path, 'w') as token:
-                    token.write(creds.to_json())
-            except Exception as e:
-                print(f"[Calendar] Failed to run OAuth local server: {e}")
-                return None
+            print("[Calendar] Active credentials not found or expired. Please visit `/api/auth/google` to authorize Google Calendar.")
+            return None
 
     return creds
 

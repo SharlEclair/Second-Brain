@@ -131,7 +131,8 @@ Wrap important entities in double brackets for Obsidian wiki-links (e.g., [[Mach
 
 If the content contains a specific upcoming date, time, or deadline (especially for Events or Job/Career items), extract that date and provide it in the 'event_date' field as an ISO 8601 string (e.g., "2024-12-31T19:00:00Z"). If there is no specific date mentioned, leave the field null.
 
-If the category is "Spot to Visit" or "Event", try to extract the approximate latitude and longitude coordinates based on any location mentioned in the content, using your knowledge base.
+If the content implies one or more 'Spot to Visit' or 'Event' locations, extract each specific venue name and the city/neighborhood into the `locations` array as objects with a `name` field, setting `lat` and `lng` to null (e.g., `[{{"name": "Fallow Restaurant, St. James, London", "lat": null, "lng": null}}]`).
+CRITICAL CONTEXT STITCHING: Social media posts often omit the city. You MUST infer the city based on the creator's username, hashtags, or surrounding context (e.g., if they mention 'CBD' or 'Chapel St', append ', Melbourne' to the location's `name`). Do NOT attempt to guess GPS coordinates; leave `lat` and `lng` as null. If there is no location info or the category is not Spot to Visit or Event, set `locations` to an empty array `[]`.
 
 You MUST respond strictly with this JSON structure:
 {{
@@ -140,10 +141,13 @@ You MUST respond strictly with this JSON structure:
   "summary": "A 1-2 sentence quick summary",
   "formatted_content": "The beautifully formatted markdown text",
   "event_date": "ISO-8601 string or null",
-  "latitude": float or null,
-  "longitude": float or null
+  "locations": [
+    {{"name": "string", "lat": null, "lng": null}}
+  ]
 }}
 """
+
+
 
 
 def _is_retryable_gemini_error(error: Exception) -> bool:
@@ -405,6 +409,65 @@ def _sync_download_instagram_post(url, post_shortcode, download_path):
         ) from instaloader_error
 
 
+def _run_geocoding_interceptor(ai_data: dict) -> dict:
+    locations = ai_data.get("locations")
+    if not isinstance(locations, list):
+        locations = []
+        
+    # Check if there is an old location_query
+    location_query = ai_data.get("location_query")
+    if location_query and not locations:
+        locations.append({"name": location_query, "lat": None, "lng": None})
+        
+    ai_data["latitude"] = None
+    ai_data["longitude"] = None
+    ai_data["hidden_locations"] = []
+    
+    from .config import GOOGLE_MAPS_API_KEY
+    gmaps = None
+    if GOOGLE_MAPS_API_KEY:
+        try:
+            import googlemaps
+            gmaps = googlemaps.Client(key=GOOGLE_MAPS_API_KEY)
+        except Exception as e:
+            print(f"Error initializing googlemaps client: {e}")
+            
+    geocoded_locations = []
+    for loc_obj in locations:
+        if not isinstance(loc_obj, dict) or "name" not in loc_obj:
+            continue
+        name = loc_obj.get("name")
+        lat = loc_obj.get("lat")
+        lng = loc_obj.get("lng")
+        
+        if (lat is None or lng is None) and name and gmaps:
+            try:
+                geocode_result = gmaps.geocode(name)
+                if geocode_result:
+                    geometry_loc = geocode_result[0]['geometry']['location']
+                    lat = geometry_loc['lat']
+                    lng = geometry_loc['lng']
+                    print(f"Geocoded '{name}' to ({lat}, {lng})")
+                else:
+                    print(f"No geocoding results for '{name}'")
+            except Exception as e:
+                print(f"Error geocoding '{name}': {e}")
+                
+        loc_obj["lat"] = lat
+        loc_obj["lng"] = lng
+        geocoded_locations.append(loc_obj)
+        
+    ai_data["locations"] = geocoded_locations
+    
+    # Backwards compatibility: set latitude/longitude to the first geocoded coordinate
+    if geocoded_locations:
+        first_loc = geocoded_locations[0]
+        ai_data["latitude"] = first_loc.get("lat")
+        ai_data["longitude"] = first_loc.get("lng")
+        
+    return ai_data
+
+
 def _sync_analyze_images(images, description="", transcript_text=""):
     context = "\n\n".join(
         part
@@ -434,6 +497,7 @@ def _sync_analyze_images(images, description="", transcript_text=""):
     )
     ai_data = _parse_json_response(response.text, _fallback_ai_data(fallback_text, "AI image JSON parsing failed"))
     ai_data["_model_used"] = model_used
+    ai_data = _run_geocoding_interceptor(ai_data)
     return ai_data
 
 
@@ -447,6 +511,7 @@ def _sync_analyze_text(raw_text, description=""):
     )
     ai_data = _parse_json_response(response.text, _fallback_ai_data(analysis_text, "AI text JSON parsing failed"))
     ai_data["_model_used"] = model_used
+    ai_data = _run_geocoding_interceptor(ai_data)
     return ai_data
 
 

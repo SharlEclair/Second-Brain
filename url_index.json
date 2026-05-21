@@ -826,7 +826,7 @@
         "date": "2026-05-21T02:51:30.000Z",
         "url": "local://Spot-to-Visit/570-Lygon-St-Melbourne.md",
         "category": "Spot to Visit",
-        "latitude": -37.7930,
+        "latitude": -37.793,
         "longitude": 144.9689
     },
     "local://Spot-to-Visit/50-La-Trobe-St-Melbourne.md": {
@@ -835,7 +835,269 @@
         "date": "2026-05-21T03:00:00.000Z",
         "url": "local://Spot-to-Visit/50-La-Trobe-St-Melbourne.md",
         "category": "Spot to Visit",
-        "latitude": -37.8094,
-        "longitude": 144.9664
+        "latitude": -37.8095,
+        "longitude": 144.9665
+    },
+    "https://www.instagram.com/reel/DVvOdH6kjzv": {
+        "title": "2026-05-21 - Job-Career from Instagram (OSA  Study in Australia)",
+        "fileName": "Job-Career/2026-05-21 - Job-Career from Instagram (OSA  Study in Australia).md",
+        "date": "2026-05-21T16:13:13.296025",
+        "url": "https://www.instagram.com/reel/DVvOdH6kjzv",
+        "content_hash": "70293c97ad9b6c93fa4ef2cc0da6b6a5",
+        "platform": "instagram",
+        "type": "instagram-video",
+        "transcript_status": "empty",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null,
+        "category": "Job/Career",
+        "latitude": null,
+        "longitude": null
+    },
+    "https://www.instagram.com/p/DYeKImmkQ1e": {
+        "title": "2026-05-21 - Spot to Visit from Instagram (Unknown)",
+        "fileName": "Spot to Visit/2026-05-21 - Spot to Visit from Instagram (Unknown).md",
+        "date": "2026-05-21T16:27:59.364671",
+        "url": "https://www.instagram.com/p/DYeKImmkQ1e",
+        "content_hash": "387defdc8eb1ca53d8698242db3a5602",
+        "platform": "instagram",
+        "type": "instagram-carousel",
+        "transcript_status": "empty",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null,
+        "category": "Spot to Visit",
+        "latitude": -37.8136,
+        "longitude": 144.9631
+    },
+    "local://shared-text-task_d33076a8": {
+        "title": "2026-05-21 - Event (Shared Text)",
+        "fileName": "Event/2026-05-21 - Event (Shared Text).md",
+        "date": "2026-05-21T18:27:02.638895",
+        "url": "local://shared-text-task_d33076a8",
+        "content_hash": "be8bf86eb9134016bab0bf28eed7f149",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": "2026-06-01T11:00:00Z",
+        "category": "Event",
+        "latitude": null,
+        "longitude": null
+    },
+    "local://shared-text-task_02dcd58a": {
+        "title": "2026-05-21 - Event (Shared Text) (2)",
+        "fileName": "Event/2026-05-21 - Event (Shared Text) (2).md",
+        "date": "2026-05-21T18:30:55.226716",
+        "url": "local://shared-text-task_02dcd58a",
+        "content_hash": "e76d08a885d21ba19499a1502b036105",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": "2026-06-03T11:00:00Z",
+        "category": "Event",
+        "latitude": null,
+        "longitude": null
+    },
+    "local://shared-text-task_1bdc3ccd": {
+        "title": "2026-05-21 - Event (Shared Text) (3)",
+        "fileName": "Event/2026-05-21 - Event (Shared Text) (3).md",
+        "date": "2026-05-21T18:37:46.619270",
+        "url": "local://shared-text-task_1bdc3ccd",
+        "content_hash": "69721d0ea418d597c85731b637fe1cf9",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": "2026-06-05T10:00:00Z",
+        "category": "Event",
+        "latitude": null,
+        "longitude": null
+    },
+    "local://shared-text-task_e70ee3de": {
+        "title": "2026-05-21 - General (Shared Text)",
+        "fileName": "General/2026-05-21 - General (Shared Text).md",
+        "date": "2026-05-21T19:22:10.481795",
+        "url": "local://shared-text-task_e70ee3de",
+        "content_hash": "a8bce9f388526a2772afae62b7a86b80",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null,
+        "category": "General",
+        "latitude": null,
+        "longitude": null
+    },
+    "local://shared-text-task_11c3dfed": {
+        "title": "2026-05-21 - Spot to Visit (Shared Text)",
+        "fileName": "Spot to Visit/2026-05-21 - Spot to Visit (Shared Text).md",
+        "date": "2026-05-21T19:27:12.995475",
+        "url": "local://shared-text-task_11c3dfed",
+        "content_hash": "cb93831304eae2898988b0c7a2d1b195",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null,
+        "category": "Spot to Visit",
+        "latitude": -37.79934859999999,
+        "longitude": 144.9828119
+    },
+    "local://shared-text-task_1b662ea5": {
+        "title": "2026-05-21 - Event (Shared Text) (4)",
+        "fileName": "Event/2026-05-21 - Event (Shared Text) (4).md",
+        "date": "2026-05-21T19:40:07.273021",
+        "url": "local://shared-text-task_1b662ea5",
+        "content_hash": "a3e3740e0c2f72c541ab7984e51a4651",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": "2024-05-15T17:00:00Z",
+        "category": "Event",
+        "latitude": -37.8082854,
+        "longitude": 144.967462
+    },
+    "https://www.instagram.com/reel/DYkE9JNxdUm": {
+        "title": "2026-05-22 - General from Instagram (Sohum Patel  Certified AI Demon)",
+        "fileName": "General/2026-05-22 - General from Instagram (Sohum Patel  Certified AI Demon).md",
+        "date": "2026-05-22T00:32:21.486347",
+        "url": "https://www.instagram.com/reel/DYkE9JNxdUm",
+        "content_hash": "7d91e4737ff8f25a4209f55dca369b9b",
+        "platform": "instagram",
+        "type": "instagram-video",
+        "transcript_status": "complete",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null,
+        "category": "General",
+        "latitude": null,
+        "longitude": null
+    },
+    "https://www.instagram.com/reel/DYkB2uahtXF": {
+        "title": "2026-05-22 - Job-Career from Instagram (Sofia \u25e1\u0308)",
+        "fileName": "Job-Career/2026-05-22 - Job-Career from Instagram (Sofia \u25e1\u0308).md",
+        "date": "2026-05-22T00:48:44.210312",
+        "url": "https://www.instagram.com/reel/DYkB2uahtXF",
+        "content_hash": "4015bb98f1bfe8261dec24c3458d4ac3",
+        "platform": "instagram",
+        "type": "instagram-video",
+        "transcript_status": "complete",
+        "ai_model": "models/gemini-2.5-flash",
+        "event_date": null,
+        "category": "Job/Career",
+        "latitude": null,
+        "longitude": null
+    },
+    "journal-2026-05-22": {
+        "title": "2026-05-22 - Daily Journal",
+        "fileName": "Journal/2026-05-22 - Daily Journal.md",
+        "category": "Journal",
+        "date": "2026-05-22"
+    },
+    "local://shared-text-task_3235ebdd": {
+        "title": "2026-05-22 - Spot to Visit (Shared Text)",
+        "fileName": "Spot to Visit/2026-05-22 - Spot to Visit (Shared Text).md",
+        "date": "2026-05-22T01:33:57.335672",
+        "url": "local://shared-text-task_3235ebdd",
+        "content_hash": "d1a765bd500c65690e866fe25f4e8c2a",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null,
+        "category": "Spot to Visit",
+        "latitude": -37.79832020000001,
+        "longitude": 144.9671769,
+        "locations": [
+            {
+                "name": "Pidapip\u00f3 Gelato, Carlton, Melbourne",
+                "lat": -37.79832020000001,
+                "lng": 144.9671769
+            },
+            {
+                "name": "Lygon St, Melbourne",
+                "lat": -37.7845408,
+                "lng": 144.9697709
+            }
+        ],
+        "hidden_locations": []
+    },
+    "local://shared-text-task_a236b7f3": {
+        "title": "2026-05-22 - Spot to Visit (Shared Text) (2)",
+        "fileName": "Spot to Visit/2026-05-22 - Spot to Visit (Shared Text) (2).md",
+        "date": "2026-05-22T01:35:52.176008",
+        "url": "local://shared-text-task_a236b7f3",
+        "content_hash": "d1a765bd500c65690e866fe25f4e8c2a",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null,
+        "category": "Spot to Visit",
+        "latitude": -37.79832020000001,
+        "longitude": 144.9671769,
+        "locations": [
+            {
+                "name": "Pidapip\u00f3 Gelato, Carlton, Melbourne",
+                "lat": -37.79832020000001,
+                "lng": 144.9671769
+            },
+            {
+                "name": "Lygon St, Melbourne",
+                "lat": -37.7845408,
+                "lng": 144.9697709
+            }
+        ],
+        "hidden_locations": []
+    },
+    "local://shared-text-task_2b7253ca": {
+        "title": "2026-05-22 - Spot to Visit (Shared Text) (3)",
+        "fileName": "Spot to Visit/2026-05-22 - Spot to Visit (Shared Text) (3).md",
+        "date": "2026-05-22T01:36:09.149625",
+        "url": "local://shared-text-task_2b7253ca",
+        "content_hash": "d1a765bd500c65690e866fe25f4e8c2a",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null,
+        "category": "Spot to Visit",
+        "latitude": -37.79832020000001,
+        "longitude": 144.9671769,
+        "locations": [
+            {
+                "name": "Pidapip\u00f3 Gelato, Carlton, Melbourne",
+                "lat": -37.79832020000001,
+                "lng": 144.9671769
+            },
+            {
+                "name": "Lygon St, Melbourne",
+                "lat": -37.7845408,
+                "lng": 144.9697709
+            }
+        ],
+        "hidden_locations": [
+            "Pidapip\u00f3 Gelato, Carlton, Melbourne"
+        ]
+    },
+    "local://shared-text-task_65585ba9": {
+        "title": "2026-05-22 - Spot to Visit (Shared Text) (4)",
+        "fileName": "Spot to Visit/2026-05-22 - Spot to Visit (Shared Text) (4).md",
+        "date": "2026-05-22T01:36:57.288513",
+        "url": "local://shared-text-task_65585ba9",
+        "content_hash": "d1a765bd500c65690e866fe25f4e8c2a",
+        "platform": "local",
+        "type": "shared-text",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null,
+        "category": "Spot to Visit",
+        "latitude": -37.79832020000001,
+        "longitude": 144.9671769,
+        "locations": [
+            {
+                "name": "Pidapip\u00f3 Gelato, Carlton, Melbourne",
+                "lat": -37.79832020000001,
+                "lng": 144.9671769
+            },
+            {
+                "name": "Lygon St, Melbourne",
+                "lat": -37.7845408,
+                "lng": 144.9697709
+            }
+        ],
+        "hidden_locations": [
+            "Pidapip\u00f3 Gelato, Carlton, Melbourne"
+        ]
     }
 }

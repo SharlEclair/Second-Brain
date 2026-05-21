@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:geolocator/geolocator.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../services/analytics_service.dart';
@@ -12,6 +11,7 @@ import '../models/isar_note.dart';
 import '../widgets/events_carousel.dart';
 import '../widgets/library_directory_widget.dart';
 import 'note_viewer_screen.dart';
+import 'nearby_map_screen.dart';
 
 class NotesBrowserScreen extends StatefulWidget {
   final bool focusSearch;
@@ -178,109 +178,6 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
         .trim();
   }
 
-  Future<void> _findNearby() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location services are disabled.')));
-      }
-      return;
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location permissions are denied.')));
-        }
-        return;
-      }
-    }
-    
-    if (permission == LocationPermission.deniedForever) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location permissions are permanently denied.')));
-      }
-      return;
-    }
-
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFFF97316))),
-      );
-    }
-
-    try {
-      Position position = await Geolocator.getCurrentPosition();
-      final nearbyNotes = await _apiService.fetchNearby(position.latitude, position.longitude);
-      
-      if (mounted) {
-        Navigator.pop(context); // close dialog
-        _showNearbyBottomSheet(nearbyNotes);
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context); // close dialog
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to find nearby places: $e')));
-      }
-    }
-  }
-
-  void _showNearbyBottomSheet(List<Map<String, dynamic>> notes) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF111111) : Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (context) {
-        if (notes.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(32.0),
-            child: Text('No nearby spots or events found.'),
-          );
-        }
-        return ListView.builder(
-          itemCount: notes.length,
-          itemBuilder: (context, index) {
-            final note = notes[index];
-            final dist = (note['distance_km'] as double).toStringAsFixed(1);
-            return ListTile(
-              leading: const Icon(Icons.place, color: Color(0xFFF97316)),
-              title: Text(note['title']),
-              subtitle: Text('${note['category']} • $dist km away'),
-              onTap: () {
-                final navigator = Navigator.of(context);
-                final scaffoldMessenger = ScaffoldMessenger.of(context);
-                navigator.pop();
-                // Open note here if we want to
-                _apiService.fetchNoteContent(note['fileName']).then((content) {
-                  if (!mounted) return;
-                  navigator.push(
-                    MaterialPageRoute(
-                      builder: (context) => NoteViewerScreen(
-                        title: note['title'],
-                        content: content,
-                        fileName: note['fileName'],
-                      ),
-                    ),
-                  );
-                }).catchError((_) {
-                  if (!mounted) return;
-                  scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Failed to open note')));
-                });
-              },
-            );
-          },
-        );
-      }
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -312,7 +209,12 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
         ),
 
         floatingActionButton: FloatingActionButton(
-          onPressed: _findNearby,
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const NearbyMapScreen()),
+            );
+          },
           backgroundColor: const Color(0xFFF97316),
           child: const Icon(Icons.location_on),
           tooltip: 'Find Nearby',

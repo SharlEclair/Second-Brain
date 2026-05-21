@@ -6,13 +6,13 @@ import json
 import uuid
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File
-from fastapi.responses import StreamingResponse, PlainTextResponse
+from fastapi.responses import StreamingResponse, PlainTextResponse, HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import chromadb
 
 # Internal Imports
-from core.config import OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH, AI_MODEL, AI_MODEL_PRIMARY, AI_MODEL_FALLBACK, AI_MODEL_CHAIN, TAGS_FILE
+from core.config import OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH, AI_MODEL, AI_MODEL_PRIMARY, AI_MODEL_FALLBACK, AI_MODEL_CHAIN, TAGS_FILE, GOOGLE_MAPS_API_KEY
 from core.state import ops_manager, get_url_index, save_url_index
 from core.utils import clean_url, chunk_text, cleanup_temp_files, get_platform_from_url
 from core.processors import process_reel, process_image_post, generate_content_with_fallback, process_pdf, process_web_article, process_text_file, process_raw_text, process_audio_file, process_uploaded_image
@@ -213,6 +213,169 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/api/auth/google")
+async def auth_google():
+    """
+    Initiates the Google OAuth2 flow by redirecting the user to Google's authorization page.
+    """
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    credentials_path = os.path.join(project_root, 'credentials.json')
+    
+    if not os.path.exists(credentials_path):
+        raise HTTPException(status_code=404, detail="credentials.json not found in project root.")
+        
+    try:
+        with open(credentials_path, 'r') as f:
+            creds_data = json.load(f)
+        client_id = creds_data['web']['client_id']
+        redirect_uri = creds_data['web']['redirect_uris'][0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read credentials from credentials.json: {e}")
+
+    try:
+        from urllib.parse import urlencode
+        from core.calendar_sync import SCOPES
+        
+        # Build the authorization URL manually to avoid enforcing PKCE (Missing code verifier)
+        auth_base_url = "https://accounts.google.com/o/oauth2/v2/auth"
+        params = {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": " ".join(SCOPES),
+            "access_type": "offline",
+            "prompt": "consent"
+        }
+        authorization_url = f"{auth_base_url}?{urlencode(params)}"
+        return RedirectResponse(url=authorization_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to initiate OAuth flow: {e}")
+
+
+@app.get("/api/auth/callback")
+async def oauth_callback(code: str, state: str = None):
+    """
+    Callback endpoint where Google redirects the user with authorization code.
+    Exchanges authorization code for credentials and saves token.json.
+    """
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    credentials_path = os.path.join(project_root, 'credentials.json')
+    token_path = os.path.join(project_root, 'token.json')
+    
+    if not os.path.exists(credentials_path):
+        raise HTTPException(status_code=404, detail="credentials.json not found in project root.")
+        
+    try:
+        with open(credentials_path, 'r') as f:
+            creds_data = json.load(f)
+        client_id = creds_data['web']['client_id']
+        client_secret = creds_data['web']['client_secret']
+        redirect_uri = creds_data['web']['redirect_uris'][0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read credentials from credentials.json: {e}")
+
+    try:
+        import requests
+        from google.oauth2.credentials import Credentials
+        from core.calendar_sync import SCOPES
+        
+        # Exchange authorization code for access and refresh tokens
+        token_url = "https://oauth2.googleapis.com/token"
+        payload = {
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code'
+        }
+        
+        response = requests.post(token_url, data=payload)
+        token_data = response.json()
+        
+        if 'error' in token_data:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Google token exchange error: {token_data.get('error_description', token_data['error'])}"
+            )
+            
+        # Build standard Google Credentials
+        creds = Credentials(
+            token=token_data.get('access_token'),
+            refresh_token=token_data.get('refresh_token'),
+            token_uri=token_url,
+            client_id=client_id,
+            client_secret=client_secret,
+            scopes=SCOPES
+        )
+        
+        with open(token_path, 'w') as token_file:
+            token_file.write(creds.to_json())
+            
+        html_content = """
+        <html>
+            <head>
+                <title>Authentication Successful</title>
+                <style>
+                    body {
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                        color: white;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                    }
+                    .container {
+                        text-align: center;
+                        background: rgba(255, 255, 255, 0.1);
+                        padding: 3rem;
+                        border-radius: 15px;
+                        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+                        backdrop-filter: blur(10px);
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        max-width: 450px;
+                    }
+                    h1 {
+                        margin-top: 0;
+                        color: #4caf50;
+                        font-size: 2.5rem;
+                        margin-bottom: 1.5rem;
+                    }
+                    p {
+                        font-size: 1.1rem;
+                        line-height: 1.6;
+                        margin-bottom: 2rem;
+                        color: #e0e0e0;
+                    }
+                    .icon {
+                        font-size: 4rem;
+                        margin-bottom: 1rem;
+                        display: inline-block;
+                        animation: bounce 2s infinite;
+                    }
+                    @keyframes bounce {
+                        0%, 100% { transform: translateY(0); }
+                        50% { transform: translateY(-10px); }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="icon">📅</div>
+                    <h1>Success!</h1>
+                    <p>Google Calendar has been successfully authorized for your Second Brain. You can now close this tab.</p>
+                </div>
+            </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content, status_code=200)
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[Calendar OAuth Error]: {tb}")
+        raise HTTPException(status_code=500, detail=f"Failed to exchange authorization code: {e}")
+
 # Startup Cleanup
 cleanup_temp_files()
 
@@ -238,6 +401,9 @@ class ReviewRequest(BaseModel):
 
 class AppendTasksRequest(BaseModel):
     tasks: str
+
+class JournalAppendRequest(BaseModel):
+    content: str
 
 
 
@@ -386,6 +552,24 @@ async def clear_error_logs():
         os.remove("error_log.json")
     return {"status": "cleared"}
 
+def is_location_hidden(loc_name: str, loc_lat: float, loc_lng: float, hidden_locations: list) -> bool:
+    if not hidden_locations:
+        return False
+    for hl in hidden_locations:
+        if isinstance(hl, str):
+            if loc_name and hl.strip().lower() == loc_name.strip().lower():
+                return True
+        elif isinstance(hl, dict):
+            hl_lat = hl.get("lat") or hl.get("latitude")
+            hl_lng = hl.get("lng") or hl.get("longitude")
+            if hl_lat is not None and hl_lng is not None:
+                if abs(float(hl_lat) - loc_lat) < 0.0001 and abs(float(hl_lng) - loc_lng) < 0.0001:
+                    return True
+            hl_name = hl.get("name")
+            if hl_name and loc_name and hl_name.strip().lower() == loc_name.strip().lower():
+                return True
+    return False
+
 @app.get("/api/geofences")
 async def get_geofences():
     index = get_url_index()
@@ -396,15 +580,39 @@ async def get_geofences():
         category = note.get("category")
         filename = note.get("fileName", "")
         if category == "Spot to Visit" or "Spot to Visit" in filename:
-            lat = note.get("latitude")
-            lng = note.get("longitude")
-            if lat is not None and lng is not None:
-                spots.append({
-                    "title": note.get("title"),
-                    "fileName": filename,
-                    "latitude": float(lat),
-                    "longitude": float(lng),
-                })
+            locations = note.get("locations")
+            if not isinstance(locations, list):
+                locations = []
+            if not locations:
+                lat = note.get("latitude")
+                lng = note.get("longitude")
+                if lat is not None and lng is not None:
+                    locations = [{"name": note.get("title") or "Unknown Spot", "lat": lat, "lng": lng}]
+            
+            hidden_locations = note.get("hidden_locations", [])
+            if not isinstance(hidden_locations, list):
+                hidden_locations = []
+                
+            for loc in locations:
+                if not isinstance(loc, dict):
+                    continue
+                loc_name = loc.get("name")
+                loc_lat = loc.get("lat")
+                loc_lng = loc.get("lng")
+                if loc_lat is not None and loc_lng is not None:
+                    try:
+                        loc_lat_f = float(loc_lat)
+                        loc_lng_f = float(loc_lng)
+                        if is_location_hidden(loc_name, loc_lat_f, loc_lng_f, hidden_locations):
+                            continue
+                        spots.append({
+                            "title": loc_name or note.get("title"),
+                            "fileName": filename,
+                            "latitude": loc_lat_f,
+                            "longitude": loc_lng_f,
+                        })
+                    except (ValueError, TypeError):
+                        pass
     return spots
 
 @app.get("/api/nearby")
@@ -421,23 +629,50 @@ async def get_nearby(lat: float, lng: float, radius: float = None, radius_km: fl
         for url, note in index.items():
             if not isinstance(note, dict):
                 continue
-            note_lat = note.get("latitude")
-            note_lng = note.get("longitude")
-            if note_lat is not None and note_lng is not None:
-                try:
-                    note_lat_f = float(note_lat)
-                    note_lng_f = float(note_lng)
-                    dist = haversine_distance(lat, lng, note_lat_f, note_lng_f)
-                    if dist <= limit_radius:
-                        note_copy = note.copy()
-                        note_copy["url"] = url
-                        note_copy["distance"] = dist
-                        note_copy["distance_km"] = round(dist, 3)
-                        note_copy["latitude"] = note_lat_f
-                        note_copy["longitude"] = note_lng_f
-                        nearby.append(note_copy)
-                except (ValueError, TypeError):
-                    pass
+            
+            locations = note.get("locations")
+            if not isinstance(locations, list):
+                locations = []
+            if not locations:
+                note_lat = note.get("latitude")
+                note_lng = note.get("longitude")
+                if note_lat is not None and note_lng is not None:
+                    locations = [{"name": note.get("title") or "Unknown Spot", "lat": note_lat, "lng": note_lng}]
+                    
+            hidden_locations = note.get("hidden_locations", [])
+            if not isinstance(hidden_locations, list):
+                hidden_locations = []
+                
+            for loc in locations:
+                if not isinstance(loc, dict):
+                    continue
+                loc_name = loc.get("name")
+                loc_lat = loc.get("lat")
+                loc_lng = loc.get("lng")
+                if loc_lat is not None and loc_lng is not None:
+                    try:
+                        loc_lat_f = float(loc_lat)
+                        loc_lng_f = float(loc_lng)
+                        
+                        if is_location_hidden(loc_name, loc_lat_f, loc_lng_f, hidden_locations):
+                            continue
+                            
+                        dist = haversine_distance(lat, lng, loc_lat_f, loc_lng_f)
+                        if dist <= limit_radius:
+                            nearby.append({
+                                "place_name": loc_name,
+                                "type": note.get("category") or note.get("type") or "Spot to Visit",
+                                "distance": dist,
+                                "distance_km": round(dist, 3),
+                                "source_note": note.get("fileName") or note.get("title") or "Unknown Note",
+                                "latitude": loc_lat_f,
+                                "longitude": loc_lng_f,
+                                "url": url,
+                                "note_title": note.get("title"),
+                                "category": note.get("category"),
+                            })
+                    except (ValueError, TypeError):
+                        pass
         # Sort by distance
         nearby.sort(key=lambda x: x["distance_km"])
         return nearby
@@ -465,6 +700,271 @@ async def get_note_content(filename: str):
                 return PlainTextResponse(f.read(), media_type="text/markdown")
     raise HTTPException(status_code=404, detail="Note not found")
 
+
+def update_markdown_frontmatter_coordinates(filepath: str, lat: float, lng: float):
+    if not os.path.exists(filepath):
+        return False
+    with open(filepath, "r", encoding="utf-8") as f:
+        content = f.read()
+        
+    # Check if content has frontmatter
+    frontmatter_pattern = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+    match = frontmatter_pattern.match(content)
+    
+    if match:
+        frontmatter_text = match.group(1)
+        remaining_content = content[match.end():]
+        
+        # Parse frontmatter lines
+        lines = frontmatter_text.splitlines()
+        new_lines = []
+        lat_found = False
+        lng_found = False
+        
+        for line in lines:
+            if line.strip().startswith("latitude:"):
+                new_lines.append(f"latitude: {lat}")
+                lat_found = True
+            elif line.strip().startswith("longitude:"):
+                new_lines.append(f"longitude: {lng}")
+                lng_found = True
+            else:
+                new_lines.append(line)
+                
+        if not lat_found:
+            new_lines.append(f"latitude: {lat}")
+        if not lng_found:
+            new_lines.append(f"longitude: {lng}")
+            
+        new_frontmatter = "\n".join(new_lines)
+        new_content = f"---\n{new_frontmatter}\n---\n{remaining_content}"
+    else:
+        # No frontmatter found, prepend frontmatter
+        new_content = f"""---
+latitude: {lat}
+longitude: {lng}
+---
+{content}"""
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(new_content)
+    return True
+
+
+def update_markdown_frontmatter_fields(filepath: str, updates: dict) -> bool:
+    if not os.path.exists(filepath):
+        return False
+    with open(filepath, "r", encoding="utf-8") as f:
+        content = f.read()
+        
+    frontmatter_pattern = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+    match = frontmatter_pattern.match(content)
+    
+    if match:
+        frontmatter_text = match.group(1)
+        remaining_content = content[match.end():]
+        
+        lines = frontmatter_text.splitlines()
+        new_lines = []
+        
+        skip_mode = False
+        for line in lines:
+            stripped = line.strip()
+            # If line starts with any key name we are updating, toggle skip_mode on
+            matched_key = None
+            for key in updates.keys():
+                if line.startswith(f"{key}:") or line.startswith(f"{key} :"):
+                    matched_key = key
+                    break
+            
+            if matched_key:
+                skip_mode = True
+                continue
+                
+            if skip_mode:
+                if stripped.startswith("-") or stripped.startswith(" ") or stripped.startswith("\t") or not stripped:
+                    continue
+                else:
+                    skip_mode = False  # we reached a new key
+            
+            new_lines.append(line)
+            
+        # Append updated values
+        for key, val in updates.items():
+            if isinstance(val, (list, dict)):
+                import json
+                new_lines.append(f"{key}: {json.dumps(val)}")
+            else:
+                new_lines.append(f"{key}: {val}")
+                
+        new_frontmatter = "\n".join(new_lines)
+        new_content = f"---\n{new_frontmatter}\n---\n{remaining_content}"
+    else:
+        # No frontmatter, prepend the updates
+        new_lines = []
+        for key, val in updates.items():
+            if isinstance(val, (list, dict)):
+                import json
+                new_lines.append(f"{key}: {json.dumps(val)}")
+            else:
+                new_lines.append(f"{key}: {val}")
+        new_frontmatter = "\n".join(new_lines)
+        new_content = f"---\n{new_frontmatter}\n---\n{content}"
+        
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(new_content)
+    return True
+
+
+class LocationOverrideRequest(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class HideLocationRequest(BaseModel):
+    name: str = None
+    lat: float = None
+    lng: float = None
+
+
+@app.patch("/api/notes/{filename:path}/hide_location")
+async def hide_note_location(filename: str, request: HideLocationRequest):
+    normalized_filename = filename.replace("\\", "/")
+    
+    # 1. Update the Markdown files
+    paths = [os.path.join(OBSIDIAN_INBOX_PATH, filename), os.path.join(PROJECT_VAULT_PATH, filename)]
+    updated_files = 0
+    
+    new_hidden_item = None
+    if request.name:
+        new_hidden_item = request.name
+    elif request.lat is not None and request.lng is not None:
+        new_hidden_item = {"lat": request.lat, "lng": request.lng}
+    else:
+        raise HTTPException(status_code=400, detail="Must provide name or coordinates to hide a location")
+        
+    for p in paths:
+        if os.path.exists(p):
+            try:
+                # We need to read existing frontmatter first to get the current hidden_locations list
+                current_hidden = []
+                with open(p, "r", encoding="utf-8") as f:
+                    content = f.read()
+                frontmatter_pattern = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+                match = frontmatter_pattern.match(content)
+                if match:
+                    lines = match.group(1).splitlines()
+                    for line in lines:
+                        if line.strip().startswith("hidden_locations:"):
+                            val_part = line.split(":", 1)[1].strip()
+                            try:
+                                current_hidden = json.loads(val_part)
+                            except:
+                                pass
+                
+                # Check for duplicates
+                is_duplicate = False
+                for item in current_hidden:
+                    if isinstance(item, str) and isinstance(new_hidden_item, str):
+                        if item.lower() == new_hidden_item.lower():
+                            is_duplicate = True
+                            break
+                    elif isinstance(item, dict) and isinstance(new_hidden_item, dict):
+                        item_lat = item.get("lat") or item.get("latitude")
+                        item_lng = item.get("lng") or item.get("longitude")
+                        new_lat = new_hidden_item.get("lat")
+                        new_lng = new_hidden_item.get("lng")
+                        if item_lat is not None and item_lng is not None and new_lat is not None and new_lng is not None:
+                            if abs(float(item_lat) - float(new_lat)) < 0.0001 and abs(float(item_lng) - float(new_lng)) < 0.0001:
+                                is_duplicate = True
+                                break
+                                
+                if not is_duplicate:
+                    current_hidden.append(new_hidden_item)
+                    
+                if update_markdown_frontmatter_fields(p, {"hidden_locations": current_hidden}):
+                    updated_files += 1
+            except Exception as e:
+                print(f"Error updating hidden locations for {p}: {e}")
+                
+    if updated_files == 0:
+        raise HTTPException(status_code=404, detail="Note file not found on disk")
+        
+    # 2. Update the corresponding entry in url_index.json
+    index = get_url_index()
+    found_in_index = False
+    for url, note_data in index.items():
+        if isinstance(note_data, dict):
+            fn = note_data.get("fileName")
+            if fn and fn.replace("\\", "/") == normalized_filename:
+                curr_hidden = note_data.get("hidden_locations", [])
+                if not isinstance(curr_hidden, list):
+                    curr_hidden = []
+                
+                is_duplicate = False
+                for item in curr_hidden:
+                    if isinstance(item, str) and isinstance(new_hidden_item, str):
+                        if item.lower() == new_hidden_item.lower():
+                            is_duplicate = True
+                            break
+                    elif isinstance(item, dict) and isinstance(new_hidden_item, dict):
+                        item_lat = item.get("lat") or item.get("latitude")
+                        item_lng = item.get("lng") or item.get("longitude")
+                        new_lat = new_hidden_item.get("lat")
+                        new_lng = new_hidden_item.get("lng")
+                        if item_lat is not None and item_lng is not None and new_lat is not None and new_lng is not None:
+                            if abs(float(item_lat) - float(new_lat)) < 0.0001 and abs(float(item_lng) - float(new_lng)) < 0.0001:
+                                is_duplicate = True
+                                break
+                if not is_duplicate:
+                    curr_hidden.append(new_hidden_item)
+                
+                note_data["hidden_locations"] = curr_hidden
+                found_in_index = True
+                break
+                
+    if found_in_index:
+        save_url_index(index)
+        
+    return {"status": "success", "message": f"Added hidden location in {updated_files} file(s) and index."}
+
+
+@app.patch("/api/notes/{filename:path}/location")
+async def update_note_location(filename: str, request: LocationOverrideRequest):
+    normalized_filename = filename.replace("\\", "/")
+    
+    # 1. Update the Markdown files
+    paths = [os.path.join(OBSIDIAN_INBOX_PATH, filename), os.path.join(PROJECT_VAULT_PATH, filename)]
+    updated_files = 0
+    for p in paths:
+        if os.path.exists(p):
+            try:
+                if update_markdown_frontmatter_coordinates(p, request.latitude, request.longitude):
+                    updated_files += 1
+            except Exception as e:
+                print(f"Error updating file frontmatter for {p}: {e}")
+                
+    if updated_files == 0:
+        raise HTTPException(status_code=404, detail="Note file not found on disk")
+        
+    # 2. Update the corresponding entry in url_index.json
+    index = get_url_index()
+    found_in_index = False
+    for url, note_data in index.items():
+        if isinstance(note_data, dict):
+            fn = note_data.get("fileName")
+            if fn and fn.replace("\\", "/") == normalized_filename:
+                note_data["latitude"] = request.latitude
+                note_data["longitude"] = request.longitude
+                found_in_index = True
+                break
+                
+    if found_in_index:
+        save_url_index(index)
+        
+    return {"status": "success", "message": f"Updated coordinates in {updated_files} file(s) and index."}
+
+
 @app.get("/api/config")
 async def get_config():
     index = get_url_index()
@@ -475,8 +975,10 @@ async def get_config():
         "fallback_model": AI_MODEL_FALLBACK,
         "model_chain": AI_MODEL_CHAIN,
         "note_count": len(index),
-        "inbox_mode": sys_config.get("inbox_mode", False)
+        "inbox_mode": sys_config.get("inbox_mode", False),
+        "maps_api_key": GOOGLE_MAPS_API_KEY
     }
+
 
 class ToggleInboxModeRequest(BaseModel):
     inbox_mode: bool
@@ -569,6 +1071,104 @@ async def append_tasks(filename: str, request: AppendTasksRequest):
             f.write(new_content)
             
     return {"status": "success", "message": "Tasks successfully appended to note"}
+
+@app.post("/api/journal/append")
+async def append_to_journal(request: JournalAppendRequest):
+    try:
+        # 1. Determine today's date
+        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        current_time = datetime.datetime.now().strftime("%H:%M")
+        
+        # 2. Path to the daily journal
+        journal_dir = os.path.join(PROJECT_VAULT_PATH, "Journal")
+        os.makedirs(journal_dir, exist_ok=True)
+        filename = f"{today_str} - Daily Journal.md"
+        filepath = os.path.join(journal_dir, filename)
+        
+        # 3. Create file if it doesn't exist
+        if not os.path.exists(filepath):
+            template = f"""---
+tags:
+  - Journal/Daily
+date: {today_str}
+---
+
+# Daily Journal - {today_str}
+
+## Focus of the Day
+- 
+
+## Tasks & Schedule
+- [ ] 
+
+## Notes & Thoughts
+- 
+
+### Scratchpad Notes
+"""
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(template)
+        
+        # 4. Append note to journal under Scratchpad Notes header
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+            
+        lines = content.splitlines()
+        header_idx = -1
+        for idx, line in enumerate(lines):
+            # Check for ## Scratchpad Notes or ### Scratchpad Notes
+            if "Scratchpad Notes" in line and (line.startswith("###") or line.startswith("##")):
+                header_idx = idx
+                break
+                
+        new_bullet = f"- [{current_time}] {request.content}"
+        
+        if header_idx != -1:
+            # Found the header. We append to the end of this section (i.e. before the next header)
+            insert_idx = header_idx + 1
+            while insert_idx < len(lines):
+                if lines[insert_idx].startswith("#"):
+                    break
+                insert_idx += 1
+            # Backtrack past empty lines to place cleanly
+            while insert_idx > header_idx + 1 and lines[insert_idx - 1].strip() == "":
+                insert_idx -= 1
+            lines.insert(insert_idx, new_bullet)
+            new_content = "\n".join(lines) + "\n"
+        else:
+            # Header not found, append to the end of the file
+            # Ensure proper separation
+            if content.endswith("\n\n"):
+                new_content = content + f"### Scratchpad Notes\n{new_bullet}\n"
+            elif content.endswith("\n"):
+                new_content = content + f"\n### Scratchpad Notes\n{new_bullet}\n"
+            else:
+                new_content = content + f"\n\n### Scratchpad Notes\n{new_bullet}\n"
+                
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(new_content)
+            
+        # 5. Add to url_index.json if not present so it's searchable
+        index = get_url_index()
+        url_key = f"journal-{today_str}"
+        if url_key not in index:
+            index[url_key] = {
+                "title": f"{today_str} - Daily Journal",
+                "fileName": f"Journal/{filename}",
+                "category": "Journal",
+                "date": today_str
+            }
+            save_url_index(index)
+            
+        # 6. Run hierarchical index update
+        try:
+            update_hierarchical_indexes()
+        except Exception as e:
+            print(f"Error updating hierarchical indexes: {e}")
+            
+        return {"status": "success", "message": f"Successfully appended note to Daily Journal: {filename}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/weekly_brief")
 async def generate_weekly_brief():
@@ -799,6 +1399,12 @@ async def _run_ingestion_logic(url: str, task_id: str, status_callback=None):
         lat_str = f"latitude: {latitude}\n" if latitude is not None else ""
         lng_str = f"longitude: {longitude}\n" if longitude is not None else ""
 
+        locations = data.get('ai_data', {}).get('locations', [])
+        hidden_locations = data.get('ai_data', {}).get('hidden_locations', [])
+        import json
+        locations_str = f"locations: {json.dumps(locations)}\n"
+        hidden_locs_str = f"hidden_locations: {json.dumps(hidden_locations)}\n"
+
         content = f"""---
 type: {data['type']}
 date: {date_str}
@@ -806,7 +1412,7 @@ author: {data['uploader']}
 url: {data['url']}
 category: {raw_category}
 tags: {data['ai_data'].get('tags', [])}
-{event_date_str}{lat_str}{lng_str}content_hash: {data.get('content_hash', '')}
+{event_date_str}{lat_str}{lng_str}{locations_str}{hidden_locs_str}content_hash: {data.get('content_hash', '')}
 transcript_status: {transcript_status}
 ai_model: {data['ai_data'].get('_model_used', AI_MODEL)}
 processor: {data.get('processor', '')}
@@ -841,6 +1447,8 @@ processor: {data.get('processor', '')}
             "category": raw_category,
             "latitude": latitude,
             "longitude": longitude,
+            "locations": locations,
+            "hidden_locations": hidden_locations,
         }
         index = get_url_index()
         index[url] = note_data
@@ -1029,6 +1637,12 @@ async def upload_file(file: UploadFile = File(...)):
         lat_str = f"latitude: {latitude}\n" if latitude is not None else ""
         lng_str = f"longitude: {longitude}\n" if longitude is not None else ""
 
+        locations = data.get('ai_data', {}).get('locations', [])
+        hidden_locations = data.get('ai_data', {}).get('hidden_locations', [])
+        import json
+        locations_str = f"locations: {json.dumps(locations)}\n"
+        hidden_locs_str = f"hidden_locations: {json.dumps(hidden_locations)}\n"
+
         content = f"""---
 type: {data['type']}
 date: {date_str}
@@ -1036,7 +1650,7 @@ author: {data['uploader']}
 url: {data['url']}
 category: {raw_category}
 tags: {data['ai_data'].get('tags', [])}
-{event_date_str}{lat_str}{lng_str}content_hash: {data.get('content_hash', '')}
+{event_date_str}{lat_str}{lng_str}{locations_str}{hidden_locs_str}content_hash: {data.get('content_hash', '')}
 ai_model: {data['ai_data'].get('_model_used', AI_MODEL)}
 processor: {data.get('processor', '')}
 ---
@@ -1067,12 +1681,29 @@ processor: {data.get('processor', '')}
             "category": raw_category,
             "latitude": latitude,
             "longitude": longitude,
+            "locations": locations,
+            "hidden_locations": hidden_locations,
         }
 
         # Update JSON index
         index = get_url_index()
         index[data['url']] = note_data
         save_url_index(index)
+
+        event_date = data.get("ai_data", {}).get("event_date")
+        if event_date and str(event_date).lower() != "null" and data['ai_data'].get('category') == "Event":
+            ops_manager.update_task(task_id, "Syncing to Calendar", progress=90)
+            try:
+                from core.calendar_sync import create_calendar_event
+                await asyncio.to_thread(
+                    create_calendar_event,
+                    title=f"Event: {data['ai_data'].get('summary', 'New Event')[:50]}",
+                    event_date_str=str(event_date),
+                    source_url=data['url'],
+                    description=data['ai_data'].get('formatted_content', '')
+                )
+            except Exception as e:
+                print(f"Calendar sync failed: {e}")
 
         # Update Vector DB
         ops_manager.update_task(task_id, "Updating AI index", progress=95)
@@ -1142,6 +1773,12 @@ async def ingest_text(request: IngestTextRequest):
         lat_str = f"latitude: {latitude}\n" if latitude is not None else ""
         lng_str = f"longitude: {longitude}\n" if longitude is not None else ""
 
+        locations = data.get('ai_data', {}).get('locations', [])
+        hidden_locations = data.get('ai_data', {}).get('hidden_locations', [])
+        import json
+        locations_str = f"locations: {json.dumps(locations)}\n"
+        hidden_locs_str = f"hidden_locations: {json.dumps(hidden_locations)}\n"
+
         content = f"""---
 type: {data['type']}
 date: {date_str}
@@ -1149,7 +1786,7 @@ author: {data['uploader']}
 url: {data['url']}
 category: {raw_category}
 tags: {data['ai_data'].get('tags', [])}
-{event_date_str}{lat_str}{lng_str}content_hash: {data.get('content_hash', '')}
+{event_date_str}{lat_str}{lng_str}{locations_str}{hidden_locs_str}content_hash: {data.get('content_hash', '')}
 ai_model: {data['ai_data'].get('_model_used', AI_MODEL)}
 processor: {data.get('processor', '')}
 ---
@@ -1180,12 +1817,29 @@ processor: {data.get('processor', '')}
             "category": raw_category,
             "latitude": latitude,
             "longitude": longitude,
+            "locations": locations,
+            "hidden_locations": hidden_locations,
         }
 
         # Update JSON index
         index = get_url_index()
         index[data['url']] = note_data
         save_url_index(index)
+
+        event_date = data.get("ai_data", {}).get("event_date")
+        if event_date and str(event_date).lower() != "null" and data['ai_data'].get('category') == "Event":
+            ops_manager.update_task(task_id, "Syncing to Calendar", progress=90)
+            try:
+                from core.calendar_sync import create_calendar_event
+                await asyncio.to_thread(
+                    create_calendar_event,
+                    title=f"Event: {data['ai_data'].get('summary', 'New Event')[:50]}",
+                    event_date_str=str(event_date),
+                    source_url=data['url'],
+                    description=data['ai_data'].get('formatted_content', '')
+                )
+            except Exception as e:
+                print(f"Calendar sync failed: {e}")
 
         # Update Vector DB
         ops_manager.update_task(task_id, "Updating AI index", progress=95)

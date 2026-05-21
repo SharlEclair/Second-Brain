@@ -6,7 +6,8 @@ import '../services/audio_ingest_service.dart';
 import '../screens/debug_logs_screen.dart';
 
 class BrainDumpButton extends StatefulWidget {
-  const BrainDumpButton({super.key});
+  final VoidCallback? onComplete;
+  const BrainDumpButton({super.key, this.onComplete});
 
   @override
   State<BrainDumpButton> createState() => _BrainDumpButtonState();
@@ -71,7 +72,10 @@ class _BrainDumpButtonState extends State<BrainDumpButton> with SingleTickerProv
         });
 
         if (path != null) {
-          if (!mounted) return;
+          if (!mounted) {
+            widget.onComplete?.call();
+            return;
+          }
           setState(() {
             _isUploading = true;
           });
@@ -100,6 +104,9 @@ class _BrainDumpButtonState extends State<BrainDumpButton> with SingleTickerProv
               ),
             );
           }
+          widget.onComplete?.call();
+        } else {
+          widget.onComplete?.call();
         }
       } else {
         // Check permissions
@@ -118,13 +125,17 @@ class _BrainDumpButtonState extends State<BrainDumpButton> with SingleTickerProv
           _startTimer();
           DebugLogger.log('Started voice recording: $path', type: 'SYSTEM');
         } else {
-          if (!mounted) return;
+          if (!mounted) {
+            widget.onComplete?.call();
+            return;
+          }
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Microphone permission denied.'),
               backgroundColor: Colors.red,
             ),
           );
+          widget.onComplete?.call();
         }
       }
     } catch (e) {
@@ -142,6 +153,7 @@ class _BrainDumpButtonState extends State<BrainDumpButton> with SingleTickerProv
           ),
         );
       }
+      widget.onComplete?.call();
     }
   }
 

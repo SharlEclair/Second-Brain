@@ -127,7 +127,7 @@ class SyncService {
   Future<void> syncUp() async {
     try {
       final isarDb = await isar;
-      final requests = await isarDb.apiRequests.where().findAll();
+      final requests = await isarDb.apiRequests.filter().isFailedEqualTo(false).findAll();
       if (requests.isEmpty) return;
 
       DebugLogger.log('Syncing ${requests.length} offline requests...', type: 'SYNC');
@@ -148,6 +148,14 @@ class SyncService {
           });
         } catch (e) {
           DebugLogger.log('Failed to sync request ${req.id}: $e', type: 'ERROR');
+          await isarDb.writeTxn(() async {
+            req.retryCount++;
+            if (req.retryCount >= 3) {
+              req.isFailed = true;
+              DebugLogger.log('Request ${req.id} failed permanently after 3 retries.', type: 'SYNC');
+            }
+            await isarDb.apiRequests.put(req);
+          });
         }
       }
     } catch (e) {

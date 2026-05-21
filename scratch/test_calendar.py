@@ -27,13 +27,13 @@ def main():
         print("7. Run this script again to perform the OAuth authentication flow.")
         return
 
-    print("[✓] Found credentials.json. Attempting authentication flow...")
+    print("[OK] Found credentials.json. Attempting authentication flow...")
     creds = get_credentials()
     
     if creds:
-        print("[✓] Authentication successful!")
+        print("[OK] Authentication successful!")
         if os.path.exists(token_path):
-            print(f"[✓] token.json saved successfully at: {token_path}")
+            print(f"[OK] token.json saved successfully at: {token_path}")
         
         print("\nAttempting to create a test event on your calendar...")
         import datetime
@@ -48,10 +48,10 @@ def main():
         )
         
         if event:
-            print(f"\n[✓] SUCCESS: Calendar event created successfully!")
+            print(f"\n[SUCCESS]: Calendar event created successfully!")
             print(f"Event Link: {event.get('htmlLink')}")
         else:
-            print("\n[X] FAILURE: Could not create calendar event. Check API console logs/permissions.")
+            print("\n[FAILURE]: Could not create calendar event. Check API console logs/permissions.")
     else:
         print("\n[X] FAILURE: Authentication failed. Please check the terminal/consent screen steps.")
 

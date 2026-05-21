@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GOOGLE_MAPS_API_KEY = os.getenv("Maps_API_KEY") or os.getenv("GOOGLE_MAPS_API_KEY")
 OBSIDIAN_INBOX_PATH = os.getenv("OBSIDIAN_VAULT_PATH") or os.getenv("OBSIDIAN_INBOX_PATH") or "./vault"
 URL_INDEX_FILE = "url_index.json"
 TAGS_FILE = "tags.txt"

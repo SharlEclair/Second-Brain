@@ -9,4 +9,7 @@ class ApiRequest {
   late String type;
   late String payload;
   late DateTime createdAt;
+
+  int retryCount = 0;
+  bool isFailed = false;
 }

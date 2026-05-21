@@ -8,6 +8,7 @@ import 'screens/notes_browser_screen.dart';
 import 'screens/debug_logs_screen.dart';
 import 'screens/note_viewer_screen.dart';
 import 'screens/quick_ask_screen.dart';
+import 'screens/scratchpad_screen.dart';
 import 'services/api_service.dart';
 import 'services/queue_service.dart';
 import 'services/widget_service.dart';
@@ -143,7 +144,21 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
         break;
       case 'action/scratchpad':
         _showToast('✏️ Launching Quick Scratchpad...');
-        Future.delayed(const Duration(milliseconds: 300), () => _showScratchpadDialog());
+        _navigatorKey.currentState?.push(
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => const ScratchpadScreen(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              const begin = Offset(0.0, 1.0);
+              const end = Offset.zero;
+              const curve = Curves.easeInOutCubic;
+              var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+              return SlideTransition(
+                position: animation.drive(tween),
+                child: child,
+              );
+            },
+          ),
+        );
         break;
       case 'action/search':
         _showToast('🔍 Notes Browser focused');
@@ -162,96 +177,6 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
         );
         break;
     }
-  }
-
-  void _showScratchpadDialog() {
-    final textController = TextEditingController();
-    final titleController = TextEditingController();
-    final BuildContext? dialogContext = _navigatorKey.currentContext;
-    if (dialogContext == null) return;
-
-    showDialog(
-      context: dialogContext,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF111111),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16.0),
-            side: const BorderSide(color: Color(0xFF333333)),
-          ),
-          title: const Text("🧠 QUICK_SCRATCHPAD", style: TextStyle(color: Color(0xFFF97316), fontWeight: FontWeight.bold, fontSize: 14)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: "Title (Optional)...",
-                  hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
-                  filled: true,
-                  fillColor: const Color(0xFF050505),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8.0),
-                    borderSide: const BorderSide(color: Color(0xFF222222)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8.0),
-                    borderSide: const BorderSide(color: Color(0xFFF97316)),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: textController,
-                maxLines: 4,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: "Type note content here...",
-                  hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
-                  filled: true,
-                  fillColor: const Color(0xFF050505),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8.0),
-                    borderSide: const BorderSide(color: Color(0xFF222222)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8.0),
-                    borderSide: const BorderSide(color: Color(0xFFF97316)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel", style: TextStyle(color: Colors.white54)),
-            ),
-            TextButton(
-              onPressed: () async {
-                final content = textController.text.trim();
-                final title = titleController.text.trim();
-                Navigator.pop(context);
-                if (content.isNotEmpty) {
-                  _showToast("Saving note to Vault...");
-                  try {
-                    await _apiService.ingestRawText(content, title: title.isNotEmpty ? title : null);
-                    AnalyticsService().logIngest('scratchpad', 'in_app', details: title.isNotEmpty ? title : 'Scratchpad Note');
-                    _showToast("✓ Note successfully archived!");
-                    // Trigger a sync of widgets
-                    WidgetService.syncAllWidgets(_apiService);
-                  } catch (e) {
-                    _showToast("❌ Failed to save note: $e");
-                  }
-                }
-              },
-              child: const Text("Save Note", style: TextStyle(color: Color(0xFFF97316), fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   @override

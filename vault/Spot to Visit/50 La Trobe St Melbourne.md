@@ -5,8 +5,8 @@ author: User
 url: local://Spot-to-Visit/50-La-Trobe-St-Melbourne.md
 category: Spot to Visit
 tags: ["#spot-to-visit", "#melbourne", "#la-trobe-st"]
-latitude: -37.8094
-longitude: 144.9664
+latitude: -37.8095
+longitude: 144.9665
 content_hash: local_50_la_trobe_st
 transcript_status: not_applicable
 ai_model: manual

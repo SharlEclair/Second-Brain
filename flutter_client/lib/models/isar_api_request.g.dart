@@ -22,13 +22,23 @@ const ApiRequestSchema = CollectionSchema(
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
-    r'payload': PropertySchema(
+    r'isFailed': PropertySchema(
       id: 1,
+      name: r'isFailed',
+      type: IsarType.bool,
+    ),
+    r'payload': PropertySchema(
+      id: 2,
       name: r'payload',
       type: IsarType.string,
     ),
+    r'retryCount': PropertySchema(
+      id: 3,
+      name: r'retryCount',
+      type: IsarType.long,
+    ),
     r'type': PropertySchema(
-      id: 2,
+      id: 4,
       name: r'type',
       type: IsarType.string,
     )
@@ -65,8 +75,10 @@ void _apiRequestSerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeDateTime(offsets[0], object.createdAt);
-  writer.writeString(offsets[1], object.payload);
-  writer.writeString(offsets[2], object.type);
+  writer.writeBool(offsets[1], object.isFailed);
+  writer.writeString(offsets[2], object.payload);
+  writer.writeLong(offsets[3], object.retryCount);
+  writer.writeString(offsets[4], object.type);
 }
 
 ApiRequest _apiRequestDeserialize(
@@ -78,8 +90,10 @@ ApiRequest _apiRequestDeserialize(
   final object = ApiRequest();
   object.createdAt = reader.readDateTime(offsets[0]);
   object.id = id;
-  object.payload = reader.readString(offsets[1]);
-  object.type = reader.readString(offsets[2]);
+  object.isFailed = reader.readBool(offsets[1]);
+  object.payload = reader.readString(offsets[2]);
+  object.retryCount = reader.readLong(offsets[3]);
+  object.type = reader.readString(offsets[4]);
   return object;
 }
 
@@ -93,8 +107,12 @@ P _apiRequestDeserializeProp<P>(
     case 0:
       return (reader.readDateTime(offset)) as P;
     case 1:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 2:
+      return (reader.readString(offset)) as P;
+    case 3:
+      return (reader.readLong(offset)) as P;
+    case 4:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -299,6 +317,16 @@ extension ApiRequestQueryFilter
     });
   }
 
+  QueryBuilder<ApiRequest, ApiRequest, QAfterFilterCondition> isFailedEqualTo(
+      bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isFailed',
+        value: value,
+      ));
+    });
+  }
+
   QueryBuilder<ApiRequest, ApiRequest, QAfterFilterCondition> payloadEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -427,6 +455,61 @@ extension ApiRequestQueryFilter
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'payload',
         value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ApiRequest, ApiRequest, QAfterFilterCondition> retryCountEqualTo(
+      int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'retryCount',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<ApiRequest, ApiRequest, QAfterFilterCondition>
+      retryCountGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'retryCount',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<ApiRequest, ApiRequest, QAfterFilterCondition>
+      retryCountLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'retryCount',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<ApiRequest, ApiRequest, QAfterFilterCondition> retryCountBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'retryCount',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
       ));
     });
   }
@@ -582,6 +665,18 @@ extension ApiRequestQuerySortBy
     });
   }
 
+  QueryBuilder<ApiRequest, ApiRequest, QAfterSortBy> sortByIsFailed() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isFailed', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ApiRequest, ApiRequest, QAfterSortBy> sortByIsFailedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isFailed', Sort.desc);
+    });
+  }
+
   QueryBuilder<ApiRequest, ApiRequest, QAfterSortBy> sortByPayload() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'payload', Sort.asc);
@@ -591,6 +686,18 @@ extension ApiRequestQuerySortBy
   QueryBuilder<ApiRequest, ApiRequest, QAfterSortBy> sortByPayloadDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'payload', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ApiRequest, ApiRequest, QAfterSortBy> sortByRetryCount() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'retryCount', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ApiRequest, ApiRequest, QAfterSortBy> sortByRetryCountDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'retryCount', Sort.desc);
     });
   }
 
@@ -633,6 +740,18 @@ extension ApiRequestQuerySortThenBy
     });
   }
 
+  QueryBuilder<ApiRequest, ApiRequest, QAfterSortBy> thenByIsFailed() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isFailed', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ApiRequest, ApiRequest, QAfterSortBy> thenByIsFailedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isFailed', Sort.desc);
+    });
+  }
+
   QueryBuilder<ApiRequest, ApiRequest, QAfterSortBy> thenByPayload() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'payload', Sort.asc);
@@ -642,6 +761,18 @@ extension ApiRequestQuerySortThenBy
   QueryBuilder<ApiRequest, ApiRequest, QAfterSortBy> thenByPayloadDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'payload', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ApiRequest, ApiRequest, QAfterSortBy> thenByRetryCount() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'retryCount', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ApiRequest, ApiRequest, QAfterSortBy> thenByRetryCountDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'retryCount', Sort.desc);
     });
   }
 
@@ -666,10 +797,22 @@ extension ApiRequestQueryWhereDistinct
     });
   }
 
+  QueryBuilder<ApiRequest, ApiRequest, QDistinct> distinctByIsFailed() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isFailed');
+    });
+  }
+
   QueryBuilder<ApiRequest, ApiRequest, QDistinct> distinctByPayload(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'payload', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ApiRequest, ApiRequest, QDistinct> distinctByRetryCount() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'retryCount');
     });
   }
 
@@ -695,9 +838,21 @@ extension ApiRequestQueryProperty
     });
   }
 
+  QueryBuilder<ApiRequest, bool, QQueryOperations> isFailedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isFailed');
+    });
+  }
+
   QueryBuilder<ApiRequest, String, QQueryOperations> payloadProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'payload');
+    });
+  }
+
+  QueryBuilder<ApiRequest, int, QQueryOperations> retryCountProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'retryCount');
     });
   }
 
