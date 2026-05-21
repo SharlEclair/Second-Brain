@@ -1,8 +1,6 @@
 # Weekly Brief Index
 
-Here's a one-sentence description for the 'Weekly Brief' category:
-
-**This category distills the most impactful takeaways and practical advice from recent knowledge entries, offering a concise overview of evolving insights.**
+**Weekly Brief: Your curated digest of essential insights and actionable takeaways.**
 
 This folder contains 1 articles related to Weekly Brief.
 

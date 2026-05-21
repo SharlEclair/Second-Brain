@@ -1,6 +1,6 @@
 # Spot to Visit Index
 
-Uncover Instagram-worthy ice cream havens in Melbourne and pinpoint precise locations for testing, all within this curated collection of "Spots to Visit."
+Uncover the coolest spots in Melbourne, from Instagram-worthy ice cream parlors to intriguing geofencing test locations.
 
 This folder contains 3 articles related to Spot to Visit.
 

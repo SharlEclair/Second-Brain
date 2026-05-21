@@ -1,6 +1,6 @@
 # Event Index
 
-Get ready for engaging webinars, hands-on workshops, and delightful social gatherings—all are events designed for connection and learning!
+**Event:** Gatherings, webinars, and workshops, from casual social meetups to in-depth tech dives, all marked by shared information and specific dates and times.
 
 This folder contains 7 articles related to Event.
 

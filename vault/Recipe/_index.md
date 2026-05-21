@@ -1,6 +1,6 @@
 # Recipe Index
 
-Uncover delicious and diverse culinary creations, from speedy weeknight dinners and inspired street food to gourmet delights and unexpected breakfast treats.
+Explore a world of culinary inspiration, from quick weeknight dinners and street food faves to decadent classics and even a curious 5 PM breakfast!
 
 This folder contains 10 articles related to Recipe.
 
