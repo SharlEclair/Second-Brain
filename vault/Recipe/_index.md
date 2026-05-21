@@ -1,6 +1,6 @@
 # Recipe Index
 
-**Unleash your inner chef with a delicious array of global flavors, from crispy chicken creations and comforting pasta dishes to the ultimate Beef Wellington, all designed to inspire your next culinary adventure!**
+Uncover delicious and diverse culinary creations, from speedy weeknight dinners and inspired street food to gourmet delights and unexpected breakfast treats.
 
 This folder contains 10 articles related to Recipe.
 

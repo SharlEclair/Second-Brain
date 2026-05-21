@@ -1,6 +1,6 @@
 # General Index
 
-This "General" category explores the practical application and foundational understanding of technology, from leveraging AI and entrepreneurship in your 20s to mastering Git and enhancing AI skills with project ideas.
+This "General" category explores the practical application of AI and technology for personal and professional growth, from mastering development tools to leveraging AI for travel and entrepreneurship.
 
 This folder contains 5 articles related to General.
 

@@ -828,5 +828,14 @@
         "category": "Spot to Visit",
         "latitude": -37.7930,
         "longitude": 144.9689
+    },
+    "local://Spot-to-Visit/50-La-Trobe-St-Melbourne.md": {
+        "title": "50 La Trobe St Melbourne",
+        "fileName": "Spot to Visit/50 La Trobe St Melbourne.md",
+        "date": "2026-05-21T03:00:00.000Z",
+        "url": "local://Spot-to-Visit/50-La-Trobe-St-Melbourne.md",
+        "category": "Spot to Visit",
+        "latitude": -37.8094,
+        "longitude": 144.9664
     }
 }
