@@ -1,6 +1,6 @@
 # Event Index
 
-Get ready for upcoming webinars, social gatherings, and hands-on workshops covering topics from AI to casual brunches!
+Get ready for upcoming webinars and social gatherings, from AI workshops to casual brunches, all designed to connect and inform!
 
 This folder contains 7 articles related to Event.
 

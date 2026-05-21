@@ -819,5 +819,14 @@
         "transcript_status": "complete",
         "ai_model": "models/gemini-2.5-flash-lite",
         "event_date": null
+    },
+    "local://Spot-to-Visit/570-Lygon-St-Melbourne.md": {
+        "title": "570 Lygon St Melbourne",
+        "fileName": "Spot to Visit/570 Lygon St Melbourne.md",
+        "date": "2026-05-21T02:51:30.000Z",
+        "url": "local://Spot-to-Visit/570-Lygon-St-Melbourne.md",
+        "category": "Spot to Visit",
+        "latitude": -37.7930,
+        "longitude": 144.9689
     }
 }

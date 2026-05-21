@@ -1,6 +1,6 @@
 # General Index
 
-Dive into the ever-evolving world of tech with this "General" category, exploring AI's real-world applications, strategic career building, and essential developer tools.
+This "General" category explores the practical application and foundational understanding of technology, from leveraging AI and entrepreneurship in your 20s to mastering Git and enhancing AI skills with project ideas.
 
 This folder contains 5 articles related to General.
 
