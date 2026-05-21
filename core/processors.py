@@ -256,7 +256,33 @@ def _sync_download_reel(url, ydl_opts, temp_prefix):
     }
 
 
+def _has_audio_stream(media_path):
+    # Try using PyAV first
+    try:
+        import av
+        with av.open(media_path) as container:
+            return len(container.streams.audio) > 0
+    except Exception as e:
+        print(f"PyAV audio stream check failed or not available for {media_path}: {e}")
+        
+    # Fallback to ffprobe
+    import subprocess
+    try:
+        cmd = ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_type", "-of", "csv=p=0", media_path]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+        if result.returncode == 0:
+            return bool(result.stdout.strip())
+    except Exception as e:
+        print(f"ffprobe fallback audio stream check failed for {media_path}: {e}")
+        
+    return True # Assume it has audio to let the rest of the flow run and handle it
+
+
 def _sync_transcribe(media_path):
+    if not _has_audio_stream(media_path):
+        print(f"Media file {media_path} does not contain any audio stream. Skipping transcription.")
+        return ""
+
     try:
         segments, _ = whisper_model.transcribe(media_path)
         texts = [segment.text.strip() for segment in segments if segment.text and segment.text.strip()]
@@ -275,10 +301,16 @@ def _sync_transcribe(media_path):
                 texts = [segment.text.strip() for segment in segments if segment.text and segment.text.strip()]
                 return " ".join(texts).strip()
             else:
-                print(f"FFmpeg extraction failed (code {result.returncode}). Stderr: {result.stderr.decode('utf-8', errors='ignore')}")
+                stderr_str = result.stderr.decode('utf-8', errors='ignore')
+                print(f"FFmpeg extraction failed (code {result.returncode}). Stderr: {stderr_str}")
+                if "does not contain any stream" in stderr_str or "Output file does not contain any stream" in stderr_str:
+                    print(f"Media file {media_path} has no audio stream (detected via ffmpeg). Skipping transcription.")
+                    return ""
                 raise e
         except Exception as ex:
             print(f"FFmpeg extraction fallback failed: {ex}")
+            if "does not contain any stream" in str(ex) or "Output file does not contain any stream" in str(ex):
+                return ""
             raise e
         finally:
             if os.path.exists(temp_wav):
