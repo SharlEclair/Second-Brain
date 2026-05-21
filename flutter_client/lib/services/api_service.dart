@@ -41,7 +41,8 @@ class ApiService {
 
   Future<void> setBaseUrl(String url) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyBaseUrl, url);
+    final cleanUrl = url.trim().replaceAll(RegExp(r'\s+'), '');
+    await prefs.setString(_keyBaseUrl, cleanUrl);
   }
 
   Future<String> _buildUrl(String endpoint) async {
@@ -49,8 +50,8 @@ class ApiService {
     if (baseUrl == null || baseUrl.isEmpty) {
       throw ServerException('Backend URL is not set. Please set it in Settings.', 0);
     }
-    // Remove all trailing slashes from base
-    String cleanBase = baseUrl.trim();
+    // Remove all whitespace characters and trailing slashes from base
+    String cleanBase = baseUrl.trim().replaceAll(RegExp(r'\s+'), '');
     while (cleanBase.endsWith('/')) {
       cleanBase = cleanBase.substring(0, cleanBase.length - 1);
     }

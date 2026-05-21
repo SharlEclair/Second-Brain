@@ -5,8 +5,11 @@ import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import com.google.android.gms.maps.MapsInitializer
+import com.google.android.gms.maps.MapsInitializer.Renderer
+import com.google.android.gms.maps.OnMapsSdkInitializedCallback
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterActivity(), OnMapsSdkInitializedCallback {
     private val CHANNEL = "com.example.second_brain/actions"
     private var pendingAction: String? = null
     private var channelInstance: MethodChannel? = null
@@ -14,6 +17,12 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleIntent(intent)
+        // Force the latest Maps renderer to prevent layout composition/resize crashes
+        MapsInitializer.initialize(applicationContext, Renderer.LATEST, this)
+    }
+
+    override fun onMapsSdkInitialized(renderer: Renderer) {
+        // Initialization complete
     }
 
     override fun onNewIntent(intent: Intent) {
