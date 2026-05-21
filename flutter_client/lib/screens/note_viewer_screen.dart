@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';

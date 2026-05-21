@@ -14,8 +14,6 @@ class ShareService {
   static late final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey;
   
   static StreamSubscription? _intentDataStreamSubscription;
-  static Timer? _sharedStatusTimer;
-  static String _lastSharedStatus = "";
 
   static void initialize({
     required GlobalKey<NavigatorState> navigatorKey,
@@ -53,49 +51,6 @@ class ShareService {
 
   static void dispose() {
     _intentDataStreamSubscription?.cancel();
-    _sharedStatusTimer?.cancel();
-  }
-
-  static String _canonicalUrl(String value) {
-    var cleaned = value.trim();
-    final queryIndex = cleaned.indexOf('?');
-    if (queryIndex >= 0) cleaned = cleaned.substring(0, queryIndex);
-    while (cleaned.endsWith('/')) {
-      cleaned = cleaned.substring(0, cleaned.length - 1);
-    }
-    return cleaned;
-  }
-
-  static void _startSharedStatusPolling(String url) {
-    _sharedStatusTimer?.cancel();
-    _lastSharedStatus = "";
-    final target = _canonicalUrl(url);
-    _sharedStatusTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
-      try {
-        final status = await _apiService.getStatus();
-        final activeTasks = status['active_tasks'];
-        if (activeTasks is! List) return;
-
-        for (final task in activeTasks) {
-          if (task is Map && _canonicalUrl((task['url'] ?? '').toString()) == target) {
-            final progress = task['progress'];
-            final progressText = progress is num ? ' ${progress.round()}%' : '';
-            final message = '${(task['status'] ?? 'Processing').toString()}$progressText';
-            if (message != _lastSharedStatus) {
-              _lastSharedStatus = message;
-              _showToast(message);
-            }
-            return;
-          }
-        }
-      } catch (_) {}
-    });
-  }
-
-  static void _stopSharedStatusPolling() {
-    _sharedStatusTimer?.cancel();
-    _sharedStatusTimer = null;
-    _lastSharedStatus = "";
   }
 
   static void ingestSharedText(String sharedText, {bool isFile = false}) async {
@@ -147,7 +102,7 @@ class ShareService {
           _showToast("✓ Successfully ingested!");
         }
       } catch (e) {
-        await QueueService().addToQueue(url);
+        await _queueService.addToQueue(url);
         AnalyticsService().logIngest('url_queue', 'share_intent', details: url);
         if (e is NetworkException) {
           _showToast("📌 Queued — will process when connected.");

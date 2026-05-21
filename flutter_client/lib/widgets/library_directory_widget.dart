@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/sync_service.dart';
-import '../models/isar_note.dart';
 import '../screens/note_viewer_screen.dart';
 
 class LibraryDirectoryWidget extends StatefulWidget {

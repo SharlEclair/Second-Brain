@@ -16,8 +16,10 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
-    // Fix namespace for isar_flutter_libs (AGP 8+ requirement)
     afterEvaluate {
+        extensions.findByType(com.android.build.gradle.BaseExtension::class.java)?.apply {
+            compileSdkVersion(36)
+        }
         if (project.name == "isar_flutter_libs") {
             extensions.findByType(com.android.build.gradle.LibraryExtension::class.java)?.apply {
                 namespace = "dev.isar.isar_flutter_libs"

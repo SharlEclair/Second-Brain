@@ -1,13 +1,10 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:home_widget/home_widget.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import 'debug_logger.dart';
 
 class WidgetService {
-  static const String _channelId = 'com.example.second_brain/actions';
-  static const String _groupId = 'group.com.example.second_brain'; // iOS/Android group if needed
 
   /// Refreshes all widgets with active data from local storage & API
   static Future<void> syncAllWidgets(ApiService apiService) async {

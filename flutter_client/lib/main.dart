@@ -2,9 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'screens/chat_screen.dart';
 import 'screens/notes_browser_screen.dart';
 import 'screens/debug_logs_screen.dart';
@@ -57,7 +55,6 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   final GlobalKey<NavigatorState> _navigatorKey = navigatorKey;
   final ApiService _apiService = ApiService();
-  final QueueService _queueService = QueueService();
 
   @override
   void initState() {

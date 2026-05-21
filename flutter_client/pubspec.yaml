@@ -18,7 +18,7 @@ dependencies:
   record: ^6.0.0
   share_plus: ^13.1.0
   home_widget: ^0.9.1
-  geolocator: ^14.0.2
+  geolocator: ^14.0.1
   connectivity_plus: ^6.0.3
   cunning_document_scanner: ^1.4.0
   flutter_local_notifications: ^21.0.0
@@ -36,8 +36,8 @@ dev_dependencies:
   flutter_lints: ^2.0.0
   flutter_launcher_icons: ^0.14.3
   isar_generator: ^3.1.0+1
-  # Pin build_runner to 2.4.8 to resolve dependency conflict with isar_generator
-  build_runner: 2.4.8
+  # Pin build_runner to ^2.4.13 to resolve dependency conflict with isar_generator and share_plus
+  build_runner: ^2.4.13
 
 flutter_launcher_icons:
   android: true
