@@ -2444,4 +2444,4 @@ async def get_nearby_notes(lat: float, lng: float, radius_km: float = 5.0):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
