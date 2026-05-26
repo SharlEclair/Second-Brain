@@ -1,30 +1,27 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:second_brain/main.dart';
+import 'package:second_brain/providers/providers.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const SecondBrainApp());
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    // Verify that the app starts (finds the chat screen title or similar)
-    expect(find.text('Second Brain'), findsOneWidget);
-    expect(find.text('0'), findsNothing);
+  testWidgets('App builds without crashing smoke test', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'is_light_theme': false});
+    final prefs = await SharedPreferences.getInstance();
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+        ],
+        child: const SecondBrainApp(),
+      ),
+    );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Verify app builds
+    expect(find.byType(SecondBrainApp), findsOneWidget);
   });
 }

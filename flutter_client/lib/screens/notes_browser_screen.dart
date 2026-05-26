@@ -190,8 +190,8 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
           backgroundColor: isDark ? const Color(0xFF111111) : Colors.white,
           elevation: 0,
           bottom: TabBar(
-            indicatorColor: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
-            labelColor: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+            indicatorColor: Theme.of(context).colorScheme.primary,
+            labelColor: Theme.of(context).colorScheme.primary,
             unselectedLabelColor: isDark ? Colors.white38 : Colors.black38,
             labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5),
             tabs: const [
@@ -215,7 +215,7 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
               MaterialPageRoute(builder: (context) => const NearbyMapScreen()),
             );
           },
-          backgroundColor: const Color(0xFFF97316),
+          backgroundColor: Theme.of(context).colorScheme.primary,
           child: const Icon(Icons.location_on),
           tooltip: 'Find Nearby',
         ),
@@ -253,9 +253,10 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
           ),
         ),
         if (_upcomingEvents.isNotEmpty)
-          EventsCarousel(
+          EventsAgendaView(
             events: _upcomingEvents,
-             onEventTap: (fileName, title) async {
+            shrinkWrap: true,
+            onEventTap: (fileName, title) async {
               final navigator = Navigator.of(context);
               final scaffoldMessenger = ScaffoldMessenger.of(context);
               setState(() => _isLoading = true);
@@ -291,7 +292,7 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
           ),
         Expanded(
           child: _isLoading 
-            ? const Center(child: CircularProgressIndicator(color: Color(0xFFF97316)))
+            ? Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary))
             : (_isarNotes.isNotEmpty ? _filteredIsarNotes.isEmpty : _filteredNotes.isEmpty)
               ? Center(
                   child: Column(
@@ -310,7 +311,7 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
                           icon: const Icon(Icons.download, size: 18),
                           label: const Text("SYNC FROM SERVER"),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFF97316),
+                            backgroundColor: Theme.of(context).colorScheme.primary,
                             foregroundColor: Colors.black,
                           ),
                         ),
@@ -334,7 +335,7 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
                         side: BorderSide(color: isDark ? const Color(0xFF222222) : const Color(0xFFE2E8F0)),
                       ),
                       child: ListTile(
-                        leading: Icon(Icons.description_outlined, color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)),
+                        leading: Icon(Icons.description_outlined, color: Theme.of(context).colorScheme.primary),
                         title: Text(
                           noteTitle,
                           style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A), fontWeight: FontWeight.w500, fontSize: 14),

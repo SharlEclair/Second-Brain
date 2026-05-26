@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
 import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
@@ -142,7 +143,23 @@ class FocusMissionWidgetProvider : HomeWidgetProvider() {
                 views.setViewVisibility(R.id.btn_complete_mission, View.VISIBLE)
             }
 
+            // Set Remote Views Service for Scrollable Agenda ListView
+            val serviceIntent = Intent(context, AgendaRemoteViewsService::class.java).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+            }
+            views.setRemoteAdapter(R.id.agenda_list, serviceIntent)
+            views.setEmptyView(R.id.agenda_list, R.id.agenda_empty_view)
+
+            // Setup click template intent for list item clicks to launch main app
+            val clickIntentTemplate = HomeWidgetLaunchIntent.getActivity(
+                context,
+                MainActivity::class.java
+            )
+            views.setPendingIntentTemplate(R.id.agenda_list, clickIntentTemplate)
+
             appWidgetManager.updateAppWidget(appWidgetId, views)
+            appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.agenda_list)
         }
     }
 }

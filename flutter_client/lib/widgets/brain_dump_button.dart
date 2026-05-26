@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/audio_ingest_service.dart';
-import '../screens/debug_logs_screen.dart';
+import '../services/debug_logger.dart';
 
 class BrainDumpButton extends StatefulWidget {
   final VoidCallback? onComplete;
@@ -163,12 +163,12 @@ class _BrainDumpButtonState extends State<BrainDumpButton> with SingleTickerProv
       return FloatingActionButton(
         onPressed: null,
         backgroundColor: Colors.grey[800],
-        child: const SizedBox(
+        child: SizedBox(
           width: 24,
           height: 24,
           child: CircularProgressIndicator(
             strokeWidth: 2.5,
-            color: Color(0xFFF97316),
+            color: Theme.of(context).colorScheme.primary,
           ),
         ),
       );
@@ -202,7 +202,7 @@ class _BrainDumpButtonState extends State<BrainDumpButton> with SingleTickerProv
 
     return FloatingActionButton(
       onPressed: _toggleRecording,
-      backgroundColor: const Color(0xFFF97316),
+      backgroundColor: Theme.of(context).colorScheme.primary,
       child: const Icon(Icons.mic, color: Colors.black, size: 28),
     );
   }

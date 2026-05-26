@@ -1,82 +1,148 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
+import 'widget_service.dart';
+
+class QueueItem {
+  final String id;
+  final String type; // 'url', 'text', 'file'
+  final String payload; // URL, text content, or local file path
+  final String? title; // Optional title/filename
+  final DateTime createdAt;
+  int retryCount;
+  bool isFailed;
+
+  QueueItem({
+    required this.id,
+    required this.type,
+    required this.payload,
+    this.title,
+    DateTime? createdAt,
+    this.retryCount = 0,
+    this.isFailed = false,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'type': type,
+    'payload': payload,
+    'title': title,
+    'createdAt': createdAt.toIso8601String(),
+    'retryCount': retryCount,
+    'isFailed': isFailed,
+  };
+
+  factory QueueItem.fromJson(Map<String, dynamic> json) => QueueItem(
+    id: json['id'] ?? '',
+    type: json['type'] ?? '',
+    payload: json['payload'] ?? '',
+    title: json['title'],
+    createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
+    retryCount: json['retryCount'] ?? 0,
+    isFailed: json['isFailed'] ?? false,
+  );
+}
 
 class QueueService {
-  static const String _keyPendingUrls = 'pending_urls';
-  static const String _keyRetryCounts = 'queue_retry_counts';
+  static const String _keyPendingItems = 'pending_queue_items';
 
-  /// Add a URL to the local queue
-  Future<void> addToQueue(String url) async {
+  /// Add a QueueItem to the local queue
+  Future<void> addToQueue(QueueItem item) async {
     final queue = await getQueue();
-    if (!queue.contains(url)) {
-      queue.add(url);
+    // Check if item already exists by checking payload (or ID)
+    if (!queue.any((element) => element.payload == item.payload)) {
+      queue.add(item);
       await _saveQueue(queue);
     }
   }
 
-  /// Get all queued URLs
-  Future<List<String>> getQueue() async {
+  /// Get all queued items
+  Future<List<QueueItem>> getQueue() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_keyPendingUrls);
+    final raw = prefs.getString(_keyPendingItems);
     if (raw == null || raw.isEmpty) return [];
     try {
-      return List<String>.from(jsonDecode(raw));
+      final List<dynamic> decoded = jsonDecode(raw);
+      return decoded.map((item) => QueueItem.fromJson(item)).toList();
     } catch (_) {
       return [];
     }
   }
 
-  /// Remove a single URL from the queue
-  Future<void> removeFromQueue(String url) async {
+  /// Remove a single item from the queue by ID or payload
+  Future<void> removeFromQueue(String id) async {
     final queue = await getQueue();
-    queue.remove(url);
+    queue.removeWhere((item) => item.id == id || item.payload == id);
     await _saveQueue(queue);
-    
-    // Clean up retry count
-    final retryCounts = await _getRetryCounts();
-    if (retryCounts.containsKey(url)) {
-      retryCounts.remove(url);
-      await _saveRetryCounts(retryCounts);
-    }
   }
 
   /// Clear the entire queue
   Future<void> clearQueue() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyPendingUrls);
-    await prefs.remove(_keyRetryCounts);
+    await prefs.remove(_keyPendingItems);
   }
 
   Future<QueueProcessResult> processQueue(ApiService api) async {
     final queue = await getQueue();
-    if (queue.isEmpty) return QueueProcessResult(processed: 0, failed: 0, total: 0, errors: {}, failedPermanently: []);
+    // Filter out items that are marked as failed permanently (retryCount >= 3)
+    final pendingItems = queue.where((item) => !item.isFailed).toList();
+    
+    if (pendingItems.isEmpty) {
+      return QueueProcessResult(processed: 0, failed: 0, total: 0, errors: {}, failedPermanently: []);
+    }
 
     int processed = 0;
     int failed = 0;
-    final total = queue.length;
+    final total = pendingItems.length;
     final Map<String, String> errors = {};
     final List<String> failedPermanently = [];
-    final retryCounts = await _getRetryCounts();
 
-    for (final url in List<String>.from(queue)) {
+    // Working copy of queue to update states
+    final updatedQueue = List<QueueItem>.from(queue);
+
+    for (final item in pendingItems) {
       try {
-        await api.ingestUrl(url.trim());
-        await removeFromQueue(url);
+        if (item.type == 'url') {
+          await WidgetService.startIngestionLiveActivity(item.payload);
+          await WidgetService.updateIngestionLiveActivity(item.payload, 'Processing Queue...', 0.3);
+          await api.ingestUrl(item.payload.trim());
+          await WidgetService.updateIngestionLiveActivity(item.payload, 'Saving to Vault...', 0.8);
+          await WidgetService.endIngestionLiveActivity(item.payload, isSuccess: true);
+        } else if (item.type == 'text') {
+          await api.ingestRawText(item.payload, title: item.title);
+        } else if (item.type == 'file') {
+          await api.uploadFile(item.payload, customFileName: item.title);
+        }
+        
+        // Remove from persistent queue only upon verified success
+        await removeFromQueue(item.id);
+        updatedQueue.removeWhere((element) => element.id == item.id);
         processed++;
-      } on ServerException catch (e) {
-        _handleFailure(url, e.message, retryCounts, failedPermanently, errors);
-        failed++;
-      } on NetworkException catch (e) {
-        _handleFailure(url, 'Network error: ${e.message}', retryCounts, failedPermanently, errors);
-        failed++;
       } catch (e) {
-        _handleFailure(url, e.toString(), retryCounts, failedPermanently, errors);
         failed++;
+        final errorMessage = e.toString();
+        errors[item.payload] = errorMessage;
+        
+        // Find item in updatedQueue and increment retryCount
+        final idx = updatedQueue.indexWhere((element) => element.id == item.id);
+        if (idx != -1) {
+          updatedQueue[idx].retryCount++;
+          if (updatedQueue[idx].retryCount >= 3) {
+            updatedQueue[idx].isFailed = true;
+            failedPermanently.add(item.payload);
+          }
+        }
+        
+        // Update Live Activity on error if it's a URL
+        if (item.type == 'url') {
+          await WidgetService.endIngestionLiveActivity(item.payload, isSuccess: false, error: 'Queue: Ingestion Failed');
+        }
       }
     }
 
-    await _saveRetryCounts(retryCounts);
+    // Save the updated queue states (with incremented retries/failed flags)
+    await _saveQueue(updatedQueue);
+
     return QueueProcessResult(
       processed: processed, 
       failed: failed, 
@@ -86,41 +152,10 @@ class QueueService {
     );
   }
 
-  void _handleFailure(
-    String url, 
-    String errorMessage, 
-    Map<String, int> retryCounts, 
-    List<String> failedPermanently, 
-    Map<String, String> errors
-  ) {
-    errors[url] = errorMessage;
-    retryCounts[url] = (retryCounts[url] ?? 0) + 1;
-    if (retryCounts[url]! >= 3) {
-      removeFromQueue(url);
-      failedPermanently.add(url);
-    }
-  }
-
-  Future<void> _saveQueue(List<String> queue) async {
+  Future<void> _saveQueue(List<QueueItem> queue) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyPendingUrls, jsonEncode(queue));
-  }
-
-  Future<Map<String, int>> _getRetryCounts() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_keyRetryCounts);
-    if (raw == null || raw.isEmpty) return {};
-    try {
-      final Map<String, dynamic> decoded = jsonDecode(raw);
-      return decoded.map((key, value) => MapEntry(key, value as int));
-    } catch (_) {
-      return {};
-    }
-  }
-
-  Future<void> _saveRetryCounts(Map<String, int> counts) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyRetryCounts, jsonEncode(counts));
+    final raw = jsonEncode(queue.map((item) => item.toJson()).toList());
+    await prefs.setString(_keyPendingItems, raw);
   }
 }
 

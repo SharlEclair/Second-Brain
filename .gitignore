@@ -23,6 +23,10 @@ url_index.json
 
 # Configuration / Credentials
 ngrok.yml
+credentials.json
+token.json
+celerybeat-schedule*
+serendipity_state.json
 
 # Portable JDK
 jdk-portable/

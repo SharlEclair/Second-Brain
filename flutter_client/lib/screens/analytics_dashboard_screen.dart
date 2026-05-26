@@ -221,7 +221,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFFEA580C)))
+          ? Center(child: CircularProgressIndicator(color: primaryColor))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20.0),
               child: Column(
@@ -240,7 +240,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                         title: "TOTAL NOTES",
                         value: _totalNotes.toString(),
                         icon: Icons.folder_open_outlined,
-                        color: const Color(0xFFEA580C),
+                        color: primaryColor,
                       ),
                       _buildGlassmorphicCard(
                         title: "INGESTS",
@@ -301,14 +301,14 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                                     height: (heightPct * 80).clamp(5.0, 80.0),
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(4),
-                                      gradient: const LinearGradient(
+                                      gradient: LinearGradient(
                                         begin: Alignment.bottomCenter,
                                         end: Alignment.topCenter,
-                                        colors: [Color(0xFFEA580C), Color(0xFFF97316)],
+                                        colors: [primaryColor, primaryColor.withOpacity(0.8)],
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: const Color(0xFFEA580C).withOpacity(0.2),
+                                          color: primaryColor.withOpacity(0.2),
                                           blurRadius: 4,
                                           spreadRadius: 1,
                                         )
@@ -353,7 +353,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                         const SizedBox(height: 16),
                         _buildSourceRow("Shared URLs / Media", _sourceUrl, _ingestCount, const Color(0xFF3B82F6)),
                         _buildSourceRow("Clipboard Sync", _sourceClipboard, _ingestCount, const Color(0xFF10B981)),
-                        _buildSourceRow("Voice Transcribe", _sourceVoice, _ingestCount, const Color(0xFFEA580C)),
+                        _buildSourceRow("Voice Transcribe", _sourceVoice, _ingestCount, primaryColor),
                         _buildSourceRow("Quick Scratchpad", _sourceScratchpad, _ingestCount, const Color(0xFFF59E0B)),
                       ],
                     ),

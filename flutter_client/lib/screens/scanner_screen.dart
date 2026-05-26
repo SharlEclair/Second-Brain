@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import '../services/api_service.dart';
+import '../services/queue_service.dart';
+
 
 class ScannerScreen extends StatefulWidget {
   const ScannerScreen({super.key});
@@ -40,17 +42,38 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     setState(() {
       _isUploading = true;
-      _uploadStatus = "Uploading ${_scannedPictures.length} document(s)...";
+      _uploadStatus = "Queueing ${_scannedPictures.length} document(s)...";
     });
 
+    final QueueService queueService = QueueService();
+    final List<QueueItem> queuedItems = [];
+
+    // 1. Add all documents to the persistent queue first
+    for (final path in _scannedPictures) {
+      final fileName = path.replaceAll('\\', '/').split('/').last;
+      final queueItem = QueueItem(
+        id: '${DateTime.now().millisecondsSinceEpoch}_${path.hashCode}',
+        type: 'file',
+        payload: path,
+        title: fileName,
+      );
+      await queueService.addToQueue(queueItem);
+      queuedItems.add(queueItem);
+    }
+
     try {
-      for (int i = 0; i < _scannedPictures.length; i++) {
-        final path = _scannedPictures[i];
+      // 2. Attempt uploading each queued document
+      for (int i = 0; i < queuedItems.length; i++) {
+        final item = queuedItems[i];
         if (!mounted) return;
         setState(() {
-          _uploadStatus = "Uploading document ${i + 1}/${_scannedPictures.length}...";
+          _uploadStatus = "Uploading document ${i + 1}/${queuedItems.length}...";
         });
-        await _apiService.uploadFile(path);
+        
+        await _apiService.uploadFile(item.payload, customFileName: item.title);
+        
+        // Verified success - remove from the persistent queue
+        await queueService.removeFromQueue(item.id);
       }
       
       if (!mounted) return;
@@ -72,13 +95,15 @@ class _ScannerScreenState extends State<ScannerScreen> {
       setState(() {
         _isUploading = false;
         _uploadStatus = "Upload failed: $e";
+        _scannedPictures.clear(); // Clear local display state since items are safely queued
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Upload failed: $e"),
-          backgroundColor: Colors.red,
+          content: Text("Upload failed: $e. Saved to queue."),
+          backgroundColor: Colors.orange,
         ),
       );
+      Navigator.pop(context);
     }
   }
 
@@ -205,8 +230,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ],
             const SizedBox(height: 16),
             if (_isUploading)
-              const Center(
-                child: CircularProgressIndicator(color: Color(0xFFF97316)),
+              Center(
+                child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
               )
             else ...[
               ElevatedButton.icon(
@@ -214,7 +239,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 icon: const Icon(Icons.camera_alt),
                 label: const Text('Scan Page'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF97316),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(

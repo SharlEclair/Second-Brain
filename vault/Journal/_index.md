@@ -1,6 +1,6 @@
 # Journal Index
 
-This category tracks the evolving landscape of daily thoughts and experiences, one entry at a time.
+This "Journal" category captures fleeting moments and daily reflections, offering a personal glimpse into the unfolding of time.
 
 This folder contains 2 articles related to Journal.
 

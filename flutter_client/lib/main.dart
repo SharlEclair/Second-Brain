@@ -1,23 +1,24 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'theme/app_theme.dart';
+import 'router/app_router.dart';
+import 'providers/providers.dart';
 import 'screens/chat_screen.dart';
-import 'screens/notes_browser_screen.dart';
-import 'screens/debug_logs_screen.dart';
-import 'screens/note_viewer_screen.dart';
-import 'screens/quick_ask_screen.dart';
 import 'screens/scratchpad_screen.dart';
-import 'services/api_service.dart';
-import 'services/queue_service.dart';
+import 'screens/quick_ask_screen.dart';
+import 'widgets/command_palette_overlay.dart';
 import 'services/widget_service.dart';
-import 'services/analytics_service.dart';
+import 'services/widget_sync_service.dart';
 import 'services/notification_service.dart';
 import 'services/geofence_service.dart';
 import 'services/offline_queue_service.dart';
 import 'services/share_service.dart';
 import 'services/clipboard_service.dart';
+import 'services/background_share_service.dart';
+import 'services/debug_logger.dart';
 
 class MyHttpOverrides extends HttpOverrides {
   @override
@@ -27,40 +28,51 @@ class MyHttpOverrides extends HttpOverrides {
   }
 }
 
-final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.dark);
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
+  
   final prefs = await SharedPreferences.getInstance();
-  final isLight = prefs.getBool('is_light_theme') ?? false;
-  themeNotifier.value = isLight ? ThemeMode.light : ThemeMode.dark;
+  
   try {
-    await NotificationService().initialize(navigatorKey);
+    await NotificationService().initialize(rootNavigatorKey);
   } catch (e) {
     debugPrint("Failed to initialize NotificationService: $e");
   }
-  runApp(const SecondBrainApp());
+  
+  try {
+    await WidgetSyncService.initialize();
+  } catch (e) {
+    debugPrint("Failed to initialize WidgetSyncService: $e");
+  }
+  
+  runApp(
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: const SecondBrainApp(),
+    ),
+  );
 }
 
-class SecondBrainApp extends StatefulWidget {
+class SecondBrainApp extends ConsumerStatefulWidget {
   const SecondBrainApp({super.key});
 
   @override
-  State<SecondBrainApp> createState() => _SecondBrainAppState();
+  ConsumerState<SecondBrainApp> createState() => _SecondBrainAppState();
 }
 
-class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObserver {
+class _SecondBrainAppState extends ConsumerState<SecondBrainApp> with WidgetsBindingObserver {
   static const _channel = MethodChannel('com.example.second_brain/actions');
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-  final GlobalKey<NavigatorState> _navigatorKey = navigatorKey;
-  final ApiService _apiService = ApiService();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    final apiService = ref.read(apiServiceProvider);
 
     // Set up MethodChannel listener for widget actions
     _channel.setMethodCallHandler((call) async {
@@ -80,16 +92,17 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
     });
 
     // Sync all widgets on startup
-    WidgetService.syncAllWidgets(_apiService);
+    WidgetService.syncAllWidgets(apiService);
 
-    // Initialize ShareService
+    // Initialize ShareService and BackgroundShareService
     ShareService.initialize(
-      navigatorKey: _navigatorKey,
+      navigatorKey: rootNavigatorKey,
       scaffoldMessengerKey: _scaffoldMessengerKey,
     );
+    BackgroundShareService.initialize();
 
     // Check geofences on startup
-    GeofenceService.checkGeofences(_apiService);
+    GeofenceService.checkGeofences(apiService);
 
     // Initialize connectivity listener for offline queues
     OfflineQueueService.initialize();
@@ -107,7 +120,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ClipboardService.checkClipboardForIngest(context);
-      GeofenceService.checkGeofences(_apiService);
+      GeofenceService.checkGeofences(ref.read(apiServiceProvider));
     }
   }
 
@@ -122,7 +135,7 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
     DebugLogger.log('Triggering Widget Action: $action', type: 'WIDGET');
     
     // Pop any open sub-screens/overlays to ensure we are at the root context
-    _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+    rootNavigatorKey.currentState?.popUntil((route) => route.isFirst);
 
     switch (action) {
       case 'action/voice':
@@ -144,94 +157,37 @@ class _SecondBrainAppState extends State<SecondBrainApp> with WidgetsBindingObse
         break;
       case 'action/scratchpad':
         _showToast('✏️ Launching Quick Scratchpad...');
-        _navigatorKey.currentState?.push(
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => const ScratchpadScreen(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              const begin = Offset(0.0, 1.0);
-              const end = Offset.zero;
-              const curve = Curves.easeInOutCubic;
-              var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-              return SlideTransition(
-                position: animation.drive(tween),
-                child: child,
-              );
-            },
-          ),
-        );
+        appRouter.push('/scratchpad');
         break;
       case 'action/search':
-        _showToast('🔍 Notes Browser focused');
-        _navigatorKey.currentState?.push(
-          MaterialPageRoute(builder: (context) => const NotesBrowserScreen(focusSearch: true))
+        _showToast('🔍 Command Palette opened');
+        rootNavigatorKey.currentState?.push(
+          PageRouteBuilder(
+            opaque: false,
+            barrierColor: Colors.black.withOpacity(0.40),
+            pageBuilder: (context, _, __) => const CommandPaletteOverlay(),
+          ),
         );
         break;
       case 'action/quick_ask':
         _showToast('🧠 Quick Ask');
-        _navigatorKey.currentState?.push(
-          PageRouteBuilder(
-            opaque: false,
-            barrierColor: Colors.black.withOpacity(0.6),
-            pageBuilder: (context, _, __) => const QuickAskScreen(),
-          ),
-        );
+        appRouter.push('/quick_ask');
         break;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: themeNotifier,
-      builder: (context, currentMode, _) {
-        return MaterialApp(
-          title: 'Second Brain',
-          navigatorKey: _navigatorKey,
-          scaffoldMessengerKey: _scaffoldMessengerKey,
-          debugShowCheckedModeBanner: false,
-          themeMode: currentMode,
-          theme: ThemeData(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFFEA580C),
-              surface: Colors.white,
-              onSurface: Color(0xFF0F172A),
-            ),
-            scaffoldBackgroundColor: const Color(0xFFFAFAFA),
-            useMaterial3: true,
-            fontFamily: 'Roboto',
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.white,
-              foregroundColor: Color(0xFF0F172A),
-              elevation: 0,
-            ),
-          ),
-          darkTheme: ThemeData(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFFF97316),
-              surface: Color(0xFF111111),
-              onSurface: Colors.white,
-            ),
-            scaffoldBackgroundColor: const Color(0xFF050505),
-            useMaterial3: true,
-            fontFamily: 'Roboto',
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Color(0xFF111111),
-              foregroundColor: Colors.white,
-              elevation: 0,
-            ),
-          ),
-          home: const ChatScreen(),
-          onGenerateRoute: (settings) {
-            if (settings.name == '/note_viewer') {
-              final fileName = settings.arguments as String;
-              return MaterialPageRoute(
-                builder: (context) => NoteLoaderScreen(fileName: fileName),
-              );
-            }
-            return null;
-          },
-        );
-      },
+    final currentMode = ref.watch(themeModeProvider);
+
+    return MaterialApp.router(
+      title: 'Second Brain',
+      routerConfig: appRouter,
+      scaffoldMessengerKey: _scaffoldMessengerKey,
+      debugShowCheckedModeBanner: false,
+      themeMode: currentMode,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
     );
   }
 }

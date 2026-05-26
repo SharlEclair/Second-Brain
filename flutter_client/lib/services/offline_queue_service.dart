@@ -32,14 +32,14 @@ class OfflineQueueService {
           DebugLogger.log('Error processing Isar syncUp: $e', type: 'ERROR');
         }
 
-        // 1. Process URL Ingestion queue
+        // 1. Process Unified Ingestion queue
         try {
           final res = await _queueService.processQueue(_apiService);
           if (res.processed > 0) {
-            DebugLogger.log('Synced ${res.processed} pending URLs from queue.', type: 'SYSTEM');
+            DebugLogger.log('Synced ${res.processed} pending items from queue.', type: 'SYSTEM');
           }
         } catch (e) {
-          DebugLogger.log('Error processing URL queue: $e', type: 'ERROR');
+          DebugLogger.log('Error processing ingestion queue: $e', type: 'ERROR');
         }
 
         // 2. Process Audio Ingestion queue

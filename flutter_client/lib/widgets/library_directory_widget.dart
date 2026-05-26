@@ -99,8 +99,8 @@ class _LibraryDirectoryWidgetState extends State<LibraryDirectoryWidget> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFFF97316)),
+      return Center(
+        child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
       );
     }
 
@@ -124,8 +124,8 @@ class _LibraryDirectoryWidgetState extends State<LibraryDirectoryWidget> {
                 icon: const Icon(Icons.refresh),
                 label: const Text('RETRY'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF97316),
-                  foregroundColor: Colors.black,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: isDark ? Colors.white : Colors.black,
                 ),
               ),
             ],
@@ -144,7 +144,7 @@ class _LibraryDirectoryWidgetState extends State<LibraryDirectoryWidget> {
     }
 
     return RefreshIndicator(
-      color: const Color(0xFFF97316),
+      color: Theme.of(context).colorScheme.primary,
       onRefresh: _loadMasterIndex,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -273,7 +273,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
         },
         leading: Icon(
           Icons.folder_special,
-          color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+          color: Theme.of(context).colorScheme.primary,
         ),
         title: Row(
           children: [
@@ -291,7 +291,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: (isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)).withOpacity(0.1),
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -299,7 +299,7 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
               ),
@@ -321,13 +321,13 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
             : null,
         children: [
           if (_isLoadingNotes)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
               child: Center(
                 child: SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF97316)),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary),
                 ),
               ),
             )
@@ -381,8 +381,8 @@ class _CategoryExpansionTileState extends State<CategoryExpansionTile> {
                     showDialog(
                       context: context,
                       barrierDismissible: false,
-                      builder: (context) => const Center(
-                        child: CircularProgressIndicator(color: Color(0xFFF97316)),
+                      builder: (context) => Center(
+                        child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
                       ),
                     );
 

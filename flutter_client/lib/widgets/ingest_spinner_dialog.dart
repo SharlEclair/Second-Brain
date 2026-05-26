@@ -74,6 +74,8 @@ class _IngestSpinnerDialogState extends State<IngestSpinnerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -83,10 +85,10 @@ class _IngestSpinnerDialogState extends State<IngestSpinnerDialog> {
           decoration: BoxDecoration(
             color: const Color(0xEE0A0A0C),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFEA580C).withOpacity(0.4), width: 1.5),
+            border: Border.all(color: primaryColor.withOpacity(0.4), width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFEA580C).withOpacity(0.2),
+                color: primaryColor.withOpacity(0.2),
                 blurRadius: 30,
                 spreadRadius: 2,
               )
@@ -95,10 +97,10 @@ class _IngestSpinnerDialogState extends State<IngestSpinnerDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 "KNOWLEDGE INGESTION",
                 style: TextStyle(
-                  color: Color(0xFFEA580C),
+                  color: primaryColor,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.5,
@@ -114,14 +116,14 @@ class _IngestSpinnerDialogState extends State<IngestSpinnerDialog> {
                     child: CircularProgressIndicator(
                       value: _progress > 0 ? _progress : null,
                       strokeWidth: 4,
-                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFEA580C)),
+                      valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
                       backgroundColor: Colors.white10,
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.psychology,
                     size: 36,
-                    color: Color(0xFFEA580C),
+                    color: primaryColor,
                   ),
                 ],
               ),

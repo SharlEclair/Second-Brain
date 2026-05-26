@@ -17,7 +17,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="🧠 BRAIN_SPARK"
-            android:textColor="#FF9F43"
+            android:textColor="@color/widget_accent"
             android:textSize="11sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-black"
@@ -31,7 +31,7 @@
             android:layout_centerVertical="true"
             android:gravity="center"
             android:text="🔄"
-            android:textColor="#88FFFFFF"
+            android:textColor="@color/widget_text_secondary"
             android:textSize="14sp"
             android:contentDescription="Refresh Insight" />
     </RelativeLayout>
@@ -46,7 +46,7 @@
         android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp"
         android:text="Select 'Sync Vault' or tap refresh to load insights from your ingested knowledge."
-        android:textColor="#E2E8F0"
+        android:textColor="@color/widget_text_primary"
         android:textSize="13sp"
         android:fontFamily="sans-serif-light"
         android:maxLines="3"
@@ -60,7 +60,7 @@
         android:layout_height="1dp"
         android:layout_above="@id/action_bar"
         android:layout_marginBottom="8dp"
-        android:background="#1AFFFFFF" />
+        android:background="@color/widget_divider" />
 
     <!-- Bottom Actions Grid -->
     <LinearLayout
@@ -83,7 +83,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="🎙️ Record"
-                android:textColor="#CBD5E1"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="11sp"
                 android:fontFamily="sans-serif"
                 android:textStyle="bold" />
@@ -93,7 +93,7 @@
         <ImageView
             android:layout_width="1dp"
             android:layout_height="16dp"
-            android:background="#1AFFFFFF" />
+            android:background="@color/widget_divider" />
 
         <!-- Clipboard Ingest Target -->
         <LinearLayout
@@ -107,7 +107,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="📋 Ingest Link"
-                android:textColor="#CBD5E1"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="11sp"
                 android:fontFamily="sans-serif"
                 android:textStyle="bold" />
@@ -117,7 +117,7 @@
         <ImageView
             android:layout_width="1dp"
             android:layout_height="16dp"
-            android:background="#1AFFFFFF" />
+            android:background="@color/widget_divider" />
 
         <!-- Scratchpad Quick Note Target -->
         <LinearLayout
@@ -131,7 +131,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="✏️ Scratchpad"
-                android:textColor="#CBD5E1"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="11sp"
                 android:fontFamily="sans-serif"
                 android:textStyle="bold" />

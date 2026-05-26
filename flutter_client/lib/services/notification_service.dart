@@ -9,7 +9,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
-import '../screens/debug_logs_screen.dart';
+import 'debug_logger.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();

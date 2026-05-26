@@ -4,8 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import '../services/api_service.dart';
 import '../services/queue_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/providers.dart';
 import '../services/widget_service.dart';
 import '../screens/debug_logs_screen.dart';
+import '../services/debug_logger.dart';
 import 'settings_screen.dart';
 import 'notes_browser_screen.dart';
 import 'audit_dashboard_screen.dart';
@@ -18,6 +21,8 @@ import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import '../services/audio_ingest_service.dart';
 import '../widgets/events_carousel.dart';
 import '../widgets/library_directory_widget.dart';
+import '../widgets/command_palette_overlay.dart';
+import '../services/haptic_feedback_manager.dart';
 
 class ChatMessage {
   final String text;
@@ -26,20 +31,20 @@ class ChatMessage {
   ChatMessage({required this.text, required this.isUser});
 }
 
-class ChatScreen extends StatefulWidget {
+class ChatScreen extends ConsumerStatefulWidget {
   static final ValueNotifier<String?> widgetActionNotifier = ValueNotifier<String?>(null);
   const ChatScreen({super.key});
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _textController = TextEditingController();
   final TextEditingController _urlController = TextEditingController();
   final List<ChatMessage> _messages = [];
-  final ApiService _apiService = ApiService();
-  final QueueService _queueService = QueueService();
+  late final ApiService _apiService;
+  late final QueueService _queueService;
   int _selectedIndex = 1; // 0: Calendar, 1: Efforts, 2: Atlas
   bool _isSpeedDialOpen = false;
   bool _isBrainDumping = false;
@@ -47,7 +52,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isLoading = false;
   bool _isIngesting = false;
   int _queueCount = 0;
-  List<String> _queuedUrls = [];
+  List<QueueItem> _queuedUrls = [];
   Map<String, String> _queueErrors = {};
   bool _isProcessingQueue = false;
   String _currentStatus = "";
@@ -70,6 +75,8 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    _apiService = ref.read(apiServiceProvider);
+    _queueService = ref.read(queueServiceProvider);
     _refreshQueue();
     _startRawCountPolling();
     _loadUpcomingEvents();
@@ -270,13 +277,30 @@ class _ChatScreenState extends State<ChatScreen> {
     final url = _urlController.text.trim();
     if (url.isEmpty) return;
 
+    final queueItem = QueueItem(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      type: 'url',
+      payload: url,
+    );
+    await _queueService.addToQueue(queueItem);
+    await _refreshQueue();
+
     setState(() => _isIngesting = true);
     _startStatusPolling(url: url);
 
     try {
+      await WidgetService.startIngestionLiveActivity(url);
+      await WidgetService.updateIngestionLiveActivity(url, 'Parsing URL...', 0.3);
       final result = await _apiService.ingestUrl(url);
+      await WidgetService.updateIngestionLiveActivity(url, 'Saving to Vault...', 0.8);
       // Update widgets on success
       WidgetService.syncAllWidgets(_apiService);
+      await WidgetService.endIngestionLiveActivity(url, isSuccess: true);
+      
+      // Verified success - remove from local queue
+      await _queueService.removeFromQueue(queueItem.id);
+      await _refreshQueue();
+
       if (mounted) {
         _urlController.clear();
         final status = result['status'];
@@ -290,8 +314,14 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
     } catch (e) {
-      await _queueService.addToQueue(url);
-      await _refreshQueue();
+      // Kept in queue on error
+      if (e is NetworkException) {
+        await WidgetService.endIngestionLiveActivity(url, isSuccess: false, error: 'Queued (Offline)');
+      } else if (e is ServerException) {
+        await WidgetService.endIngestionLiveActivity(url, isSuccess: false, error: 'Queued (Server error)');
+      } else {
+        await WidgetService.endIngestionLiveActivity(url, isSuccess: false, error: 'Queued');
+      }
       if (mounted) {
         _urlController.clear();
         String message = '📌 Queued';
@@ -305,7 +335,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message),
-            backgroundColor: const Color(0xFFF97316),
+            backgroundColor: Theme.of(context).colorScheme.primary,
           ),
         );
       }
@@ -338,7 +368,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Processed ${result.processed}/${result.total}${result.failed > 0 ? " · ${result.failed} failed" : ""}'),
-            backgroundColor: result.failed == 0 ? const Color(0xFF22C55E) : const Color(0xFFF97316),
+            backgroundColor: result.failed == 0 ? const Color(0xFF22C55E) : Theme.of(context).colorScheme.primary,
           ),
         );
       }
@@ -365,11 +395,24 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _showCommandPalette() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: "CommandPalette",
+      barrierColor: Colors.black.withOpacity(0.40),
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (context, anim1, anim2) => const CommandPaletteOverlay(),
+    );
+  }
+
   // --- Chat ---
 
   void _sendMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
+
+    HapticFeedbackManager.mediumImpact();
 
     setState(() {
       _messages.add(ChatMessage(text: text, isUser: true));
@@ -461,67 +504,91 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('CORTEX', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 3.0, fontSize: 16)),
-        backgroundColor: const Color(0xFF111111),
-        shape: const Border(bottom: BorderSide(color: Color(0xFF222222), width: 1)),
-        actions: [
-          if (_queueCount > 0)
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Badge(
-                label: Text('$_queueCount'),
-                backgroundColor: const Color(0xFFF97316),
-                child: IconButton(
-                  icon: const Icon(Icons.schedule, color: Colors.white70),
-                  onPressed: _showQueueBottomSheet,
-                  tooltip: "Queued links",
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (FocusNode node, KeyEvent event) {
+        if (event is KeyDownEvent) {
+          final isCtrl = HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed;
+          if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyP) {
+            _showCommandPalette();
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.slash) {
+            if (_textController.text.isEmpty) {
+              _showCommandPalette();
+              return KeyEventResult.handled;
+            }
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('CORTEX', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 3.0, fontSize: 16)),
+          backgroundColor: const Color(0xFF111111),
+          shape: const Border(bottom: BorderSide(color: Color(0xFF222222), width: 1)),
+          actions: [
+            if (_queueCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Badge(
+                  label: Text('$_queueCount'),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  child: IconButton(
+                    icon: const Icon(Icons.schedule, color: Colors.white70),
+                    onPressed: _showQueueBottomSheet,
+                    tooltip: "Queued links",
+                  ),
                 ),
               ),
+            IconButton(
+              icon: const Icon(Icons.search, color: Colors.white70),
+              onPressed: _showCommandPalette,
+              tooltip: "Command Palette",
             ),
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white70),
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
-            },
-          )
-        ],
-      ),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: [
-          _buildCalendarTab(),
-          _buildEffortsTab(),
-          _buildAtlasTab(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: const Color(0xFF111111),
-        selectedItemColor: const Color(0xFFF97316),
-        unselectedItemColor: Colors.white38,
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Calendar'),
-          BottomNavigationBarItem(icon: Icon(Icons.bolt), label: 'Efforts'),
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Atlas'),
-        ],
-      ),
-      floatingActionButton: _isBrainDumping
-          ? BrainDumpButton(
-              onComplete: () {
-                setState(() {
-                  _isBrainDumping = false;
-                });
+            IconButton(
+              icon: const Icon(Icons.settings, color: Colors.white70),
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
               },
             )
-          : _buildSpeedDial(isDark),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+          ],
+        ),
+        body: IndexedStack(
+          index: _selectedIndex,
+          children: [
+            _buildCalendarTab(),
+            _buildEffortsTab(),
+            _buildAtlasTab(),
+          ],
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          backgroundColor: const Color(0xFF111111),
+          selectedItemColor: Theme.of(context).colorScheme.primary,
+          unselectedItemColor: Colors.white38,
+          currentIndex: _selectedIndex,
+          onTap: (index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+          },
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Calendar'),
+            BottomNavigationBarItem(icon: Icon(Icons.bolt), label: 'Efforts'),
+            BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Atlas'),
+          ],
+        ),
+        floatingActionButton: _isBrainDumping
+            ? BrainDumpButton(
+                onComplete: () {
+                  setState(() {
+                    _isBrainDumping = false;
+                  });
+                },
+              )
+            : _buildSpeedDial(isDark),
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      ),
     );
   }
 
@@ -545,57 +612,41 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       );
     }
-    return Column(
-      children: [
-        const SizedBox(height: 16),
-        const Text(
-          "UPCOMING EVENTS",
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2,
-            color: Color(0xFFF97316),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Expanded(
-          child: EventsCarousel(
-            events: _upcomingEvents,
-            onEventTap: (fileName, title) async {
-              setState(() => _isLoading = true);
-              try {
-                final storage = StorageService();
-                var content = await storage.readNote(fileName);
-                if (content == null) {
-                  content = await _apiService.fetchNoteContent(fileName);
-                  await storage.saveNote(fileName, content);
-                }
-                if (mounted) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => NoteViewerScreen(
-                        title: title,
-                        content: content!,
-                        fileName: fileName,
-                      ),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to load note: $e')),
-                  );
-                }
-              } finally {
-                if (mounted) {
-                  setState(() => _isLoading = false);
-                }
-              }
-            },
-          ),
-        ),
-      ],
+    return EventsAgendaView(
+      events: _upcomingEvents,
+      onEventTap: (fileName, title) async {
+        setState(() => _isLoading = true);
+        try {
+          final storage = StorageService();
+          var content = await storage.readNote(fileName);
+          if (content == null) {
+            content = await _apiService.fetchNoteContent(fileName);
+            await storage.saveNote(fileName, content);
+          }
+          if (mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NoteViewerScreen(
+                  title: title,
+                  content: content!,
+                  fileName: fileName,
+                ),
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to load note: $e')),
+            );
+          }
+        } finally {
+          if (mounted) {
+            setState(() => _isLoading = false);
+          }
+        }
+      },
     );
   }
 
@@ -665,7 +716,7 @@ class _ChatScreenState extends State<ChatScreen> {
             _isSpeedDialOpen = true;
           });
         },
-        backgroundColor: const Color(0xFFF97316),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         child: const Icon(Icons.add, color: Colors.black),
       );
     }
@@ -683,7 +734,7 @@ class _ChatScreenState extends State<ChatScreen> {
               _isBrainDumping = true;
             });
           },
-          child: const Icon(Icons.mic, color: Color(0xFFF97316)),
+          child: Icon(Icons.mic, color: Theme.of(context).colorScheme.primary),
         ),
         const SizedBox(height: 8),
         FloatingActionButton.small(
@@ -693,7 +744,7 @@ class _ChatScreenState extends State<ChatScreen> {
             setState(() { _isSpeedDialOpen = false; });
             Navigator.push(context, MaterialPageRoute(builder: (context) => const ScannerScreen()));
           },
-          child: const Icon(Icons.document_scanner, color: Color(0xFFF97316)),
+          child: Icon(Icons.document_scanner, color: Theme.of(context).colorScheme.primary),
         ),
         const SizedBox(height: 8),
         FloatingActionButton.small(
@@ -703,7 +754,7 @@ class _ChatScreenState extends State<ChatScreen> {
             setState(() { _isSpeedDialOpen = false; });
             Navigator.push(context, MaterialPageRoute(builder: (context) => const QuickAskScreen()));
           },
-          child: const Icon(Icons.text_fields, color: Color(0xFFF97316)),
+          child: Icon(Icons.text_fields, color: Theme.of(context).colorScheme.primary),
         ),
         const SizedBox(height: 8),
         FloatingActionButton(
@@ -756,7 +807,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8.0),
-                      borderSide: BorderSide(color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C), width: 1),
+                      borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1),
                     ),
                     prefixIcon: IconButton(
                       icon: Icon(Icons.content_paste, color: isDark ? Colors.white30 : Colors.black38, size: 18),
@@ -776,7 +827,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: ElevatedButton(
                   onPressed: (_isIngesting || _isProcessingQueue) ? null : _ingestUrl,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.black,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -799,12 +850,12 @@ class _ChatScreenState extends State<ChatScreen> {
               color: isDark ? const Color(0xFF111111) : Colors.white,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: (isDark ? const Color(0xFFE55B13) : const Color(0xFFEA580C)).withOpacity(0.3),
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: (isDark ? const Color(0xFFE55B13) : const Color(0xFFEA580C)).withOpacity(0.05),
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
                   blurRadius: 10,
                   spreadRadius: 1,
                 )
@@ -814,7 +865,7 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 Icon(
                   Icons.inbox,
-                  color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                  color: Theme.of(context).colorScheme.primary,
                   size: 20,
                 ),
                 const SizedBox(width: 12),
@@ -826,7 +877,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       Text(
                         _isCompiling ? "COMPILING INBOX..." : "PENDING CLIPPINGS IN INBOX",
                         style: TextStyle(
-                          color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                          color: Theme.of(context).colorScheme.primary,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1.0,
@@ -847,17 +898,17 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 const SizedBox(width: 8),
                 _isCompiling
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF97316)),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary),
                     )
                   : ElevatedButton.icon(
                       onPressed: _runCompile,
                       icon: const Icon(Icons.auto_awesome, size: 14),
                       label: const Text("COMPILE", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
                         foregroundColor: Colors.black,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
@@ -924,7 +975,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 p: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 15, height: 1.5),
                                 code: TextStyle(
                                   backgroundColor: isDark ? Colors.black38 : const Color(0xFFF1F5F9),
-                                  color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                                  color: Theme.of(context).colorScheme.primary,
                                 ),
                                 codeblockDecoration: BoxDecoration(
                                   color: isDark ? const Color(0xFF050505) : const Color(0xFFF8FAFC),
@@ -941,7 +992,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   icon: Icon(
                                     Icons.auto_awesome,
                                     size: 16,
-                                    color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                                    color: Theme.of(context).colorScheme.primary,
                                   ),
                                   label: Text(
                                     "PROMOTE TO WIKI",
@@ -953,11 +1004,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                     ),
                                   ),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: (isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)).withOpacity(0.15),
-                                    shadowColor: (isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)).withOpacity(0.2),
+                                    backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                                    shadowColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                                     elevation: 0,
                                     side: BorderSide(
-                                      color: (isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)).withOpacity(0.5),
+                                      color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
                                       width: 1,
                                     ),
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -999,7 +1050,7 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Row(
               children: [
                 const SizedBox(width: 8),
-                const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF97316))),
+                SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary)),
                 const SizedBox(width: 12),
                 Text("Querying Vault...", style: TextStyle(color: Colors.white54, fontSize: 12, fontFamily: 'monospace')),
               ],
@@ -1009,24 +1060,24 @@ class _ChatScreenState extends State<ChatScreen> {
         // --- Chat Input ---
         Container(
           padding: const EdgeInsets.all(16.0),
-          decoration: const BoxDecoration(
-            color: Color(0xFF111111),
-            border: Border(top: BorderSide(color: Color(0xFF222222))),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
           ),
           child: Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _textController,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                   decoration: InputDecoration(
                     hintText: "ASK YOUR BRAIN...",
-                    hintStyle: const TextStyle(color: Colors.white30, fontFamily: 'monospace', fontSize: 14),
-                    fillColor: const Color(0xFF050505),
+                    hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3), fontFamily: 'monospace', fontSize: 14),
+                    fillColor: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFF0F0F2),
                     filled: true,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0), borderSide: const BorderSide(color: Color(0xFF333333))),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0), borderSide: const BorderSide(color: Color(0xFF222222))),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0), borderSide: const BorderSide(color: Color(0xFFF97316), width: 1)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16.0), borderSide: BorderSide.none),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16.0), borderSide: BorderSide.none),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16.0), borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2)),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
                   onSubmitted: (_) => _sendMessage(),
@@ -1089,7 +1140,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           Text(
                             "QUEUED LINKS",
                             style: TextStyle(
-                              color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C),
+                              color: Theme.of(context).colorScheme.primary,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 1.5,
                               fontSize: 13,
@@ -1132,7 +1183,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: _queueCount > 0
-                                  ? (isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C))
+                                  ? Theme.of(context).colorScheme.primary
                                   : (isDark ? const Color(0xFF333333) : const Color(0xFFE2E8F0)),
                                 foregroundColor: isDark ? Colors.black : Colors.white,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1177,85 +1228,95 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           )
                         : ListView.builder(
-                            shrinkWrap: true,
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            itemCount: _queuedUrls.length,
-                            itemBuilder: (context, index) {
-                              final url = _queuedUrls[index];
-                              IconData platformIcon = Icons.link;
-                              Color platformColor = isDark ? Colors.white38 : Colors.black38;
-                              if (url.contains('instagram.com')) {
-                                platformIcon = Icons.camera_alt;
-                                platformColor = const Color(0xFFE1306C);
-                              } else if (url.contains('youtube.com') || url.contains('youtu.be')) {
-                                platformIcon = Icons.play_circle;
-                                platformColor = const Color(0xFFFF0000);
-                              } else if (url.contains('tiktok.com')) {
-                                platformIcon = Icons.music_note;
-                                platformColor = isDark ? Colors.white70 : Colors.black54;
-                              }
+                              shrinkWrap: true,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: _queuedUrls.length,
+                              itemBuilder: (context, index) {
+                                final item = _queuedUrls[index];
+                                final displayName = item.title ?? item.payload;
+                                IconData platformIcon = Icons.link;
+                                Color platformColor = isDark ? Colors.white38 : Colors.black38;
+                                
+                                if (item.type == 'url') {
+                                  if (item.payload.contains('instagram.com')) {
+                                    platformIcon = Icons.camera_alt;
+                                    platformColor = const Color(0xFFE1306C);
+                                  } else if (item.payload.contains('youtube.com') || item.payload.contains('youtu.be')) {
+                                    platformIcon = Icons.play_circle;
+                                    platformColor = const Color(0xFFFF0000);
+                                  } else if (item.payload.contains('tiktok.com')) {
+                                    platformIcon = Icons.music_note;
+                                    platformColor = isDark ? Colors.white70 : Colors.black54;
+                                  }
+                                } else if (item.type == 'text') {
+                                  platformIcon = Icons.note_alt;
+                                  platformColor = Colors.blueAccent;
+                                } else if (item.type == 'file') {
+                                  platformIcon = Icons.file_present;
+                                  platformColor = Colors.orangeAccent;
+                                }
 
-                              return Dismissible(
-                                key: Key(url),
-                                direction: DismissDirection.endToStart,
-                                background: Container(
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 20),
-                                  color: Colors.red.withOpacity(0.2),
-                                  child: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                ),
-                                onDismissed: (_) => _removeFromQueue(url),
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  decoration: BoxDecoration(
-                                    color: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF1F5F9),
-                                    border: Border.all(
-                                      color: _queueErrors.containsKey(url)
-                                        ? Colors.red.withOpacity(0.3)
-                                        : (isDark ? const Color(0xFF222222) : const Color(0xFFE2E8F0)),
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
+                                return Dismissible(
+                                  key: Key(item.id),
+                                  direction: DismissDirection.endToStart,
+                                  background: Container(
+                                    alignment: Alignment.centerRight,
+                                    padding: const EdgeInsets.only(right: 20),
+                                    color: Colors.red.withOpacity(0.2),
+                                    child: const Icon(Icons.delete, color: Colors.red, size: 20),
                                   ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(platformIcon, color: platformColor, size: 20),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Text(
-                                              url,
-                                              style: TextStyle(
-                                                color: isDark ? Colors.white70 : Colors.black87,
-                                                fontSize: 12,
-                                                fontFamily: 'monospace',
+                                  onDismissed: (_) => _removeFromQueue(item.id),
+                                  child: Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF1F5F9),
+                                      border: Border.all(
+                                        color: _queueErrors.containsKey(item.payload)
+                                          ? Colors.red.withOpacity(0.3)
+                                          : (isDark ? const Color(0xFF222222) : const Color(0xFFE2E8F0)),
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(platformIcon, color: platformColor, size: 20),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Text(
+                                                displayName,
+                                                style: TextStyle(
+                                                  color: isDark ? Colors.white70 : Colors.black87,
+                                                  fontSize: 12,
+                                                  fontFamily: 'monospace',
+                                                ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            IconButton(
+                                              icon: Icon(Icons.close, color: isDark ? Colors.white24 : Colors.black26, size: 16),
+                                              onPressed: () => _removeFromQueue(item.id),
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(),
+                                            ),
+                                          ],
+                                        ),
+                                        if (_queueErrors.containsKey(item.payload))
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 8, left: 32),
+                                            child: Text(
+                                              _queueErrors[item.payload]!,
+                                              style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
                                             ),
                                           ),
-                                          IconButton(
-                                            icon: Icon(Icons.close, color: isDark ? Colors.white24 : Colors.black26, size: 16),
-                                            onPressed: () => _removeFromQueue(url),
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(),
-                                          ),
-                                        ],
-                                      ),
-                                      if (_queueErrors.containsKey(url))
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 8, left: 32),
-                                          child: Text(
-                                            _queueErrors[url]!,
-                                            style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
-                                          ),
-                                        ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              );
+                                );
                             },
                           ),
                     ),
@@ -1362,10 +1423,10 @@ class _VoiceAssistantDialogState extends State<_VoiceAssistantDialog> with Singl
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               "🎙️ CORTEX VOICE ASSISTANT",
               style: TextStyle(
-                color: Color(0xFFF97316),
+                color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 2.0,
                 fontSize: 14,
@@ -1384,14 +1445,14 @@ class _VoiceAssistantDialogState extends State<_VoiceAssistantDialog> with Singl
               child: Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF97316).withOpacity(0.15),
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFF97316).withOpacity(0.4), width: 2),
+                  border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.4), width: 2),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.mic,
                   size: 40,
-                  color: Color(0xFFF97316),
+                  color: Theme.of(context).colorScheme.primary,
                 ),
               ),
             ),
@@ -1424,7 +1485,7 @@ class _VoiceAssistantDialogState extends State<_VoiceAssistantDialog> with Singl
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFF97316)),
+                  borderSide: BorderSide(color: Theme.of(context).colorScheme.primary),
                 ),
               ),
             ),
@@ -1446,7 +1507,7 @@ class _VoiceAssistantDialogState extends State<_VoiceAssistantDialog> with Singl
                     Navigator.pop(context);
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF97316),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.black,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),

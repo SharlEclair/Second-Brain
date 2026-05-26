@@ -1,5 +1,6 @@
 import 'dart:developer' as dev;
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
 
 class LogEntry {
   final DateTime timestamp;
@@ -12,6 +13,7 @@ class LogEntry {
 class DebugLogger {
   static final List<LogEntry> logs = [];
   static const int maxLogs = 200;
+  static final ValueNotifier<int> logCount = ValueNotifier<int>(0);
 
   static void log(String message, {String type = 'INFO'}) {
     final entry = LogEntry(message: message, type: type);
@@ -20,9 +22,11 @@ class DebugLogger {
     
     final timeStr = DateFormat('HH:mm:ss').format(entry.timestamp);
     dev.log('[$timeStr] [$type] $message');
+    logCount.value++;
   }
 
   static void clear() {
     logs.clear();
+    logCount.value = 0;
   }
 }

@@ -17,3 +17,5 @@ firebase-admin
 google-api-python-client
 google-auth-oauthlib
 googlemaps
+celery
+redis

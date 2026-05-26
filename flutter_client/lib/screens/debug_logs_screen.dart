@@ -1,25 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-
-class DebugLog {
-  final DateTime timestamp;
-  final String message;
-  final String type; // 'INFO', 'ERROR', 'NETWORK'
-
-  DebugLog(this.message, {this.type = 'INFO'}) : timestamp = DateTime.now();
-}
-
-class DebugLogger {
-  static final List<DebugLog> logs = [];
-  static final ValueNotifier<int> logCount = ValueNotifier(0);
-
-  static void log(String message, {String type = 'INFO'}) {
-    logs.insert(0, DebugLog(message, type: type));
-    if (logs.length > 200) logs.removeLast();
-    logCount.value++;
-    print('[$type] $message');
-  }
-}
+import '../services/debug_logger.dart';
 
 class DebugLogsScreen extends StatelessWidget {
   const DebugLogsScreen({super.key});
@@ -36,10 +18,22 @@ class DebugLogsScreen extends StatelessWidget {
         title: const Text('DEBUG LOGS', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 2)),
         actions: [
           IconButton(
+            icon: const Icon(Icons.copy_all, color: Colors.blueAccent),
+            tooltip: 'Copy all logs',
+            onPressed: () {
+              final allLogs = DebugLogger.logs
+                  .map((l) => '[${l.type}] ${DateFormat('HH:mm:ss').format(l.timestamp)}: ${l.message}')
+                  .join('\n');
+              Clipboard.setData(ClipboardData(text: allLogs));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('All logs copied to clipboard')),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
             onPressed: () {
-              DebugLogger.logs.clear();
-              DebugLogger.logCount.value = 0;
+              DebugLogger.clear();
             },
           ),
         ],
@@ -82,10 +76,24 @@ class DebugLogsScreen extends StatelessWidget {
                         DateFormat('HH:mm:ss.SSS').format(log.timestamp),
                         style: TextStyle(color: isDark ? Colors.white24 : Colors.black38, fontSize: 10),
                       ),
+                      const Spacer(),
+                      IconButton(
+                        icon: Icon(Icons.copy, size: 14, color: isDark ? Colors.white54 : Colors.black54),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          final formatted = '[${log.type}] ${DateFormat('HH:mm:ss').format(log.timestamp)}: ${log.message}';
+                          Clipboard.setData(ClipboardData(text: formatted));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Log copied to clipboard'), duration: Duration(seconds: 1)),
+                          );
+                        },
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
+                  SelectableText(
                     log.message,
                     style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 13, fontFamily: 'monospace'),
                   ),

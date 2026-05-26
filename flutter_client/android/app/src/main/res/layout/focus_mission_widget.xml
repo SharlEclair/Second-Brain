@@ -12,7 +12,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="🎯 FOCUS_MISSION"
-        android:textColor="#FF9F43"
+        android:textColor="@color/widget_accent"
         android:textSize="10sp"
         android:textStyle="bold"
         android:fontFamily="sans-serif-black"
@@ -42,7 +42,7 @@
         android:layout_below="@id/focus_header"
         android:layout_marginTop="12dp"
         android:text="IN 2 DAYS"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/widget_text_primary"
         android:textSize="22sp"
         android:textStyle="bold"
         android:fontFamily="sans-serif-condensed" />
@@ -55,12 +55,39 @@
         android:layout_below="@id/focus_time"
         android:layout_marginTop="4dp"
         android:text="Next-Gen AI Orchestration Workshop"
-        android:textColor="#88FFFFFF"
+        android:textColor="@color/widget_text_secondary"
         android:textSize="12sp"
         android:fontFamily="sans-serif-light"
         android:maxLines="3"
         android:ellipsize="end"
         android:lineSpacingMultiplier="1.1" />
+
+    <!-- Scrollable Agenda ListView -->
+    <ListView
+        android:id="@+id/agenda_list"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/focus_title"
+        android:layout_above="@id/focus_status"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:divider="@android:color/transparent"
+        android:dividerHeight="4dp" />
+
+    <!-- Empty state for the list -->
+    <TextView
+        android:id="@+id/agenda_empty_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/focus_title"
+        android:layout_above="@id/focus_status"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:text="No upcoming events"
+        android:textColor="@color/widget_text_secondary"
+        android:textSize="11sp"
+        android:fontFamily="sans-serif-light"
+        android:visibility="gone" />
 
     <!-- Footer System Status -->
     <TextView

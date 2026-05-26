@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../services/haptic_feedback_manager.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import 'note_viewer_screen.dart';
 
@@ -288,13 +289,14 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
       }
 
       // Add spots markers
-      for (final spot in _nearbySpots) {
+      for (int i = 0; i < _nearbySpots.length; i++) {
+        final spot = _nearbySpots[i];
         final double? lat = spot['latitude'];
         final double? lng = spot['longitude'];
         if (lat != null && lng != null) {
           _markers.add(
             Marker(
-              markerId: MarkerId("${spot['place_name']}_${spot['source_note']}"),
+              markerId: MarkerId("${spot['place_name']}_${spot['source_note']}_$i"),
               position: LatLng(lat, lng),
               icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
               infoWindow: InfoWindow(
@@ -316,7 +318,7 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFFF97316))),
+      builder: (context) => Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
     );
 
     try {
@@ -351,7 +353,7 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
     final placeName = spot['place_name'];
     
     // Heavy haptics trigger
-    HapticFeedback.heavyImpact();
+    HapticFeedbackManager.heavyImpact();
 
     setState(() {
       _nearbySpots.remove(spot);
@@ -362,7 +364,7 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
     if (success) {
       Fluttertoast.showToast(
         msg: "Hidden: $placeName",
-        backgroundColor: const Color(0xFFF97316),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         textColor: Colors.white,
         gravity: ToastGravity.BOTTOM,
       );
@@ -415,8 +417,8 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
           _isLoading && _currentPosition == null
               ? Container(
                   color: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
-                  child: const Center(
-                    child: CircularProgressIndicator(color: Color(0xFFF97316)),
+                  child: Center(
+                    child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
                   ),
                 )
               : GoogleMap(
@@ -426,18 +428,23 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
                   ),
                   onMapCreated: (GoogleMapController controller) {
                     _mapController = controller;
+                    // Apply dark map style via setMapStyle as a fallback
+                    // (some versions of google_maps_flutter don't support the `style` constructor param)
+                    if (isDark) {
+                      controller.setMapStyle(_darkMapStyle);
+                    }
                   },
-                  style: _darkMapStyle,
                   markers: _markers,
                   myLocationEnabled: false,
                   myLocationButtonEnabled: false,
                   zoomControlsEnabled: false,
                   mapToolbarEnabled: false,
                 ),
+
           
           // 2. Loading Indicator Overlay
           if (_isLoading && _currentPosition != null)
-            const Positioned(
+            Positioned(
               top: 100,
               left: 0,
               right: 0,
@@ -454,7 +461,7 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Color(0xFFF97316),
+                            color: Theme.of(context).colorScheme.primary,
                           ),
                         ),
                         SizedBox(width: 12),
@@ -495,16 +502,20 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
                       )
                     ],
                   ),
-                  child: Column(
+                  child: ListView(
+                    controller: scrollController,
+                    padding: EdgeInsets.zero,
                     children: [
                       // Drag handle bar
-                      Container(
-                        margin: const EdgeInsets.only(top: 10, bottom: 8),
-                        width: 40,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white24 : Colors.black12,
-                          borderRadius: BorderRadius.circular(2.5),
+                      Center(
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 10, bottom: 8),
+                          width: 40,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white24 : Colors.black12,
+                            borderRadius: BorderRadius.circular(2.5),
+                          ),
                         ),
                       ),
                       
@@ -524,10 +535,10 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
                             ),
                             Text(
                               "${_nearbySpots.length} spots found",
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFFF97316),
+                                color: Theme.of(context).colorScheme.primary,
                               ),
                             ),
                           ],
@@ -536,110 +547,127 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
                       
                       const Divider(height: 16),
                       
-                      Expanded(
-                        child: _nearbySpots.isEmpty
-                            ? Center(
-                                child: Text(
-                                  "No nearby spots found.",
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white24 : Colors.black38,
-                                    fontSize: 14,
+                      if (_nearbySpots.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 32),
+                          child: Center(
+                            child: Text(
+                              "No nearby spots found.",
+                              style: TextStyle(
+                                color: isDark ? Colors.white24 : Colors.black38,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        ...grouped.entries.expand((entry) {
+                          final sectionKey = entry.key;
+                          final sectionSpots = entry.value;
+
+                          return [
+                            // Section Header
+                            Padding(
+                              padding: const EdgeInsets.only(left: 20, top: 12, bottom: 6),
+                              child: Text(
+                                sectionKey.toUpperCase(),
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                            ),
+                            // Items in section
+                            ...sectionSpots.asMap().entries.map((spotEntry) {
+                              final idx = spotEntry.key;
+                              final spot = spotEntry.value;
+                              return Dismissible(
+                                key: Key("${spot['place_name']}_${spot['source_note']}_$idx"),
+                                direction: DismissDirection.endToStart,
+                                background: Container(
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 20),
+                                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.redAccent,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.visibility_off_outlined,
+                                    color: Colors.white,
                                   ),
                                 ),
-                              )
-                            : ListView.builder(
-                                controller: scrollController,
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                itemCount: grouped.keys.length,
-                                itemBuilder: (context, sectionIndex) {
-                                  final sectionKey = grouped.keys.elementAt(sectionIndex);
-                                  final sectionSpots = grouped[sectionKey]!;
-
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Section Header
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 12, top: 12, bottom: 6),
-                                        child: Text(
-                                          sectionKey.toUpperCase(),
-                                          style: const TextStyle(
-                                            color: Color(0xFFF97316),
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 1.0,
-                                          ),
-                                        ),
+                                onDismissed: (direction) {
+                                  _hideLocation(spot);
+                                },
+                                child: Card(
+                                  margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+                                  color: isDark ? const Color(0xFF1E1E24) : const Color(0xFFF1F5F9),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: ListTile(
+                                    leading: Icon(
+                                      Icons.location_pin,
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                    title: Text(
+                                      spot['place_name'],
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
                                       ),
-                                      // Items in section
-                                      ...sectionSpots.map((spot) {
-                                        return Dismissible(
-                                          key: Key("${spot['place_name']}_${spot['source_note']}"),
-                                          direction: DismissDirection.endToStart,
-                                          background: Container(
-                                            alignment: Alignment.centerRight,
-                                            padding: const EdgeInsets.only(right: 20),
-                                            decoration: BoxDecoration(
-                                              color: Colors.redAccent,
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: const Icon(
-                                              Icons.visibility_off_outlined,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          onDismissed: (direction) {
-                                            _hideLocation(spot);
+                                    ),
+                                    subtitle: Text(
+                                      "${spot['category'] ?? spot['type'] ?? 'Spot'} • ${spot['distance_km']} km away",
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.map_outlined, size: 18),
+                                          onPressed: () async {
+                                            final query = Uri.encodeComponent(spot['place_name']);
+                                            final uri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$query");
+                                            try {
+                                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                            } catch (e) {
+                                              if (mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Could not open maps application: $e")));
+                                              }
+                                            }
                                           },
-                                          child: Card(
-                                            margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                                            color: isDark ? const Color(0xFF1E1E24) : const Color(0xFFF1F5F9),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: ListTile(
-                                              leading: const Icon(
-                                                Icons.location_pin,
-                                                color: Color(0xFFF97316),
-                                              ),
-                                              title: Text(
-                                                spot['place_name'],
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 13,
-                                                ),
-                                              ),
-                                              subtitle: Text(
-                                                "${spot['note_title'] ?? 'Note'} • ${spot['distance_km']} km away",
-                                                style: const TextStyle(fontSize: 11),
-                                              ),
-                                              trailing: IconButton(
-                                                icon: const Icon(Icons.open_in_new, size: 18),
-                                                onPressed: () => _openNote(spot),
-                                                tooltip: "Open Note",
-                                              ),
-                                              onTap: () {
-                                                // Pan map to location
-                                                final double? lat = spot['latitude'];
-                                                final double? lng = spot['longitude'];
-                                                if (lat != null && lng != null && _mapController != null) {
-                                                  _mapController!.animateCamera(
-                                                    CameraUpdate.newLatLngZoom(
-                                                      LatLng(lat, lng),
-                                                      16.0,
-                                                    ),
-                                                  );
-                                                }
-                                              },
-                                            ),
+                                          tooltip: "Open in Maps",
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.open_in_new, size: 18),
+                                          onPressed: () => _openNote(spot),
+                                          tooltip: "Open Note",
+                                        ),
+                                      ],
+                                    ),
+                                    onTap: () {
+                                      // Pan map to location
+                                      final double? lat = spot['latitude'];
+                                      final double? lng = spot['longitude'];
+                                      if (lat != null && lng != null && _mapController != null) {
+                                        _mapController!.animateCamera(
+                                          CameraUpdate.newLatLngZoom(
+                                            LatLng(lat, lng),
+                                            16.0,
                                           ),
                                         );
-                                      }).toList(),
-                                    ],
-                                  );
-                                },
-                              ),
-                      ),
+                                      }
+                                    },
+                                  ),
+                                ),
+                              );
+                            }),
+                          ];
+                        }),
                     ],
                   ),
                 );

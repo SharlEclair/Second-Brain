@@ -105,8 +105,8 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                   showDialog(
                     context: currentContext,
                     barrierDismissible: false,
-                    builder: (context) => const Center(
-                      child: CircularProgressIndicator(color: Color(0xFFF97316)),
+                    builder: (context) => Center(
+                      child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
                     ),
                   );
 
@@ -135,9 +135,9 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                   }
                 }
               },
-              child: const Text(
+              child: Text(
                 "Create Note",
-                style: TextStyle(color: Color(0xFFF97316), fontWeight: FontWeight.bold),
+                style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -166,13 +166,13 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
         ),
       ),
       body: _isLoading
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(color: Color(0xFFF97316)),
-                  SizedBox(height: 16),
-                  Text(
+                  CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(height: 16),
+                  const Text(
                     "Analyzing Vault Integrity...",
                     style: TextStyle(color: Colors.white30, fontSize: 12, fontFamily: 'monospace'),
                   ),
@@ -199,7 +199,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                           icon: const Icon(Icons.refresh),
                           label: const Text("RETRY AUDIT"),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFF97316),
+                            backgroundColor: Theme.of(context).colorScheme.primary,
                             foregroundColor: Colors.black,
                           ),
                         ),
@@ -208,7 +208,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                   ),
                 )
               : RefreshIndicator(
-                  color: const Color(0xFFF97316),
+                  color: Theme.of(context).colorScheme.primary,
                   onRefresh: _triggerAudit,
                   child: ListView(
                     padding: const EdgeInsets.all(16),
@@ -246,7 +246,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                 ),
       floatingActionButton: FloatingActionButton(
         onPressed: _isLoading ? null : _triggerAudit,
-        backgroundColor: const Color(0xFFF97316),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.black,
         child: const Icon(Icons.refresh),
       ),

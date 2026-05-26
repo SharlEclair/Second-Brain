@@ -3,20 +3,21 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:home_widget/home_widget.dart';
 import '../services/api_service.dart';
-import '../main.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/providers.dart';
 import 'debug_logs_screen.dart';
 import 'analytics_dashboard_screen.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final TextEditingController _urlController = TextEditingController();
-  final ApiService _apiService = ApiService();
+  late final ApiService _apiService;
   bool _isSyncing = false;
   bool _isLightTheme = false;
   
@@ -29,6 +30,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _apiService = ref.read(apiServiceProvider);
     _loadCurrentUrl();
     _loadCurrentTheme();
     _loadWidgetSettings();
@@ -84,12 +86,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _toggleTheme(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('is_light_theme', value);
+    ref.read(themeModeProvider.notifier).toggleTheme();
     setState(() {
       _isLightTheme = value;
     });
-    themeNotifier.value = value ? ThemeMode.light : ThemeMode.dark;
   }
 
   String _sanitizeUrl(String raw) {
@@ -98,9 +98,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     while (url.endsWith('/')) {
       url = url.substring(0, url.length - 1);
     }
-    // Prepend http:// if no scheme present
+    // Prepend http:// or https:// if no scheme present
     if (url.isNotEmpty && !url.startsWith('http://') && !url.startsWith('https://')) {
-      url = 'http://$url';
+      // Default to https:// unless it's localhost or a standard local IP range
+      final isLocal = url.contains('localhost') || 
+                      url.contains('127.0.0.1') || 
+                      url.startsWith('192.168.') || 
+                      url.startsWith('10.');
+      url = isLocal ? 'http://$url' : 'https://$url';
     }
     return url;
   }

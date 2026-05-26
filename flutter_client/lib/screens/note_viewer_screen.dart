@@ -226,8 +226,14 @@ class _NoteViewerScreenState extends State<NoteViewerScreen> {
     }
   }
 
-  Future<void> _openMapApp(double lat, double lng) async {
-    final uri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng");
+  Future<void> _openMapApp(double lat, double lng, {String? placeName}) async {
+    String query;
+    if (placeName != null && placeName.isNotEmpty) {
+      query = Uri.encodeComponent(placeName);
+    } else {
+      query = '$lat,$lng';
+    }
+    final uri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$query");
     try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
@@ -349,7 +355,7 @@ class _NoteViewerScreenState extends State<NoteViewerScreen> {
               icon: const Icon(Icons.add_location_alt_outlined, size: 16),
               label: const Text("Set Location"),
               style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFFEA580C),
+                foregroundColor: Theme.of(context).colorScheme.primary,
                 textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ),
@@ -386,7 +392,17 @@ class _NoteViewerScreenState extends State<NoteViewerScreen> {
           ),
           const SizedBox(width: 4),
           ElevatedButton.icon(
-            onPressed: () => _openMapApp(lat!, lng!),
+            onPressed: () {
+              // Try to parse `locations:` from frontmatter
+              String? placeName;
+              final locMatch = RegExp(r'locations:\s*\n\s*-\s*([^\n]+)').firstMatch(_currentContent);
+              if (locMatch != null && locMatch.group(1) != null) {
+                placeName = locMatch.group(1)!.trim();
+              } else {
+                placeName = widget.title;
+              }
+              _openMapApp(lat!, lng!, placeName: placeName);
+            },
             icon: const Icon(Icons.map_outlined, size: 14),
             label: const Text("Open"),
             style: ElevatedButton.styleFrom(
@@ -439,7 +455,7 @@ class _NoteViewerScreenState extends State<NoteViewerScreen> {
                 code: TextStyle(
                   backgroundColor: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF1F5F9), 
                   fontFamily: 'monospace', 
-                  color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)
+                  color: Theme.of(context).colorScheme.primary,
                 ),
                 codeblockDecoration: BoxDecoration(
                   color: isDark ? const Color(0xFF111111) : const Color(0xFFF8FAFC),
@@ -448,9 +464,9 @@ class _NoteViewerScreenState extends State<NoteViewerScreen> {
                 ),
                 blockquote: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontStyle: FontStyle.italic),
                 blockquoteDecoration: BoxDecoration(
-                  border: Border(left: BorderSide(color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C), width: 4)),
+                  border: Border(left: BorderSide(color: Theme.of(context).colorScheme.primary, width: 4)),
                 ),
-                listBullet: TextStyle(color: isDark ? const Color(0xFFF97316) : const Color(0xFFEA580C)),
+                listBullet: TextStyle(color: Theme.of(context).colorScheme.primary),
               ),
             ),
           ),

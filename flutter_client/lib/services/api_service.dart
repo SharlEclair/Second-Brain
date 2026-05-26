@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../screens/debug_logs_screen.dart';
+import 'debug_logger.dart';
 
 /// Custom exception to distinguish network errors from server errors
 class NetworkException implements Exception {
@@ -27,6 +27,7 @@ class ApiService {
   Map<String, String> _getHeaders({Map<String, String>? custom}) {
     final headers = {
       'ngrok-skip-browser-warning': 'true',
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
     };
     if (custom != null) {
       headers.addAll(custom);
@@ -36,7 +37,7 @@ class ApiService {
 
   Future<String?> getBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyBaseUrl);
+    return prefs.getString(_keyBaseUrl) ?? 'https://why-waffle-pentagon.ngrok-free.dev';
   }
 
   Future<void> setBaseUrl(String url) async {

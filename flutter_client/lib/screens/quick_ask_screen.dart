@@ -102,10 +102,10 @@ class _QuickAskScreenState extends State<QuickAskScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         "🧠 CORTEX QUICK ASK",
                         style: TextStyle(
-                          color: Color(0xFFF97316),
+                          color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 2.0,
                           fontSize: 14,
@@ -132,18 +132,18 @@ class _QuickAskScreenState extends State<QuickAskScreen> {
                             border: Border.all(color: Colors.white.withOpacity(0.05)),
                           ),
                           child: _isLoading
-                              ? const Row(
+                              ? Row(
                                   children: [
                                     SizedBox(
                                       width: 16,
                                       height: 16,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        color: Color(0xFFF97316),
+                                        color: Theme.of(context).colorScheme.primary,
                                       ),
                                     ),
-                                    SizedBox(width: 12),
-                                    Text(
+                                    const SizedBox(width: 12),
+                                    const Text(
                                       "Consulting Brain Vault...",
                                       style: TextStyle(color: Colors.white60, fontSize: 13),
                                     ),
@@ -182,7 +182,7 @@ class _QuickAskScreenState extends State<QuickAskScreen> {
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFFF97316), width: 1),
+                              borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1),
                             ),
                           ),
                           onSubmitted: (_) => _submitQuery(),
@@ -190,7 +190,7 @@ class _QuickAskScreenState extends State<QuickAskScreen> {
                       ),
                       const SizedBox(width: 10),
                       IconButton(
-                        icon: const Icon(Icons.send, color: Color(0xFFF97316)),
+                        icon: Icon(Icons.send, color: Theme.of(context).colorScheme.primary),
                         onPressed: _submitQuery,
                       ),
                     ],

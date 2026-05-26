@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import '../services/api_service.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import '../providers/providers.dart';
+import '../services/haptic_feedback_manager.dart';
 
-class ScratchpadScreen extends StatefulWidget {
+class ScratchpadScreen extends ConsumerStatefulWidget {
   const ScratchpadScreen({super.key});
 
   @override
-  State<ScratchpadScreen> createState() => _ScratchpadScreenState();
+  ConsumerState<ScratchpadScreen> createState() => _ScratchpadScreenState();
 }
 
-class _ScratchpadScreenState extends State<ScratchpadScreen> {
+class _ScratchpadScreenState extends ConsumerState<ScratchpadScreen> {
   final TextEditingController _textController = TextEditingController();
-  final ApiService _apiService = ApiService();
   bool _isSaving = false;
 
   Future<void> _saveAndClose() async {
@@ -31,7 +32,7 @@ class _ScratchpadScreenState extends State<ScratchpadScreen> {
     });
 
     // Immediate tactile feedback to confirm closure action
-    HapticFeedback.mediumImpact();
+    HapticFeedbackManager.mediumImpact();
 
     try {
       // Pop the screen immediately for responsive interaction
@@ -39,17 +40,17 @@ class _ScratchpadScreenState extends State<ScratchpadScreen> {
         Navigator.of(context).pop();
       }
       
-      // Append content to Daily Journal
-      await _apiService.appendToJournal(content);
+      // Append content to Daily Journal using the Riverpod-managed ApiService
+      await ref.read(apiServiceProvider).appendToJournal(content);
       
       // Heavy tactile confirmation on save completion
-      await HapticFeedback.heavyImpact();
+      await HapticFeedbackManager.heavyImpact();
       
       Fluttertoast.showToast(
         msg: "Saved to Daily Journal 📓",
         toastLength: Toast.LENGTH_SHORT,
         gravity: ToastGravity.BOTTOM,
-        backgroundColor: const Color(0xFFF97316),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         textColor: Colors.white,
         fontSize: 13.0,
       );
@@ -76,9 +77,9 @@ class _ScratchpadScreenState extends State<ScratchpadScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
     // Premium gradient background for depth
-    final bgColor1 = isDark ? const Color(0xFF0E0E12) : const Color(0xFFF8FAFC);
-    final bgColor2 = isDark ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
-    final textColor = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+    final bgColor1 = Theme.of(context).colorScheme.background;
+    final bgColor2 = Theme.of(context).colorScheme.surface;
+    final textColor = Theme.of(context).colorScheme.onBackground;
     final hintColor = isDark ? Colors.white30 : Colors.black38;
 
     return WillPopScope(
@@ -130,10 +131,10 @@ class _ScratchpadScreenState extends State<ScratchpadScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text(
+                            Text(
                               "DAILY JOURNAL PIPELINE",
                               style: TextStyle(
-                                color: Color(0xFFF97316),
+                                color: Theme.of(context).colorScheme.primary,
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 1.5,
@@ -153,7 +154,7 @@ class _ScratchpadScreenState extends State<ScratchpadScreen> {
                       const SizedBox(height: 12),
                     ],
                   ),
-                ),
+                ).animate().fadeIn(duration: 400.ms).slideY(begin: -0.2, end: 0, curve: Curves.easeOutCubic),
                 // Fullscreen large input area
                 Expanded(
                   child: Padding(
@@ -169,7 +170,7 @@ class _ScratchpadScreenState extends State<ScratchpadScreen> {
                         fontWeight: FontWeight.w300,
                         height: 1.5,
                       ),
-                      cursorColor: const Color(0xFFF97316),
+                      cursorColor: Theme.of(context).colorScheme.primary,
                       decoration: InputDecoration(
                         hintText: "What's on your mind?",
                         hintStyle: TextStyle(
@@ -184,7 +185,7 @@ class _ScratchpadScreenState extends State<ScratchpadScreen> {
                         disabledBorder: InputBorder.none,
                         contentPadding: EdgeInsets.zero,
                       ),
-                    ),
+                    ).animate().fadeIn(duration: 500.ms, delay: 100.ms).slideY(begin: 0.1, end: 0, curve: Curves.easeOutCubic),
                   ),
                 ),
               ],

@@ -1,13 +1,14 @@
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../screens/debug_logs_screen.dart';
+import 'debug_logger.dart';
 
 class AudioIngestService {
   static Future<bool> uploadAudio(String filePath) async {
+    await queueAudioUpload(filePath);
     final success = await _uploadAudioRaw(filePath);
-    if (!success) {
-      await queueAudioUpload(filePath);
+    if (success) {
+      await dequeueAudioUpload(filePath);
     }
     return success;
   }
@@ -66,6 +67,20 @@ class AudioIngestService {
     }
   }
 
+  static Future<void> dequeueAudioUpload(String filePath) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final List<String> queue = prefs.getStringList('pending_audio_uploads') ?? [];
+      if (queue.contains(filePath)) {
+        queue.remove(filePath);
+        await prefs.setStringList('pending_audio_uploads', queue);
+        DebugLogger.log('Removed audio file from queue: $filePath', type: 'STORAGE');
+      }
+    } catch (e) {
+      DebugLogger.log('Failed to dequeue audio upload: $e', type: 'ERROR');
+    }
+  }
+
   static Future<void> processAudioQueue() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -76,6 +91,11 @@ class AudioIngestService {
       final List<String> succeeded = [];
 
       for (final filePath in queue) {
+        final file = File(filePath);
+        if (!await file.exists()) {
+          succeeded.add(filePath); // File no longer exists, consider it processed
+          continue;
+        }
         final success = await _uploadAudioRaw(filePath);
         if (success) {
           succeeded.add(filePath);

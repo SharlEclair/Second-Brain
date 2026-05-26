@@ -1099,5 +1099,62 @@
         "hidden_locations": [
             "Pidapip\u00f3 Gelato, Carlton, Melbourne"
         ]
+    },
+    "https://youtube.com/shorts/aDCqv0k5vEs": {
+        "title": "2026-05-26 - Recipe from Youtube (Alex Baka)",
+        "fileName": "Recipe/2026-05-26 - Recipe from Youtube (Alex Baka).md",
+        "date": "2026-05-26T06:49:36.354842",
+        "url": "https://youtube.com/shorts/aDCqv0k5vEs",
+        "content_hash": "f759ad1f752a7544918fc0389a613a69",
+        "platform": "youtube",
+        "type": "youtube-video",
+        "transcript_status": "complete",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null,
+        "category": "Recipe",
+        "latitude": null,
+        "longitude": null,
+        "locations": [],
+        "hidden_locations": []
+    },
+    "journal-2026-05-26": {
+        "title": "2026-05-26 - Daily Journal",
+        "fileName": "Journal/2026-05-26 - Daily Journal.md",
+        "category": "Journal",
+        "date": "2026-05-26"
+    },
+    "https://www.instagram.com/p/DYKm60LiRIc": {
+        "title": "2026-05-26 - General from Instagram (aifornontechies)",
+        "fileName": "General/2026-05-26 - General from Instagram (aifornontechies).md",
+        "date": "2026-05-26T19:02:38.139118",
+        "url": "https://www.instagram.com/p/DYKm60LiRIc",
+        "content_hash": "61a8fbb75d0b69ecb3730806eeefce7c",
+        "platform": "instagram",
+        "type": "instagram-carousel",
+        "transcript_status": "not_applicable",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null,
+        "category": "General",
+        "latitude": null,
+        "longitude": null,
+        "locations": [],
+        "hidden_locations": []
+    },
+    "https://www.instagram.com/reel/DYXsFIBg5cq": {
+        "title": "2026-05-26 - General from Instagram (Alina Pak)",
+        "fileName": "General/2026-05-26 - General from Instagram (Alina Pak).md",
+        "date": "2026-05-26T20:35:18.563621",
+        "url": "https://www.instagram.com/reel/DYXsFIBg5cq",
+        "content_hash": "0e14de98209b36b38a28eac99aad3971",
+        "platform": "instagram",
+        "type": "instagram-video",
+        "transcript_status": "complete",
+        "ai_model": "models/gemini-2.5-flash-lite",
+        "event_date": null,
+        "category": "General",
+        "latitude": null,
+        "longitude": null,
+        "locations": [],
+        "hidden_locations": []
     }
 }

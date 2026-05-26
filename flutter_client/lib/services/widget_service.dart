@@ -1,10 +1,40 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
+import 'package:flutter/services.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:workmanager/workmanager.dart';
 import '../services/api_service.dart';
 import 'debug_logger.dart';
 
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((taskName, inputData) async {
+    try {
+      final apiService = ApiService();
+      final events = await apiService.fetchUpcomingEvents();
+      final jsonString = jsonEncode(events);
+      await HomeWidget.saveWidgetData<String>('agenda_data', jsonString);
+      
+      // Update Android scrollable agenda widget
+      await HomeWidget.updateWidget(
+        androidName: 'CortexAgendaWidgetProvider',
+        name: 'CortexAgendaWidgetProvider',
+      );
+      
+      // Also sync other widgets
+      await WidgetService.syncAllWidgets(apiService);
+    } catch (e) {
+      DebugLogger.log('Background sync failed: $e', type: 'ERROR');
+    }
+    return true;
+  });
+}
+
 class WidgetService {
+  /// MethodChannel for iOS Live Activities (ActivityKit).
+  /// This is iOS-only — calls are safely no-op'd on Android.
+  static const _liveActivityChannel = MethodChannel('com.example.second_brain/live_activity');
 
   /// Refreshes all widgets with active data from local storage & API
   static Future<void> syncAllWidgets(ApiService apiService) async {
@@ -125,4 +155,85 @@ class WidgetService {
       DebugLogger.log('Error syncing focus mission: $e', type: 'ERROR');
     }
   }
+
+  /// Initializes the workmanager background syncing
+  static Future<void> initializeWorkmanager() async {
+    try {
+      await Workmanager().initialize(
+        callbackDispatcher,
+        isInDebugMode: false,
+      );
+      await Workmanager().registerPeriodicTask(
+        "cortex_agenda_sync_task",
+        "cortexAgendaSyncTask",
+        frequency: const Duration(hours: 2),
+        constraints: Constraints(
+          networkType: NetworkType.connected,
+        ),
+      );
+      DebugLogger.log('Workmanager initialized for agenda syncing.', type: 'WIDGET');
+    } catch (e) {
+      DebugLogger.log('Failed to initialize Workmanager: $e', type: 'ERROR');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Live Activity helpers (iOS-only via custom MethodChannel)
+  // On Android these are safe no-ops.
+  // ─────────────────────────────────────────────────────────────
+
+  /// Starts the Ingestion Live Activity on the iOS lock screen / Dynamic Island
+  static Future<void> startIngestionLiveActivity(String url) async {
+    if (!Platform.isIOS) return; // Live Activities are iOS-only
+    try {
+      await _liveActivityChannel.invokeMethod('startLiveActivity', {
+        'title': 'Ingesting Link...',
+        'url': url,
+        'status': 'Processing...',
+        'progress': 0.1,
+      });
+      DebugLogger.log('Live Activity started for: $url', type: 'WIDGET');
+    } on MissingPluginException {
+      // Channel not registered on this platform — ignore silently
+      DebugLogger.log('Live Activity channel not available (expected on Android)', type: 'WIDGET');
+    } catch (e) {
+      DebugLogger.log('Failed to start Live Activity: $e', type: 'ERROR');
+    }
+  }
+
+  /// Updates the Ingestion Live Activity status and progress
+  static Future<void> updateIngestionLiveActivity(String url, String status, double progress) async {
+    if (!Platform.isIOS) return;
+    try {
+      await _liveActivityChannel.invokeMethod('updateLiveActivity', {
+        'title': 'Ingesting Link...',
+        'url': url,
+        'status': status,
+        'progress': progress,
+      });
+    } on MissingPluginException {
+      // ignore
+    } catch (e) {
+      DebugLogger.log('Failed to update Live Activity: $e', type: 'ERROR');
+    }
+  }
+
+  /// Ends the Ingestion Live Activity
+  static Future<void> endIngestionLiveActivity(String url, {required bool isSuccess, String? error}) async {
+    if (!Platform.isIOS) return;
+    try {
+      await _liveActivityChannel.invokeMethod('endLiveActivity', {
+        'title': isSuccess ? 'Ingestion Complete' : 'Ingestion Failed',
+        'url': url,
+        'status': isSuccess ? 'Saved to Vault' : (error ?? 'Failed'),
+        'progress': isSuccess ? 1.0 : 0.0,
+      });
+      DebugLogger.log('Live Activity ended for: $url', type: 'WIDGET');
+    } on MissingPluginException {
+      // ignore
+    } catch (e) {
+      DebugLogger.log('Failed to end Live Activity: $e', type: 'ERROR');
+    }
+  }
 }
+

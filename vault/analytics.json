@@ -613,5 +613,54 @@
       "source": "share_intent",
       "details": "https://why-waffle-pentagon.ngrok-"
     }
+  },
+  {
+    "event_type": "search",
+    "timestamp": "2026-05-26T11:38:49.124963",
+    "metadata": {
+      "query": "c"
+    }
+  },
+  {
+    "event_type": "search",
+    "timestamp": "2026-05-26T11:38:49.445318",
+    "metadata": {
+      "query": "cl"
+    }
+  },
+  {
+    "event_type": "search",
+    "timestamp": "2026-05-26T11:38:49.660176",
+    "metadata": {
+      "query": "clo"
+    }
+  },
+  {
+    "event_type": "search",
+    "timestamp": "2026-05-26T11:38:49.878246",
+    "metadata": {
+      "query": "clou"
+    }
+  },
+  {
+    "event_type": "search",
+    "timestamp": "2026-05-26T11:38:50.151788",
+    "metadata": {
+      "query": "cloud"
+    }
+  },
+  {
+    "event_type": "search",
+    "timestamp": "2026-05-26T11:38:51.127157",
+    "metadata": {
+      "query": "cloud"
+    }
+  },
+  {
+    "event_type": "read",
+    "timestamp": "2026-05-26T11:38:52.736782",
+    "metadata": {
+      "note_title": "2026-05-26 - Daily Journal"
+    }
   }
 ]

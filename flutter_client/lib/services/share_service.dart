@@ -3,10 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'api_service.dart';
 import 'queue_service.dart';
 import 'analytics_service.dart';
-import '../widgets/ingest_spinner_dialog.dart';
+import 'widget_service.dart';
+import 'haptic_feedback_manager.dart';
+
+import '../theme/design_tokens.dart';
 
 class ShareService {
   static final ApiService _apiService = ApiService();
@@ -72,19 +76,34 @@ class ShareService {
       final fileName = sharedText.split('/').last;
       _showToast("Sharing File: $fileName");
       final isShareAct = await isShareActivity();
+
+      final queueItem = QueueItem(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'file',
+        payload: sharedText,
+        title: fileName,
+      );
+      await _queueService.addToQueue(queueItem);
+
       try {
         final lowerName = fileName.toLowerCase();
         if (lowerName.endsWith('.pdf') || lowerName.endsWith('.txt') || lowerName.endsWith('.md') || lowerName.endsWith('.mp3')) {
           await _apiService.uploadFile(sharedText);
+          
+          // Remove only on successful verification
+          await _queueService.removeFromQueue(queueItem.id);
+
           _showToast("✓ File uploaded and ingested successfully!");
           _showToastNotification("Cortex: Saved to Vault 🧠");
         } else {
+          // File format unsupported, we can remove it as it won't ever succeed
+          await _queueService.removeFromQueue(queueItem.id);
           _showToast("❌ Only PDF, TXT, MD, and MP3 files are supported");
           _showToastNotification("❌ Unsupported file format");
         }
       } catch (e) {
-        _showToast("❌ Upload Error: $e");
-        _showToastNotification("❌ Upload Error");
+        _showToast("❌ Upload Error (Queued): $e");
+        _showToastNotification("📌 Saved to Queue");
       } finally {
         if (isShareAct) {
           await _channel.invokeMethod('finishActivity');
@@ -98,74 +117,122 @@ class ShareService {
     
     if (match != null) {
       final url = match.group(0)!;
-      _showToast("Ingesting URL: $url");
+      _showToast("⏳ Ingesting URL: $url");
       
-      final context = _navigatorKey.currentContext;
-      bool dialogOpen = false;
       final isShareAct = await isShareActivity();
+
+      final queueItem = QueueItem(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'url',
+        payload: url,
+      );
+      await _queueService.addToQueue(queueItem);
       
-      if (!isShareAct && context != null) {
-        dialogOpen = true;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => IngestSpinnerDialog(url: url, apiService: _apiService),
-        ).then((_) {
-          dialogOpen = false;
-        });
-      }
+      // Connectivity pre-check: if offline, skip API call and queue silently
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final isOnline = connectivityResult.any((r) =>
+        r == ConnectivityResult.wifi ||
+        r == ConnectivityResult.mobile ||
+        r == ConnectivityResult.ethernet);
       
-      try {
-        final result = await _apiService.ingestUrl(url);
-        AnalyticsService().logIngest('url', 'share_intent', details: url);
-        if (result['status'] == 'existing') {
-          _showToast("✓ Already in your Brain Vault.");
-          _showToastNotification("Cortex: Saved to Vault 🧠");
-        } else {
-          _showToast("✓ Successfully ingested!");
-          _showToastNotification("Cortex: Saved to Vault 🧠");
-        }
-      } catch (e) {
-        await _queueService.addToQueue(url);
-        AnalyticsService().logIngest('url_queue', 'share_intent', details: url);
-        if (e is NetworkException) {
-          _showToast("📌 Queued — will process when connected.");
-          _showToastNotification("Cortex: Saved to Vault 🧠");
-        } else if (e is ServerException) {
-          _showToast("📌 Queued (Server Error: ${e.message})");
-          _showToastNotification("Cortex: Saved to Vault 🧠");
-        } else {
-          _showToast("📌 Queued (${e.toString().substring(0, (e.toString().length).clamp(0, 45))})");
-          _showToastNotification("Cortex: Saved to Vault 🧠");
-        }
-      } finally {
-        if (dialogOpen && _navigatorKey.currentContext != null) {
-          Navigator.of(_navigatorKey.currentContext!).pop();
-        }
+      if (!isOnline) {
+        // Offline: skip API call, item is already in queue
+        await HapticFeedbackManager.lightImpact();
+        _showToast("📌 Queued — will sync when online.");
+        _showToastNotification("Cortex: Ingestion Queued 📌");
         if (isShareAct) {
           await _channel.invokeMethod('finishActivity');
+        }
+      } else {
+        try {
+          await WidgetService.startIngestionLiveActivity(url);
+          await WidgetService.updateIngestionLiveActivity(url, 'Parsing URL...', 0.3);
+          final result = await _apiService.ingestUrl(url);
+          await WidgetService.updateIngestionLiveActivity(url, 'Saving to Vault...', 0.8);
+          AnalyticsService().logIngest('url', 'share_intent', details: url);
+
+          // Success verification - remove from queue
+          await _queueService.removeFromQueue(queueItem.id);
+
+          // Non-blocking success feedback
+          await HapticFeedbackManager.mediumImpact();
+          if (result['status'] == 'existing') {
+            _showToast("✓ Already in your Brain Vault.");
+          } else {
+            _showToast("✓ Successfully ingested!");
+          }
+          _showToastNotification("Cortex: Saved to Vault 🧠");
+          await WidgetService.endIngestionLiveActivity(url, isSuccess: true);
+        } catch (e) {
+          AnalyticsService().logIngest('url_queue', 'share_intent', details: url);
+          if (e is NetworkException) {
+            _showToast("📌 Queued — will process when connected.");
+            _showToastNotification("Cortex: Ingestion Queued 📌");
+            await WidgetService.endIngestionLiveActivity(url, isSuccess: false, error: 'Queued (Offline)');
+          } else if (e is ServerException) {
+            _showToast("📌 Queued (Server Error: ${e.message})");
+            _showToastNotification("Cortex: Ingestion Queued 📌");
+            await WidgetService.endIngestionLiveActivity(url, isSuccess: false, error: 'Queued (Server Error)');
+          } else {
+            _showToast("📌 Queued (${e.toString().substring(0, (e.toString().length).clamp(0, 45))})");
+            _showToastNotification("Cortex: Ingestion Queued 📌");
+            await WidgetService.endIngestionLiveActivity(url, isSuccess: false, error: 'Queued');
+          }
+        } finally {
+          if (isShareAct) {
+            await _channel.invokeMethod('finishActivity');
+          }
         }
       }
     } else {
       _showToast("Ingesting Shared Text Note...");
       final isShareAct = await isShareActivity();
-      try {
-        await _apiService.ingestRawText(sharedText);
-        AnalyticsService().logIngest('text', 'share_intent');
-        _showToast("✓ Shared text note saved successfully!");
-        _showToastNotification("Cortex: Saved to Vault 🧠");
-      } on NetworkException {
-        _showToast("❌ Offline: Can't ingest raw text now.");
-        _showToastNotification("❌ Offline: Can't ingest raw text now.");
-      } on ServerException catch (e) {
-        _showToast("❌ Error: ${e.message}");
-        _showToastNotification("❌ Error: ${e.message}");
-      } catch (e) {
-        _showToast("❌ Error: $e");
-        _showToastNotification("❌ Error: $e");
-      } finally {
+
+      final queueItem = QueueItem(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'text',
+        payload: sharedText,
+      );
+      await _queueService.addToQueue(queueItem);
+
+      // Connectivity pre-check
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final isOnline = connectivityResult.any((r) =>
+        r == ConnectivityResult.wifi ||
+        r == ConnectivityResult.mobile ||
+        r == ConnectivityResult.ethernet);
+
+      if (!isOnline) {
+        await HapticFeedbackManager.lightImpact();
+        _showToast("📌 Queued — will sync when online.");
+        _showToastNotification("Cortex: Ingestion Queued 📌");
         if (isShareAct) {
           await _channel.invokeMethod('finishActivity');
+        }
+      } else {
+        try {
+          await _apiService.ingestRawText(sharedText);
+          AnalyticsService().logIngest('text', 'share_intent');
+          
+          // Remove on success
+          await _queueService.removeFromQueue(queueItem.id);
+
+          await HapticFeedbackManager.mediumImpact();
+          _showToast("✓ Shared text note saved successfully!");
+          _showToastNotification("Cortex: Saved to Vault 🧠");
+        } on NetworkException {
+          _showToast("📌 Queued — will process when connected.");
+          _showToastNotification("Cortex: Ingestion Queued 📌");
+        } on ServerException catch (e) {
+          _showToast("📌 Queued (Server Error: ${e.message})");
+          _showToastNotification("Cortex: Ingestion Queued 📌");
+        } catch (e) {
+          _showToast("📌 Queued (Error: $e)");
+          _showToastNotification("Cortex: Ingestion Queued 📌");
+        } finally {
+          if (isShareAct) {
+            await _channel.invokeMethod('finishActivity');
+          }
         }
       }
     }
@@ -179,7 +246,7 @@ class ShareService {
           message,
           style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13),
         ),
-        backgroundColor: const Color(0xFFF97316),
+        backgroundColor: AppColors.accent,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 4),
@@ -193,7 +260,7 @@ class ShareService {
       toastLength: Toast.LENGTH_SHORT,
       gravity: ToastGravity.BOTTOM,
       timeInSecForIosWeb: 1,
-      backgroundColor: const Color(0xFFF97316),
+      backgroundColor: AppColors.accent,
       textColor: Colors.white,
       fontSize: 13.0
     );

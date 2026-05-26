@@ -16,6 +16,8 @@ from core.config import OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH, AI_MODEL, AI_MO
 from core.state import ops_manager, get_url_index, save_url_index
 from core.utils import clean_url, chunk_text, cleanup_temp_files, get_platform_from_url
 from core.processors import process_reel, process_image_post, generate_content_with_fallback, process_pdf, process_web_article, process_text_file, process_raw_text, process_audio_file, process_uploaded_image
+from api.routes import auth, geofence, notes
+
 
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -54,157 +56,20 @@ if HAS_FIREBASE:
     except Exception as e:
         print(f"Error initializing Firebase Admin SDK: {e}")
 
-# --- QUEUE SYSTEM ---
-task_queue = asyncio.Queue()
-
-async def background_worker():
-    while True:
-        task_info = await task_queue.get()
-        url = task_info.get("url")
-        task_id = task_info.get("task_id")
-
-        ops_manager.update_task(task_id, "Processing from queue", state="active")
-
-        try:
-            await _run_ingestion_logic(url, task_id)
-        except Exception as e:
-            pass
-        finally:
-            task_queue.task_done()
-
-async def weekly_synthesis_scheduler():
-    while True:
-        await asyncio.sleep(3600)
-        now = datetime.datetime.now()
-        if now.weekday() == 6 and now.hour == 23:
-            try:
-                from core.synthesis_loop import run_weekly_synthesis
-                await run_weekly_synthesis()
-            except Exception as e:
-                print(f"Error in scheduled weekly synthesis: {e}")
-
-async def send_serendipity_notifications():
-    try:
-        notes = await get_serendipity()
-        if not notes:
-            print("[Serendipity] No notes available to send.")
-            return
-            
-        tokens_file = "device_tokens.json"
-        if not os.path.exists(tokens_file):
-            print("[Serendipity] No registered device tokens.")
-            return
-            
-        try:
-            with open(tokens_file, "r", encoding="utf-8") as f:
-                devices = json.load(f)
-        except Exception as e:
-            print(f"[Serendipity] Error loading device tokens: {e}")
-            return
-            
-        tokens = [d["token"] for d in devices if d.get("token")]
-        if not tokens:
-            print("[Serendipity] No device tokens available.")
-            return
-            
-        if not HAS_FIREBASE or not firebase_app:
-            print("[Serendipity] Firebase Admin SDK is not initialized/installed. Cannot send push notifications.")
-            return
-
-        now = datetime.datetime.now()
-
-        for note in notes:
-            # Determine notification title based on event proximity
-            is_upcoming_event = False
-            note_category = note.get("category", "")
-            note_event_date = note.get("event_date")
-            if note_category == "Event" and note_event_date:
-                try:
-                    evt_dt = datetime.datetime.fromisoformat(str(note_event_date).replace("Z", "+00:00")).replace(tzinfo=None)
-                    days_until = (evt_dt - now).days
-                    if 0 <= days_until <= 7:
-                        is_upcoming_event = True
-                except Exception:
-                    pass
-
-            if is_upcoming_event:
-                title = f"📅 Upcoming Event: {note['title']}"
-            else:
-                title = f"🧠 Daily Spark: {note['title']}"
-            body = note.get("summary") or "Review this note from your Second Brain."
-            if len(body) > 150:
-                body = body[:147] + "..."
-                
-            message = messaging.MulticastMessage(
-                notification=messaging.Notification(
-                    title=title,
-                    body=body
-                ),
-                data={
-                    "route": "/note",
-                    "fileName": note["fileName"]
-                },
-                tokens=tokens
-            )
-            
-            try:
-                response = messaging.send_multicast(message)
-                print(f"[Serendipity] Sent notification for {note['title']}: {response.success_count} success, {response.failure_count} failure")
-            except Exception as ex:
-                print(f"[Serendipity] Failed to send multicast message: {ex}")
-    except Exception as e:
-        print(f"[Serendipity] Error in send_serendipity_notifications: {e}")
-
-async def daily_serendipity_scheduler():
-    while True:
-        # Check every 30 minutes
-        await asyncio.sleep(1800)
-        try:
-            now = datetime.datetime.now()
-            # We want to run daily at 08:30 AM local time.
-            if now.hour == 8 and now.minute >= 30:
-                today_str = now.strftime("%Y-%m-%d")
-                state_file = "serendipity_state.json"
-                last_run = ""
-                if os.path.exists(state_file):
-                    try:
-                        with open(state_file, "r") as f:
-                            state = json.load(f)
-                            last_run = state.get("last_run", "")
-                    except Exception:
-                        pass
-                
-                if last_run != today_str:
-                    await send_serendipity_notifications()
-                    try:
-                        with open(state_file, "w") as f:
-                            json.dump({"last_run": today_str}, f)
-                    except Exception as e:
-                        print(f"[Serendipity] Failed to save state: {e}")
-        except Exception as e:
-            print(f"[Serendipity] Error in scheduler loop: {e}")
-
-async def retroactive_backlink_scheduler():
-    while True:
-        # Check every 6 hours
-        await asyncio.sleep(21600)
-        now = datetime.datetime.now()
-        # Run weekly on Sunday at 02:00 AM
-        if now.weekday() == 6 and now.hour == 2:
-            try:
-                from core.retroactive_backlink import run_retroactive_scan
-                await asyncio.to_thread(run_retroactive_scan)
-            except Exception as e:
-                print(f"Error in scheduled retroactive backlink: {e}")
+# --- Celery-Based queue is configured. Schedulers are migrated to Celery Beat. ---
 
 # --- INITIALIZATION ---
 app = FastAPI(title="Second Brain API")
+
+# Include modular API routers
+app.include_router(auth.router)
+app.include_router(geofence.router)
+app.include_router(notes.router)
+
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(background_worker())
-    asyncio.create_task(weekly_synthesis_scheduler())
-    asyncio.create_task(daily_serendipity_scheduler())
-    asyncio.create_task(retroactive_backlink_scheduler())
+    pass
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -213,168 +78,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/api/auth/google")
-async def auth_google():
-    """
-    Initiates the Google OAuth2 flow by redirecting the user to Google's authorization page.
-    """
-    project_root = os.path.dirname(os.path.abspath(__file__))
-    credentials_path = os.path.join(project_root, 'credentials.json')
-    
-    if not os.path.exists(credentials_path):
-        raise HTTPException(status_code=404, detail="credentials.json not found in project root.")
-        
-    try:
-        with open(credentials_path, 'r') as f:
-            creds_data = json.load(f)
-        client_id = creds_data['web']['client_id']
-        redirect_uri = creds_data['web']['redirect_uris'][0]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read credentials from credentials.json: {e}")
-
-    try:
-        from urllib.parse import urlencode
-        from core.calendar_sync import SCOPES
-        
-        # Build the authorization URL manually to avoid enforcing PKCE (Missing code verifier)
-        auth_base_url = "https://accounts.google.com/o/oauth2/v2/auth"
-        params = {
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "scope": " ".join(SCOPES),
-            "access_type": "offline",
-            "prompt": "consent"
-        }
-        authorization_url = f"{auth_base_url}?{urlencode(params)}"
-        return RedirectResponse(url=authorization_url)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to initiate OAuth flow: {e}")
-
-
-@app.get("/api/auth/callback")
-async def oauth_callback(code: str, state: str = None):
-    """
-    Callback endpoint where Google redirects the user with authorization code.
-    Exchanges authorization code for credentials and saves token.json.
-    """
-    project_root = os.path.dirname(os.path.abspath(__file__))
-    credentials_path = os.path.join(project_root, 'credentials.json')
-    token_path = os.path.join(project_root, 'token.json')
-    
-    if not os.path.exists(credentials_path):
-        raise HTTPException(status_code=404, detail="credentials.json not found in project root.")
-        
-    try:
-        with open(credentials_path, 'r') as f:
-            creds_data = json.load(f)
-        client_id = creds_data['web']['client_id']
-        client_secret = creds_data['web']['client_secret']
-        redirect_uri = creds_data['web']['redirect_uris'][0]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read credentials from credentials.json: {e}")
-
-    try:
-        import requests
-        from google.oauth2.credentials import Credentials
-        from core.calendar_sync import SCOPES
-        
-        # Exchange authorization code for access and refresh tokens
-        token_url = "https://oauth2.googleapis.com/token"
-        payload = {
-            'code': code,
-            'client_id': client_id,
-            'client_secret': client_secret,
-            'redirect_uri': redirect_uri,
-            'grant_type': 'authorization_code'
-        }
-        
-        response = requests.post(token_url, data=payload)
-        token_data = response.json()
-        
-        if 'error' in token_data:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Google token exchange error: {token_data.get('error_description', token_data['error'])}"
-            )
-            
-        # Build standard Google Credentials
-        creds = Credentials(
-            token=token_data.get('access_token'),
-            refresh_token=token_data.get('refresh_token'),
-            token_uri=token_url,
-            client_id=client_id,
-            client_secret=client_secret,
-            scopes=SCOPES
-        )
-        
-        with open(token_path, 'w') as token_file:
-            token_file.write(creds.to_json())
-            
-        html_content = """
-        <html>
-            <head>
-                <title>Authentication Successful</title>
-                <style>
-                    body {
-                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-                        color: white;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        height: 100vh;
-                        margin: 0;
-                    }
-                    .container {
-                        text-align: center;
-                        background: rgba(255, 255, 255, 0.1);
-                        padding: 3rem;
-                        border-radius: 15px;
-                        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-                        backdrop-filter: blur(10px);
-                        border: 1px solid rgba(255, 255, 255, 0.2);
-                        max-width: 450px;
-                    }
-                    h1 {
-                        margin-top: 0;
-                        color: #4caf50;
-                        font-size: 2.5rem;
-                        margin-bottom: 1.5rem;
-                    }
-                    p {
-                        font-size: 1.1rem;
-                        line-height: 1.6;
-                        margin-bottom: 2rem;
-                        color: #e0e0e0;
-                    }
-                    .icon {
-                        font-size: 4rem;
-                        margin-bottom: 1rem;
-                        display: inline-block;
-                        animation: bounce 2s infinite;
-                    }
-                    @keyframes bounce {
-                        0%, 100% { transform: translateY(0); }
-                        50% { transform: translateY(-10px); }
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="icon">📅</div>
-                    <h1>Success!</h1>
-                    <p>Google Calendar has been successfully authorized for your Second Brain. You can now close this tab.</p>
-                </div>
-            </body>
-        </html>
-        """
-        return HTMLResponse(content=html_content, status_code=200)
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        print(f"[Calendar OAuth Error]: {tb}")
-        raise HTTPException(status_code=500, detail=f"Failed to exchange authorization code: {e}")
+# Google OAuth routes are now managed by auth router
 
 # Startup Cleanup
 cleanup_temp_files()
@@ -403,7 +107,8 @@ class AppendTasksRequest(BaseModel):
     tasks: str
 
 class JournalAppendRequest(BaseModel):
-    content: str
+    content: Optional[str] = None
+    text: Optional[str] = None
 
 
 
@@ -570,399 +275,7 @@ def is_location_hidden(loc_name: str, loc_lat: float, loc_lng: float, hidden_loc
                 return True
     return False
 
-@app.get("/api/geofences")
-async def get_geofences():
-    index = get_url_index()
-    spots = []
-    for url, note in index.items():
-        if not isinstance(note, dict):
-            continue
-        category = note.get("category")
-        filename = note.get("fileName", "")
-        if category == "Spot to Visit" or "Spot to Visit" in filename:
-            locations = note.get("locations")
-            if not isinstance(locations, list):
-                locations = []
-            if not locations:
-                lat = note.get("latitude")
-                lng = note.get("longitude")
-                if lat is not None and lng is not None:
-                    locations = [{"name": note.get("title") or "Unknown Spot", "lat": lat, "lng": lng}]
-            
-            hidden_locations = note.get("hidden_locations", [])
-            if not isinstance(hidden_locations, list):
-                hidden_locations = []
-                
-            for loc in locations:
-                if not isinstance(loc, dict):
-                    continue
-                loc_name = loc.get("name")
-                loc_lat = loc.get("lat")
-                loc_lng = loc.get("lng")
-                if loc_lat is not None and loc_lng is not None:
-                    try:
-                        loc_lat_f = float(loc_lat)
-                        loc_lng_f = float(loc_lng)
-                        if is_location_hidden(loc_name, loc_lat_f, loc_lng_f, hidden_locations):
-                            continue
-                        spots.append({
-                            "title": loc_name or note.get("title"),
-                            "fileName": filename,
-                            "latitude": loc_lat_f,
-                            "longitude": loc_lng_f,
-                        })
-                    except (ValueError, TypeError):
-                        pass
-    return spots
-
-@app.get("/api/nearby")
-async def get_nearby(lat: float, lng: float, radius: float = None, radius_km: float = None):
-    try:
-        limit_radius = 5.0
-        if radius_km is not None:
-            limit_radius = radius_km
-        elif radius is not None:
-            limit_radius = radius
-
-        index = get_url_index()
-        nearby = []
-        for url, note in index.items():
-            if not isinstance(note, dict):
-                continue
-            
-            locations = note.get("locations")
-            if not isinstance(locations, list):
-                locations = []
-            if not locations:
-                note_lat = note.get("latitude")
-                note_lng = note.get("longitude")
-                if note_lat is not None and note_lng is not None:
-                    locations = [{"name": note.get("title") or "Unknown Spot", "lat": note_lat, "lng": note_lng}]
-                    
-            hidden_locations = note.get("hidden_locations", [])
-            if not isinstance(hidden_locations, list):
-                hidden_locations = []
-                
-            for loc in locations:
-                if not isinstance(loc, dict):
-                    continue
-                loc_name = loc.get("name")
-                loc_lat = loc.get("lat")
-                loc_lng = loc.get("lng")
-                if loc_lat is not None and loc_lng is not None:
-                    try:
-                        loc_lat_f = float(loc_lat)
-                        loc_lng_f = float(loc_lng)
-                        
-                        if is_location_hidden(loc_name, loc_lat_f, loc_lng_f, hidden_locations):
-                            continue
-                            
-                        dist = haversine_distance(lat, lng, loc_lat_f, loc_lng_f)
-                        if dist <= limit_radius:
-                            nearby.append({
-                                "place_name": loc_name,
-                                "type": note.get("category") or note.get("type") or "Spot to Visit",
-                                "distance": dist,
-                                "distance_km": round(dist, 3),
-                                "source_note": note.get("fileName") or note.get("title") or "Unknown Note",
-                                "latitude": loc_lat_f,
-                                "longitude": loc_lng_f,
-                                "url": url,
-                                "note_title": note.get("title"),
-                                "category": note.get("category"),
-                            })
-                    except (ValueError, TypeError):
-                        pass
-        # Sort by distance
-        nearby.sort(key=lambda x: x["distance_km"])
-        return nearby
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/notes")
-async def get_notes():
-    index = get_url_index()
-    notes = []
-    for url, data in index.items():
-        if isinstance(data, dict):
-            notes.append(data)
-        else:
-            notes.append({"title": data.replace(".md", ""), "fileName": data, "date": "Unknown"})
-    return sorted(notes, key=lambda x: x.get('date', ''), reverse=True)
-
-@app.get("/api/notes/{filename:path}")
-async def get_note_content(filename: str):
-    # Try both locations
-    paths = [os.path.join(OBSIDIAN_INBOX_PATH, filename), os.path.join(PROJECT_VAULT_PATH, filename)]
-    for p in paths:
-        if os.path.exists(p):
-            with open(p, "r", encoding="utf-8") as f:
-                return PlainTextResponse(f.read(), media_type="text/markdown")
-    raise HTTPException(status_code=404, detail="Note not found")
-
-
-def update_markdown_frontmatter_coordinates(filepath: str, lat: float, lng: float):
-    if not os.path.exists(filepath):
-        return False
-    with open(filepath, "r", encoding="utf-8") as f:
-        content = f.read()
-        
-    # Check if content has frontmatter
-    frontmatter_pattern = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
-    match = frontmatter_pattern.match(content)
-    
-    if match:
-        frontmatter_text = match.group(1)
-        remaining_content = content[match.end():]
-        
-        # Parse frontmatter lines
-        lines = frontmatter_text.splitlines()
-        new_lines = []
-        lat_found = False
-        lng_found = False
-        
-        for line in lines:
-            if line.strip().startswith("latitude:"):
-                new_lines.append(f"latitude: {lat}")
-                lat_found = True
-            elif line.strip().startswith("longitude:"):
-                new_lines.append(f"longitude: {lng}")
-                lng_found = True
-            else:
-                new_lines.append(line)
-                
-        if not lat_found:
-            new_lines.append(f"latitude: {lat}")
-        if not lng_found:
-            new_lines.append(f"longitude: {lng}")
-            
-        new_frontmatter = "\n".join(new_lines)
-        new_content = f"---\n{new_frontmatter}\n---\n{remaining_content}"
-    else:
-        # No frontmatter found, prepend frontmatter
-        new_content = f"""---
-latitude: {lat}
-longitude: {lng}
----
-{content}"""
-
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(new_content)
-    return True
-
-
-def update_markdown_frontmatter_fields(filepath: str, updates: dict) -> bool:
-    if not os.path.exists(filepath):
-        return False
-    with open(filepath, "r", encoding="utf-8") as f:
-        content = f.read()
-        
-    frontmatter_pattern = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
-    match = frontmatter_pattern.match(content)
-    
-    if match:
-        frontmatter_text = match.group(1)
-        remaining_content = content[match.end():]
-        
-        lines = frontmatter_text.splitlines()
-        new_lines = []
-        
-        skip_mode = False
-        for line in lines:
-            stripped = line.strip()
-            # If line starts with any key name we are updating, toggle skip_mode on
-            matched_key = None
-            for key in updates.keys():
-                if line.startswith(f"{key}:") or line.startswith(f"{key} :"):
-                    matched_key = key
-                    break
-            
-            if matched_key:
-                skip_mode = True
-                continue
-                
-            if skip_mode:
-                if stripped.startswith("-") or stripped.startswith(" ") or stripped.startswith("\t") or not stripped:
-                    continue
-                else:
-                    skip_mode = False  # we reached a new key
-            
-            new_lines.append(line)
-            
-        # Append updated values
-        for key, val in updates.items():
-            if isinstance(val, (list, dict)):
-                import json
-                new_lines.append(f"{key}: {json.dumps(val)}")
-            else:
-                new_lines.append(f"{key}: {val}")
-                
-        new_frontmatter = "\n".join(new_lines)
-        new_content = f"---\n{new_frontmatter}\n---\n{remaining_content}"
-    else:
-        # No frontmatter, prepend the updates
-        new_lines = []
-        for key, val in updates.items():
-            if isinstance(val, (list, dict)):
-                import json
-                new_lines.append(f"{key}: {json.dumps(val)}")
-            else:
-                new_lines.append(f"{key}: {val}")
-        new_frontmatter = "\n".join(new_lines)
-        new_content = f"---\n{new_frontmatter}\n---\n{content}"
-        
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(new_content)
-    return True
-
-
-class LocationOverrideRequest(BaseModel):
-    latitude: float
-    longitude: float
-
-
-class HideLocationRequest(BaseModel):
-    name: str = None
-    lat: float = None
-    lng: float = None
-
-
-@app.patch("/api/notes/{filename:path}/hide_location")
-async def hide_note_location(filename: str, request: HideLocationRequest):
-    normalized_filename = filename.replace("\\", "/")
-    
-    # 1. Update the Markdown files
-    paths = [os.path.join(OBSIDIAN_INBOX_PATH, filename), os.path.join(PROJECT_VAULT_PATH, filename)]
-    updated_files = 0
-    
-    new_hidden_item = None
-    if request.name:
-        new_hidden_item = request.name
-    elif request.lat is not None and request.lng is not None:
-        new_hidden_item = {"lat": request.lat, "lng": request.lng}
-    else:
-        raise HTTPException(status_code=400, detail="Must provide name or coordinates to hide a location")
-        
-    for p in paths:
-        if os.path.exists(p):
-            try:
-                # We need to read existing frontmatter first to get the current hidden_locations list
-                current_hidden = []
-                with open(p, "r", encoding="utf-8") as f:
-                    content = f.read()
-                frontmatter_pattern = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
-                match = frontmatter_pattern.match(content)
-                if match:
-                    lines = match.group(1).splitlines()
-                    for line in lines:
-                        if line.strip().startswith("hidden_locations:"):
-                            val_part = line.split(":", 1)[1].strip()
-                            try:
-                                current_hidden = json.loads(val_part)
-                            except:
-                                pass
-                
-                # Check for duplicates
-                is_duplicate = False
-                for item in current_hidden:
-                    if isinstance(item, str) and isinstance(new_hidden_item, str):
-                        if item.lower() == new_hidden_item.lower():
-                            is_duplicate = True
-                            break
-                    elif isinstance(item, dict) and isinstance(new_hidden_item, dict):
-                        item_lat = item.get("lat") or item.get("latitude")
-                        item_lng = item.get("lng") or item.get("longitude")
-                        new_lat = new_hidden_item.get("lat")
-                        new_lng = new_hidden_item.get("lng")
-                        if item_lat is not None and item_lng is not None and new_lat is not None and new_lng is not None:
-                            if abs(float(item_lat) - float(new_lat)) < 0.0001 and abs(float(item_lng) - float(new_lng)) < 0.0001:
-                                is_duplicate = True
-                                break
-                                
-                if not is_duplicate:
-                    current_hidden.append(new_hidden_item)
-                    
-                if update_markdown_frontmatter_fields(p, {"hidden_locations": current_hidden}):
-                    updated_files += 1
-            except Exception as e:
-                print(f"Error updating hidden locations for {p}: {e}")
-                
-    if updated_files == 0:
-        raise HTTPException(status_code=404, detail="Note file not found on disk")
-        
-    # 2. Update the corresponding entry in url_index.json
-    index = get_url_index()
-    found_in_index = False
-    for url, note_data in index.items():
-        if isinstance(note_data, dict):
-            fn = note_data.get("fileName")
-            if fn and fn.replace("\\", "/") == normalized_filename:
-                curr_hidden = note_data.get("hidden_locations", [])
-                if not isinstance(curr_hidden, list):
-                    curr_hidden = []
-                
-                is_duplicate = False
-                for item in curr_hidden:
-                    if isinstance(item, str) and isinstance(new_hidden_item, str):
-                        if item.lower() == new_hidden_item.lower():
-                            is_duplicate = True
-                            break
-                    elif isinstance(item, dict) and isinstance(new_hidden_item, dict):
-                        item_lat = item.get("lat") or item.get("latitude")
-                        item_lng = item.get("lng") or item.get("longitude")
-                        new_lat = new_hidden_item.get("lat")
-                        new_lng = new_hidden_item.get("lng")
-                        if item_lat is not None and item_lng is not None and new_lat is not None and new_lng is not None:
-                            if abs(float(item_lat) - float(new_lat)) < 0.0001 and abs(float(item_lng) - float(new_lng)) < 0.0001:
-                                is_duplicate = True
-                                break
-                if not is_duplicate:
-                    curr_hidden.append(new_hidden_item)
-                
-                note_data["hidden_locations"] = curr_hidden
-                found_in_index = True
-                break
-                
-    if found_in_index:
-        save_url_index(index)
-        
-    return {"status": "success", "message": f"Added hidden location in {updated_files} file(s) and index."}
-
-
-@app.patch("/api/notes/{filename:path}/location")
-async def update_note_location(filename: str, request: LocationOverrideRequest):
-    normalized_filename = filename.replace("\\", "/")
-    
-    # 1. Update the Markdown files
-    paths = [os.path.join(OBSIDIAN_INBOX_PATH, filename), os.path.join(PROJECT_VAULT_PATH, filename)]
-    updated_files = 0
-    for p in paths:
-        if os.path.exists(p):
-            try:
-                if update_markdown_frontmatter_coordinates(p, request.latitude, request.longitude):
-                    updated_files += 1
-            except Exception as e:
-                print(f"Error updating file frontmatter for {p}: {e}")
-                
-    if updated_files == 0:
-        raise HTTPException(status_code=404, detail="Note file not found on disk")
-        
-    # 2. Update the corresponding entry in url_index.json
-    index = get_url_index()
-    found_in_index = False
-    for url, note_data in index.items():
-        if isinstance(note_data, dict):
-            fn = note_data.get("fileName")
-            if fn and fn.replace("\\", "/") == normalized_filename:
-                note_data["latitude"] = request.latitude
-                note_data["longitude"] = request.longitude
-                found_in_index = True
-                break
-                
-    if found_in_index:
-        save_url_index(index)
-        
-    return {"status": "success", "message": f"Updated coordinates in {updated_files} file(s) and index."}
+# Geofence and notes routes are now managed by notes and geofence routers
 
 
 @app.get("/api/config")
@@ -1075,9 +388,62 @@ async def append_tasks(filename: str, request: AppendTasksRequest):
 @app.post("/api/journal/append")
 async def append_to_journal(request: JournalAppendRequest):
     try:
+        note_content = request.text or request.content
+        if not note_content:
+            raise HTTPException(status_code=400, detail="Either 'text' or 'content' field must be provided")
+
         # 1. Determine today's date
-        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
-        current_time = datetime.datetime.now().strftime("%H:%M")
+        now = datetime.datetime.now()
+        today_str = now.strftime("%Y-%m-%d")
+        current_time = now.strftime("%H:%M")
+        full_current_time_str = now.strftime("%Y-%m-%d %H:%M:%S")
+
+        # 1.5. Check for events/reminders using Gemini
+        try:
+            prompt = f"""You are an intelligent assistant. The current date and time is {full_current_time_str}.
+Analyze the following scratchpad note. Does it describe a future event, task with a deadline, or appointment?
+If yes, return a JSON object with:
+- "is_event": true
+- "title": event title (string)
+- "event_date": absolute date/time formatted as "YYYY-MM-DD HH:MM:SS" (resolve relative words like 'tomorrow', 'today', 'this friday' using the current date provided)
+- "description": optional details (string)
+
+If it's just a regular note or journal entry without an actionable event, return {{"is_event": false}}.
+
+Respond ONLY with valid JSON. Do not include markdown formatting or backticks around the JSON.
+
+Note: {note_content}"""
+            
+            response, model_used = generate_content_with_fallback(prompt, purpose="scratchpad_event_extraction")
+            
+            import json
+            cleaned_response = response.text.strip()
+            if cleaned_response.startswith("```json"):
+                cleaned_response = cleaned_response[7:]
+            if cleaned_response.startswith("```"):
+                cleaned_response = cleaned_response[3:]
+            if cleaned_response.endswith("```"):
+                cleaned_response = cleaned_response[:-3]
+                
+            parsed_data = json.loads(cleaned_response.strip())
+            
+            if parsed_data.get("is_event"):
+                event_date = parsed_data.get("event_date")
+                event_title = parsed_data.get("title", "Scratchpad Event")
+                event_desc = parsed_data.get("description", note_content)
+                
+                if event_date:
+                    from core.calendar_sync import create_calendar_event
+                    import asyncio
+                    await asyncio.to_thread(
+                        create_calendar_event,
+                        title=event_title,
+                        event_date_str=event_date,
+                        source_url="",
+                        description=event_desc
+                    )
+        except Exception as e:
+            print(f"Failed to extract or create event from scratchpad: {e}")
         
         # 2. Path to the daily journal
         journal_dir = os.path.join(PROJECT_VAULT_PATH, "Journal")
@@ -1121,7 +487,7 @@ date: {today_str}
                 header_idx = idx
                 break
                 
-        new_bullet = f"- [{current_time}] {request.content}"
+        new_bullet = f"- [{current_time}] {note_content}"
         
         if header_idx != -1:
             # Found the header. We append to the end of this section (i.e. before the next header)
@@ -1276,7 +642,8 @@ async def ingest_url(request: Request):
         task_id = f"task_{uuid.uuid4().hex[:8]}"
         platform = get_platform_from_url(url)
         ops_manager.start_task(task_id, url, "Queued", platform=platform, progress=0, state="queued")
-        await task_queue.put({"url": url, "task_id": task_id})
+        from api.tasks import ingest_url_task
+        ingest_url_task.delay(url, task_id)
         return {"status": "queued", "task_id": task_id, "message": "Task added to background queue"}
 
     async def _run_ingestion(url: str, status_callback=None):
@@ -1940,111 +1307,8 @@ async def get_suggestions():
 @app.get("/api/serendipity")
 async def get_serendipity():
     try:
-        index = get_url_index()
-        all_notes = []
-        urgent_event_notes = []
-        now = datetime.datetime.now()
-        
-        for url, data in index.items():
-            if isinstance(data, dict):
-                date_str = data.get("date")
-                if date_str:
-                    try:
-                        dt = datetime.datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                    except Exception:
-                        dt = now
-                else:
-                    dt = now
-                
-                note_entry = {
-                    "url": url,
-                    "title": data.get("title", ""),
-                    "fileName": data.get("fileName", ""),
-                    "date": date_str,
-                    "last_reviewed": data.get("last_reviewed"),
-                    "category": data.get("category"),
-                    "event_date": data.get("event_date"),
-                    "dt": dt
-                }
-                all_notes.append(note_entry)
-
-                # Check for urgent event notes (Event category with event_date 0, 3, or 7 days away)
-                if data.get("category") == "Event" and data.get("event_date"):
-                    try:
-                        evt_dt = datetime.datetime.fromisoformat(
-                            str(data["event_date"]).replace("Z", "+00:00")
-                        ).replace(tzinfo=None)
-                        days_away = (evt_dt.date() - now.date()).days
-                        if 0 <= days_away <= 7:
-                            urgent_event_notes.append(note_entry)
-                    except Exception:
-                        pass
-        
-        if not all_notes:
-            return []
-
-        # Build final selection: urgent events first, then fill remaining slots randomly
-        max_results = 3
-        selected = []
-        urgent_urls = set()
-
-        for note in urgent_event_notes[:max_results]:
-            selected.append(note)
-            urgent_urls.add(note["url"])
-
-        remaining_slots = max_results - len(selected)
-        if remaining_slots > 0:
-            # Use the existing prioritization logic for the random pool
-            def sort_key(note):
-                last_rev = note["last_reviewed"]
-                has_rev = 1 if last_rev else 0
-                rev_time = last_rev if last_rev else ""
-                return (has_rev, rev_time, note["date"])
-
-            pool_candidates = [n for n in all_notes if n["url"] not in urgent_urls]
-            sorted_notes = sorted(pool_candidates, key=sort_key)
-
-            import random
-            pool = sorted_notes[:min(15, len(sorted_notes))]
-            random_picks = random.sample(pool, min(remaining_slots, len(pool)))
-            selected.extend(random_picks)
-        
-        results = []
-        for note in selected:
-            summary = ""
-            filename = note["fileName"]
-            paths = [
-                os.path.join(OBSIDIAN_INBOX_PATH, filename),
-                os.path.join(PROJECT_VAULT_PATH, filename)
-            ]
-            for p in paths:
-                if os.path.exists(p):
-                    try:
-                        with open(p, "r", encoding="utf-8") as f:
-                            content = f.read()
-                        match = re.search(r'> \*\*AI Summary:\*\* (.*)', content)
-                        if match:
-                            summary = match.group(1).strip()
-                        else:
-                            match_body = re.search(r'# .*\n\n> (.*)', content)
-                            if match_body:
-                                summary = match_body.group(1).strip()
-                    except Exception:
-                        pass
-                    break
-            
-            results.append({
-                "url": note["url"],
-                "title": note["title"],
-                "fileName": filename,
-                "date": note["date"],
-                "last_reviewed": note["last_reviewed"],
-                "summary": summary,
-                "category": note.get("category"),
-                "event_date": note.get("event_date")
-            })
-            
-        return results
+        from core.serendipity import _get_serendipity_picks
+        return _get_serendipity_picks()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

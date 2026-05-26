@@ -86,6 +86,26 @@
                 android:resource="@xml/focus_mission_widget_info" />
         </receiver>
 
+        <!-- Cortex Agenda Widget Provider -->
+        <receiver android:name=".CortexAgendaWidgetProvider" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_agenda_info" />
+        </receiver>
+
+        <!-- RemoteViewsService for Scrollable Agenda list -->
+        <service android:name=".CortexAgendaWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
+
+        <!-- RemoteViewsService for Agenda list on Focus widget -->
+        <service android:name=".AgendaRemoteViewsService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
+
         <!-- Google Maps API Key -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"

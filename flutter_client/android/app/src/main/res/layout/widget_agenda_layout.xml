@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/agenda_widget_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:padding="12dp">
+
+    <!-- Header Section -->
+    <TextView
+        android:id="@+id/agenda_header"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="📅 CORTEX_AGENDA"
+        android:textColor="@color/widget_accent"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:fontFamily="sans-serif-black"
+        android:letterSpacing="0.05"
+        android:layout_alignParentTop="true" />
+
+    <!-- List View -->
+    <ListView
+        android:id="@+id/agenda_list"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/agenda_header"
+        android:layout_marginTop="8dp"
+        android:divider="@android:color/transparent"
+        android:dividerHeight="6dp" />
+
+    <!-- Empty State View -->
+    <TextView
+        android:id="@+id/agenda_empty_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/agenda_header"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:text="No upcoming events"
+        android:textColor="@color/widget_text_secondary"
+        android:textSize="12sp"
+        android:fontFamily="sans-serif-light"
+        android:visibility="gone" />
+
+</RelativeLayout>
