@@ -604,5 +604,14 @@
       "source": "share_intent",
       "details": "https://www.instagram.com/p/DYeKImmkQ1e/?igsh=MWJiZTRmdXJkMW50OQ=="
     }
+  },
+  {
+    "event_type": "ingest",
+    "timestamp": "2026-05-22T02:30:57.162423",
+    "metadata": {
+      "type": "url_queue",
+      "source": "share_intent",
+      "details": "https://why-waffle-pentagon.ngrok-"
+    }
   }
 ]

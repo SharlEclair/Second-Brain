@@ -1,6 +1,6 @@
 # Weekly Brief Index
 
-This "Weekly Brief" distills crucial learnings and actionable insights from the week's knowledge into a concise, impactful summary.
+This **Weekly Brief** distills essential knowledge and practical takeaways from recent entries into a concise, actionable summary.
 
 This folder contains 1 articles related to Weekly Brief.
 

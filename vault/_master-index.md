@@ -3,30 +3,16 @@
 Topics appear here as they're created.
 
 - **[[Event/_index|Event]]**: 11 articles
-  ***Event:** Mark your calendars for a mix of insightful webinars, engaging workshops, and vibrant social gatherings, all designed to inform, connect, and celebrate!*
+  *Get ready for a mix of exciting webinars, social gatherings, and crucial product launch meetings, all packed with key information and networking opportunities!*
 - **[[General/_index|General]]**: 7 articles
-  *Dive into a dynamic blend of tech insights, from practical AI applications and development workflows to mastering essential tools like Git, all while balancing personal growth and even a touch of retail therapy.*
+  *This "General" category explores the intersection of technology and personal growth, from mastering Git and AI tools to building a public dev log and even finding the perfect gift set.*
 - **[[Job-Career/_index|Job-Career]]**: 6 articles
-  *Navigate the professional world with a mix of clever strategies, essential insights, and authentic connections to secure your next opportunity.*
-- **[[Journal/_index|Journal]]**: 1 articles
-  *Here are a few options, depending on the nuance you want to emphasize:
-
-**Option 1 (Focus on the act of writing):**
-> This category captures the personal reflections and daily experiences chronicled in your journal.
-
-**Option 2 (Focus on the content):**
-> Dive into a day's worth of personal thoughts, events, and observations captured within this journal entry.
-
-**Option 3 (More active and intriguing):**
-> Uncover the unfolding narrative of a single day as documented in this personal journal.
-
-**Option 4 (Very concise):**
-> A daily snapshot of thoughts and events, meticulously recorded in this journal.
-
-Choose the one that best fits the overall tone and purpose of your collection of articles.*
-- **[[Recipe/_index|Recipe]]**: 10 articles
-  *Discover mouthwatering culinary inspiration, from quick weeknight dinners and street food favorites to gourmet delights, all designed to tantalize your taste buds.*
+  *Navigate the twists and turns of professional life, from clever LinkedIn tactics and strategic applications to essential networking, ensuring you seize every opportunity on your career journey.*
+- **[[Journal/_index|Journal]]**: 2 articles
+  *This "Journal" category captures the essence of a personal daily record, a snapshot of life as it unfolds day by day.*
+- **[[Recipe/_index|Recipe]]**: 11 articles
+  *Discover mouthwatering dishes, from spicy chicken creations to gourmet delights, to elevate your next meal!*
 - **[[Spot to Visit/_index|Spot to Visit]]**: 9 articles
-  *Explore Melbourne's hottest new eats, chill escapes, and must-visit neighborhoods for every mood and season.*
+  *Explore Melbourne's hottest — and coolest — destinations, from sun-kissed ice cream parlors and cozy brunch nooks to rejuvenating winter spas and iconic gelato stops!*
 - **[[Weekly Brief/_index|Weekly Brief]]**: 1 articles
-  *This "Weekly Brief" distills crucial learnings and actionable insights from the week's knowledge into a concise, impactful summary.*
+  *This **Weekly Brief** distills essential knowledge and practical takeaways from recent entries into a concise, actionable summary.*

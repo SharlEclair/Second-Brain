@@ -1,6 +1,6 @@
 # General Index
 
-Dive into a dynamic blend of tech insights, from practical AI applications and development workflows to mastering essential tools like Git, all while balancing personal growth and even a touch of retail therapy.
+This "General" category explores the intersection of technology and personal growth, from mastering Git and AI tools to building a public dev log and even finding the perfect gift set.
 
 This folder contains 7 articles related to General.
 

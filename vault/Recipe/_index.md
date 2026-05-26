@@ -1,8 +1,8 @@
 # Recipe Index
 
-Discover mouthwatering culinary inspiration, from quick weeknight dinners and street food favorites to gourmet delights, all designed to tantalize your taste buds.
+Discover mouthwatering dishes, from spicy chicken creations to gourmet delights, to elevate your next meal!
 
-This folder contains 10 articles related to Recipe.
+This folder contains 11 articles related to Recipe.
 
 ## Articles
 - [[2026-05-18 - Recipe from Instagram (Ayesha Mahboob)]]: A recipe for crispy garlic sesame chicken, with the full recipe available on the creator's blog.
@@ -15,3 +15,4 @@ This folder contains 10 articles related to Recipe.
 - [[2026-05-19 - Recipe from Instagram (Dean)]]: A quick and easy Kung Pao Chicken recipe ready in under 30 minutes, perfect for a weeknight fakeaway.
 - [[2026-05-19 - Recipe from Instagram (Iram Mansoor)]]: A recipe for Nashville style hot chicken sandwich, including ingredients for the chicken, dry batter, ranch dressing, hot oil, creamy lettuce, and assembly instructions.
 - [[2026-05-19 - Recipe from Instagram (Noor)]]: A spicy penne pasta recipe with cheese, featuring common pantry staples and a creamy tomato-based sauce.
+- [[2026-05-26 - Recipe from Youtube (Alex Baka)]]: A recipe for crispy fried chicken using vodka in the batter for a crispier coating.
