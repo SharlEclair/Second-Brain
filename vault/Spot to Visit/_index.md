@@ -1,6 +1,6 @@
 # Spot to Visit Index
 
-Explore Melbourne's hottest — and coolest — destinations, from sun-kissed ice cream parlors and cozy brunch nooks to rejuvenating winter spas and iconic gelato stops!
+Uncover Melbourne's coolest destinations, from sweet treats and brunch spots to ultimate relaxation havens, perfect for any craving or mood.
 
 This folder contains 9 articles related to Spot to Visit.
 

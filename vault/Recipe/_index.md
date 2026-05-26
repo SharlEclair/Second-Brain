@@ -1,6 +1,6 @@
 # Recipe Index
 
-Discover mouthwatering dishes, from spicy chicken creations to gourmet delights, to elevate your next meal!
+Discover culinary inspiration from global kitchens, from crispy chicken creations to comforting pasta and gourmet classics, perfect for every meal and craving.
 
 This folder contains 11 articles related to Recipe.
 
