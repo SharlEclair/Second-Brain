@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../providers/ui_state_provider.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/ambient_background.dart';
@@ -9,6 +10,7 @@ import '../widgets/chat_bubble.dart';
 import '../widgets/typing_indicator.dart';
 import '../widgets/result_card.dart';
 import '../widgets/horizontal_data_scroller.dart';
+import '../widgets/command_palette_overlay.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -61,6 +63,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           SafeArea(
             child: Column(
               children: [
+                _buildHeader(context),
                 Expanded(
                   child: Stack(
                     children: [
@@ -77,6 +80,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'CORTEX',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: AppColors.darkTextPrimary,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2.0,
+                ),
+          ),
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.search_rounded, color: Colors.white70),
+                onPressed: () {
+                  showGeneralDialog(
+                    context: context,
+                    barrierDismissible: true,
+                    barrierLabel: "CommandPalette",
+                    barrierColor: Colors.black.withOpacity(0.40),
+                    transitionDuration: const Duration(milliseconds: 250),
+                    pageBuilder: (context, anim1, anim2) => const CommandPaletteOverlay(),
+                  );
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+                onPressed: () => GoRouter.of(context).push('/settings'),
+              ),
+            ],
           ),
         ],
       ),
