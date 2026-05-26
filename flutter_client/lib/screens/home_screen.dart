@@ -50,15 +50,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isProcessing = uiState == UiState.processing;
 
     return Scaffold(
-      backgroundColor: AppColors.darkBackground,
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          // 1. Base Layer: Ambient Background
-          const Positioned.fill(
-            child: AmbientBackground(),
-          ),
-
           // 2. Middle Layer: Content Area (Greeting or Chat Feed)
           SafeArea(
             child: Column(

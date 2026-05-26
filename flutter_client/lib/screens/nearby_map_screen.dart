@@ -6,6 +6,8 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import 'note_viewer_screen.dart';
+import 'dart:ui';
+import '../theme/design_tokens.dart';
 
 class NearbyMapScreen extends StatefulWidget {
   const NearbyMapScreen({super.key});
@@ -492,8 +494,8 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
 
                 return Container(
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF111115) : Colors.white,
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    color: isDark ? AppColors.darkSurface.withOpacity(0.6) : Colors.white.withOpacity(0.6),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
                     boxShadow: const [
                       BoxShadow(
                         color: Colors.black26,
@@ -502,10 +504,14 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
                       )
                     ],
                   ),
-                  child: ListView(
-                    controller: scrollController,
-                    padding: EdgeInsets.zero,
-                    children: [
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: ListView(
+                        controller: scrollController,
+                        padding: EdgeInsets.zero,
+                        children: [
                       // Drag handle bar
                       Center(
                         child: Container(
@@ -670,8 +676,10 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
                         }),
                     ],
                   ),
-                );
-              },
+                ),
+              ),
+            );
+          },
             ),
         ],
       ),

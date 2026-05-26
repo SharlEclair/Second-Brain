@@ -4,6 +4,8 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../providers/providers.dart';
 import '../services/haptic_feedback_manager.dart';
+import 'dart:ui';
+import '../theme/design_tokens.dart';
 
 class ScratchpadScreen extends ConsumerStatefulWidget {
   const ScratchpadScreen({super.key});
@@ -88,15 +90,14 @@ class _ScratchpadScreenState extends ConsumerState<ScratchpadScreen> {
         return false; // We pop manually in _saveAndClose
       },
       child: Scaffold(
+        backgroundColor: Colors.transparent,
         body: Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [bgColor1, bgColor2],
-            ),
+            color: isDark ? AppColors.darkSurface.withOpacity(0.6) : Colors.white.withOpacity(0.6),
           ),
-          child: SafeArea(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: SafeArea(
             child: Column(
               children: [
                 // Top drag bar handle and header
@@ -193,6 +194,7 @@ class _ScratchpadScreenState extends ConsumerState<ScratchpadScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

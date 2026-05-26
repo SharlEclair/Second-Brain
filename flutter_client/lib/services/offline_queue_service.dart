@@ -5,13 +5,15 @@ import 'audio_ingest_service.dart';
 import 'api_service.dart';
 import 'sync_service.dart';
 import 'debug_logger.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/ui_state_provider.dart';
 
 class OfflineQueueService {
   static StreamSubscription<List<ConnectivityResult>>? _subscription;
   static final QueueService _queueService = QueueService();
   static final ApiService _apiService = ApiService();
 
-  static void initialize() {
+  static void initialize(dynamic ref) {
     if (_subscription != null) return;
 
     DebugLogger.log('Initializing Offline Queue Service (Connectivity listener)...', type: 'SYSTEM');
@@ -25,11 +27,15 @@ class OfflineQueueService {
       if (isConnected) {
         DebugLogger.log('Network connected! Syncing offline queues...', type: 'SYSTEM');
         
+        ref.read(uiStateProvider.notifier).setProcessing();
+        bool hasError = false;
+
         // Process Isar ApiRequests
         try {
           await SyncService().syncUp();
         } catch (e) {
           DebugLogger.log('Error processing Isar syncUp: $e', type: 'ERROR');
+          hasError = true;
         }
 
         // 1. Process Unified Ingestion queue
@@ -40,6 +46,7 @@ class OfflineQueueService {
           }
         } catch (e) {
           DebugLogger.log('Error processing ingestion queue: $e', type: 'ERROR');
+          hasError = true;
         }
 
         // 2. Process Audio Ingestion queue
@@ -47,6 +54,16 @@ class OfflineQueueService {
           await AudioIngestService.processAudioQueue();
         } catch (e) {
           DebugLogger.log('Error processing audio queue: $e', type: 'ERROR');
+          hasError = true;
+        }
+
+        if (hasError) {
+          ref.read(uiStateProvider.notifier).setError();
+          Future.delayed(const Duration(seconds: 3), () {
+            ref.read(uiStateProvider.notifier).setIdle();
+          });
+        } else {
+          ref.read(uiStateProvider.notifier).setIdle();
         }
       }
     });
