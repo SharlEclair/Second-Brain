@@ -1,6 +1,6 @@
 # Journal Index
 
-This "Journal" category captures fleeting moments and daily reflections, offering a personal glimpse into the unfolding of time.
+This 'Journal' category captures the unfolding narrative of daily life, offering snapshots of thoughts and events as they happen.
 
 This folder contains 2 articles related to Journal.
 

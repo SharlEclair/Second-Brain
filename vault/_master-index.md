@@ -3,16 +3,16 @@
 Topics appear here as they're created.
 
 - **[[Event/_index|Event]]**: 11 articles
-  *Discover upcoming webinars, social gatherings, workshops, and crucial product launch meetings designed to inform, connect, and drive innovation.*
+  ***Event:** Gatherings of all kinds, from insightful webinars and hands-on workshops to social meetups and crucial product launch meetings, happening soon!*
 - **[[General/_index|General]]**: 9 articles
-  *This "General" category is a vibrant digital playground where tech enthusiasts explore AI's practical magic, from revolutionizing travel and project management to mastering code and building personal brands.*
+  *This category explores the intersection of technology and personal growth, offering insights from AI innovation and developer best practices to practical advice for thriving in your 20s and even finding the perfect gift.*
 - **[[Job-Career/_index|Job-Career]]**: 6 articles
-  *Navigate the professional world with tips ranging from witty LinkedIn strategies and targeted job applications to genuine networking and essential advice for international students.*
+  *Navigate the modern job market with a mix of strategic savvy, from playful LinkedIn personas and tailored applications to clever networking and identifying overlooked opportunities.*
 - **[[Journal/_index|Journal]]**: 2 articles
-  *This "Journal" category captures fleeting moments and daily reflections, offering a personal glimpse into the unfolding of time.*
+  *This 'Journal' category captures the unfolding narrative of daily life, offering snapshots of thoughts and events as they happen.*
 - **[[Recipe/_index|Recipe]]**: 11 articles
-  *Unleash your inner chef with a world of mouthwatering dishes, from crispy fried chicken to gourmet Beef Wellington, all crafted with ease and delicious results!*
+  *Explore a world of culinary inspiration, from craveable crispy chicken variations to global flavors and convenient weeknight meals, all designed to delight your taste buds!*
 - **[[Spot to Visit/_index|Spot to Visit]]**: 9 articles
-  *Discover Melbourne's culinary and relaxation gems, from delicious ice cream and brunch to rejuvenating spas, perfect for any mood or season.*
+  ***Uncover Melbourne's hottest spots, from decadent gelato and brunch havens to rejuvenating spas, perfect for every craving and season.***
 - **[[Weekly Brief/_index|Weekly Brief]]**: 1 articles
-  *This **Weekly Brief** distills essential knowledge and actionable takeaways into concise summaries, empowering you with key learnings for the week ahead.*
+  ***Weekly Briefs: Your concise roundup of essential insights and actionable takeaways, distilled from the latest knowledge.***

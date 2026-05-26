@@ -1,6 +1,6 @@
 # Job-Career Index
 
-Navigate the professional world with tips ranging from witty LinkedIn strategies and targeted job applications to genuine networking and essential advice for international students.
+Navigate the modern job market with a mix of strategic savvy, from playful LinkedIn personas and tailored applications to clever networking and identifying overlooked opportunities.
 
 This folder contains 6 articles related to Job-Career.
 

@@ -20,3 +20,6 @@ date: 2026-05-26
 - [11:47] Take Cloud Computing Quiz tomorrow at 7 pm
 - [14:48] cloud computing test at 2:50pm today
 - [14:51] machine learning test at 2:53 pm today
+- [22:20] cloud quiz at 11pm tonight
+- [22:20] test
+- [22:27] test note 79

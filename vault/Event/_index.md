@@ -1,6 +1,6 @@
 # Event Index
 
-Discover upcoming webinars, social gatherings, workshops, and crucial product launch meetings designed to inform, connect, and drive innovation.
+**Event:** Gatherings of all kinds, from insightful webinars and hands-on workshops to social meetups and crucial product launch meetings, happening soon!
 
 This folder contains 11 articles related to Event.
 
