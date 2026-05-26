@@ -12,7 +12,6 @@ import '../screens/nearby_map_screen.dart';
 import '../screens/quick_ask_screen.dart';
 import '../screens/note_viewer_screen.dart';
 import '../screens/chat_screen.dart';
-import '../theme/design_tokens.dart';
 
 class CommandPaletteOverlay extends StatefulWidget {
   const CommandPaletteOverlay({super.key});
@@ -351,7 +350,7 @@ class _CommandPaletteOverlayState extends State<CommandPaletteOverlay> {
                           maxHeight: screenHeight * 0.70,
                         ),
                         decoration: BoxDecoration(
-                          color: isDark ? AppColors.darkSurface.withOpacity(0.6) : Colors.white.withOpacity(0.6),
+                          color: isDark ? const Color(0xFF111115).withOpacity(0.95) : Colors.white.withOpacity(0.95),
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
                             color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
@@ -366,13 +365,9 @@ class _CommandPaletteOverlayState extends State<CommandPaletteOverlay> {
                             ),
                           ],
                         ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(24),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                             // Search field container
                             Padding(
                               padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
@@ -479,8 +474,7 @@ class _CommandPaletteOverlayState extends State<CommandPaletteOverlay> {
                           ],
                         ),
                       ),
-                    ),
-                  ).animate()
+                    ).animate()
                       .fadeIn(duration: 250.ms, curve: Curves.easeOut)
                       .slideY(begin: -0.05, end: 0, duration: 300.ms, curve: Curves.easeOutCubic)
                       .scale(begin: const Offset(0.97, 0.97), end: const Offset(1.0, 1.0), duration: 300.ms, curve: Curves.easeOutCubic),

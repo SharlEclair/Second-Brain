@@ -27,7 +27,7 @@ class AppRadii {
 
 class AppColors {
   // Premium Accent: Electric Blue
-  static const Color accent = Color(0xFF3B82F6); 
+  static const Color accent = Color(0xFF007AFF); 
   static const Color success = Color(0xFF34C759);
   static const Color warning = Color(0xFFFF9500);
   static const Color error = Color(0xFFFF3B30);
@@ -40,14 +40,8 @@ class AppColors {
   static const Color lightTextSecondary = Color(0xFF6E6E73);
   static const Color lightDivider = Color(0xFFE5E5EA);
 
-  // Neon Colors (Ambient Aurora)
-  static const Color neonGreen = Color(0xFFA8FF53);
-  static const Color neonPurple = Color(0xFF8B5CF6);
-  static const Color neonBlue = Color(0xFF3B82F6);
-  static const Color neonOrange = Color(0xFFFF5722);
-
   // Dark Theme Colors (Deep OLED Black, Premium feel)
-  static const Color darkBackground = Color(0xFF050505);
+  static const Color darkBackground = Color(0xFF000000);
   static const Color darkSurface = Color(0xFF151515);
   static const Color darkSurfaceSecondary = Color(0xFF1E1E1E);
   static const Color darkTextPrimary = Color(0xFFF5F5F7);

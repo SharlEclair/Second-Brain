@@ -105,7 +105,7 @@ class _SecondBrainAppState extends ConsumerState<SecondBrainApp> with WidgetsBin
     GeofenceService.checkGeofences(apiService);
 
     // Initialize connectivity listener for offline queues
-    OfflineQueueService.initialize(ref);
+    OfflineQueueService.initialize();
   }
 
   @override

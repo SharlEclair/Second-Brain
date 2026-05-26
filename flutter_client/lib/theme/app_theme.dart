@@ -19,7 +19,7 @@ class AppTheme {
         onSurface: AppColors.lightTextPrimary,
         onError: Colors.white,
       ),
-      scaffoldBackgroundColor: Colors.transparent,
+      scaffoldBackgroundColor: AppColors.lightBackground,
       dividerColor: AppColors.lightDivider,
       fontFamily: GoogleFonts.inter().fontFamily,
       textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme).copyWith(
@@ -107,7 +107,7 @@ class AppTheme {
         onSurface: AppColors.darkTextPrimary,
         onError: Colors.white,
       ),
-      scaffoldBackgroundColor: Colors.transparent,
+      scaffoldBackgroundColor: AppColors.darkBackground,
       dividerColor: AppColors.darkDivider,
       fontFamily: GoogleFonts.inter().fontFamily,
       textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme).copyWith(

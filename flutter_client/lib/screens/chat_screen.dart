@@ -6,7 +6,6 @@ import '../services/api_service.dart';
 import '../services/queue_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
-import '../providers/ui_state_provider.dart';
 import '../services/widget_service.dart';
 import '../screens/debug_logs_screen.dart';
 import '../services/debug_logger.dart';
@@ -288,7 +287,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     setState(() => _isIngesting = true);
     _startStatusPolling(url: url);
-    ref.read(uiStateProvider.notifier).setProcessing();
 
     try {
       await WidgetService.startIngestionLiveActivity(url);
@@ -315,13 +313,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         );
       }
-      ref.read(uiStateProvider.notifier).setIdle();
     } catch (e) {
-      ref.read(uiStateProvider.notifier).setError();
-      Future.delayed(const Duration(seconds: 3), () {
-        ref.read(uiStateProvider.notifier).setIdle();
-      });
-
       // Kept in queue on error
       if (e is NetworkException) {
         await WidgetService.endIngestionLiveActivity(url, isSuccess: false, error: 'Queued (Offline)');
@@ -363,7 +355,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _queueErrors = {};
     });
     _startStatusPolling();
-    ref.read(uiStateProvider.notifier).setProcessing();
 
     try {
       final result = await _queueService.processQueue(_apiService);
@@ -381,20 +372,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         );
       }
-      if (result.failed > 0) {
-        ref.read(uiStateProvider.notifier).setError();
-        Future.delayed(const Duration(seconds: 3), () {
-          ref.read(uiStateProvider.notifier).setIdle();
-        });
-      } else {
-        ref.read(uiStateProvider.notifier).setIdle();
-      }
     } catch (e) {
       DebugLogger.log("Queue processing failed: $e");
-      ref.read(uiStateProvider.notifier).setError();
-      Future.delayed(const Duration(seconds: 3), () {
-        ref.read(uiStateProvider.notifier).setIdle();
-      });
     } finally {
       if (mounted) {
         setState(() => _isProcessingQueue = false);
