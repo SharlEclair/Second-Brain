@@ -8,6 +8,7 @@ import '../screens/scratchpad_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/notes_browser_screen.dart';
 import '../screens/audit_dashboard_screen.dart';
+import '../screens/home_screen.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -17,7 +18,7 @@ final appRouter = GoRouter(
   routes: [
     GoRoute(
       path: '/',
-      builder: (context, state) => const ChatScreen(),
+      builder: (context, state) => const HomeScreen(),
     ),
     GoRoute(
       path: '/scratchpad',
