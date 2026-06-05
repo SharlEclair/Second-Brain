@@ -2,7 +2,7 @@ name: Build iOS App
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, old-ui ]
   workflow_dispatch: # Allows manual triggering
 
 jobs:
@@ -28,13 +28,15 @@ jobs:
           cd flutter_client
           flutter build ios --release --no-codesign
           
-      - name: Zip Build for Download
+      - name: Package as IPA for Sideloading
         run: |
           cd flutter_client/build/ios/iphoneos
-          zip -r Cortex_iOS.zip Runner.app
-
-      - name: Upload Artifact
+          mkdir Payload
+          cp -r Runner.app Payload/
+          zip -yr SecondBrain.ipa Payload
+          
+      - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cortex-iphone-app
-          path: flutter_client/build/ios/iphoneos/Cortex_iOS.zip
+          name: second-brain-ios-ipa
+          path: flutter_client/build/ios/iphoneos/SecondBrain.ipa
