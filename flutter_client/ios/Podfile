@@ -1,0 +1,34 @@
+# Uncomment this line to define a global platform for your project
+platform :ios, '14.0'
+
+# CocoaPods analytics sends usage stats. In order to automate CI/CD you may want to disable it
+# env['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_install_all_ios_pods(cocoapods_targets_obj)
+  setup_line = "require File.expand_path(File.join(File.dirname(__FILE__), '..', '.flutter-plugins-dependencies'))"
+  eval(setup_line, binding)
+  # Install helper to install plugins
+  flutter_install_ios_plugin_pods(cocoapods_targets_obj)
+end
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods(super_binder = nil)
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+    end
+  end
+end
