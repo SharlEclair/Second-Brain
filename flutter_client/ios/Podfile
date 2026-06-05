@@ -18,7 +18,7 @@ File.open(flutter_xcconfig, 'r') do |file|
 end
 
 # Uncomment this line to define a global platform for your project
-platform :ios, '14.0'
+platform :ios, '15.0'
 
 # CocoaPods analytics sends usage stats. In order to automate CI/CD you may want to disable it
 # env['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -40,7 +40,7 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
     end
   end
 end
