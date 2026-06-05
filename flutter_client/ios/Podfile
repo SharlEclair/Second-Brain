@@ -13,22 +13,11 @@ project 'Runner', {
   'Release' => :release,
 }
 
-def flutter_install_all_ios_pods(cocoapods_targets_obj)
-  setup_line = File.expand_path(File.join(File.dirname(__FILE__), '..', '.flutter-plugins-dependencies'))
-  if File.exist?(setup_line)
-    eval(File.read(setup_line), binding, setup_line)
-  else
-    puts "Warning: Flutter dependencies file not found"
-  end
-  # Install helper to install plugins
-  flutter_install_ios_plugin_pods(cocoapods_targets_obj)
-end
-
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
-  flutter_install_all_ios_pods(super_binder = nil)
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 end
 
 post_install do |installer|
