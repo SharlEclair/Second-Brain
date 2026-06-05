@@ -2,6 +2,7 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
+@available(iOS 16.1, *)
 struct IngestionAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
         // Dynamic properties
@@ -21,11 +22,14 @@ struct IngestionAttributes: ActivityAttributes {
 struct CortexWidgetBundle: WidgetBundle {
     var body: some Widget {
         CortexAgendaWidget()
-        CortexLiveActivity()
+        if #available(iOS 16.1, *) {
+            CortexLiveActivity()
+        }
     }
 }
 
 
+@available(iOS 16.1, *)
 struct CortexLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: IngestionAttributes.self) { context in
