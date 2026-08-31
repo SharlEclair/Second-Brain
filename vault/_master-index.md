@@ -3,16 +3,16 @@
 Topics appear here as they're created.
 
 - **[[Event/_index|Event]]**: 11 articles
-  ***Event:** Gatherings of all kinds, from insightful webinars and hands-on workshops to social meetups and crucial product launch meetings, happening soon!*
-- **[[General/_index|General]]**: 9 articles
-  *This category explores the intersection of technology and personal growth, offering insights from AI innovation and developer best practices to practical advice for thriving in your 20s and even finding the perfect gift.*
-- **[[Job-Career/_index|Job-Career]]**: 6 articles
-  *Navigate the modern job market with a mix of strategic savvy, from playful LinkedIn personas and tailored applications to clever networking and identifying overlooked opportunities.*
+  ***Event** is your go-to hub for upcoming webinars, engaging workshops, social gatherings, and crucial product launch meetings, all designed to keep you informed and connected!*
+- **[[General/_index|General]]**: 14 articles
+  *Explore the cutting edge of tech and personal growth, from AI-powered productivity hacks and innovative web design to mastering essential developer tools and building a winning career.*
+- **[[Job-Career/_index|Job-Career]]**: 12 articles
+  *Navigate the professional world with a blend of strategic networking, tailored applications, and skill development, from mastering online profiles to understanding industry roles.*
 - **[[Journal/_index|Journal]]**: 2 articles
-  *This 'Journal' category captures the unfolding narrative of daily life, offering snapshots of thoughts and events as they happen.*
-- **[[Recipe/_index|Recipe]]**: 11 articles
-  *Explore a world of culinary inspiration, from craveable crispy chicken variations to global flavors and convenient weeknight meals, all designed to delight your taste buds!*
-- **[[Spot to Visit/_index|Spot to Visit]]**: 9 articles
-  ***Uncover Melbourne's hottest spots, from decadent gelato and brunch havens to rejuvenating spas, perfect for every craving and season.***
+  *Dive into the personal narrative of daily life, capturing fleeting moments and ongoing thoughts as they unfold, day by day.*
+- **[[Recipe/_index|Recipe]]**: 12 articles
+  *Whip up delicious dishes, from crispy garlic sesame chicken to Michelin-star Swedish meatballs, with these inspiring recipes from across the web!*
+- **[[Spot to Visit/_index|Spot to Visit]]**: 10 articles
+  *Discover vibrant Melbourne's hidden gems, from sweet treats and cozy brunches to relaxing retreats and unique date night ideas, perfect for any mood or season.*
 - **[[Weekly Brief/_index|Weekly Brief]]**: 1 articles
-  ***Weekly Briefs: Your concise roundup of essential insights and actionable takeaways, distilled from the latest knowledge.***
+  *Your "Weekly Brief" offers a concise digest of the week's most important learnings and insights, ready for immediate action.*

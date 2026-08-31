@@ -1,6 +1,6 @@
 # Weekly Brief Index
 
-**Weekly Briefs: Your concise roundup of essential insights and actionable takeaways, distilled from the latest knowledge.**
+Your "Weekly Brief" offers a concise digest of the week's most important learnings and insights, ready for immediate action.
 
 This folder contains 1 articles related to Weekly Brief.
 

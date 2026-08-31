@@ -1,8 +1,8 @@
 # Recipe Index
 
-Explore a world of culinary inspiration, from craveable crispy chicken variations to global flavors and convenient weeknight meals, all designed to delight your taste buds!
+Whip up delicious dishes, from crispy garlic sesame chicken to Michelin-star Swedish meatballs, with these inspiring recipes from across the web!
 
-This folder contains 11 articles related to Recipe.
+This folder contains 12 articles related to Recipe.
 
 ## Articles
 - [[2026-05-18 - Recipe from Instagram (Ayesha Mahboob)]]: A recipe for crispy garlic sesame chicken, with the full recipe available on the creator's blog.
@@ -16,3 +16,4 @@ This folder contains 11 articles related to Recipe.
 - [[2026-05-19 - Recipe from Instagram (Iram Mansoor)]]: A recipe for Nashville style hot chicken sandwich, including ingredients for the chicken, dry batter, ranch dressing, hot oil, creamy lettuce, and assembly instructions.
 - [[2026-05-19 - Recipe from Instagram (Noor)]]: A spicy penne pasta recipe with cheese, featuring common pantry staples and a creamy tomato-based sauce.
 - [[2026-05-26 - Recipe from Youtube (Alex Baka)]]: A recipe for crispy fried chicken using vodka in the batter for a crispier coating.
+- [[2026-08-31 - Recipe from Youtube (Fallow)]]: This recipe details how to make Swedish meatballs and accompaniments like pomme puree, pickled cucumbers, and cream gravy, aiming for a Michelin-star quality.

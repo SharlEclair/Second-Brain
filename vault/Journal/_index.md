@@ -1,6 +1,6 @@
 # Journal Index
 
-This 'Journal' category captures the unfolding narrative of daily life, offering snapshots of thoughts and events as they happen.
+Dive into the personal narrative of daily life, capturing fleeting moments and ongoing thoughts as they unfold, day by day.
 
 This folder contains 2 articles related to Journal.
 

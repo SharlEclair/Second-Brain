@@ -1,8 +1,8 @@
 # Spot to Visit Index
 
-**Uncover Melbourne's hottest spots, from decadent gelato and brunch havens to rejuvenating spas, perfect for every craving and season.**
+Discover vibrant Melbourne's hidden gems, from sweet treats and cozy brunches to relaxing retreats and unique date night ideas, perfect for any mood or season.
 
-This folder contains 9 articles related to Spot to Visit.
+This folder contains 10 articles related to Spot to Visit.
 
 ## Articles
 - [[2026-05-18 - Spot to Visit from Instagram (Sunny)]]: Discover top ice cream spots in Melbourne, with unique flavors and perfect for hot weather.
@@ -12,5 +12,6 @@ This folder contains 9 articles related to Spot to Visit.
 - [[2026-05-22 - Spot to Visit (Shared Text) (3)]]: Visited Pidapipó Gelato in Carlton and walked down Lygon Street in Melbourne.
 - [[2026-05-22 - Spot to Visit (Shared Text) (4)]]: Visited Pidapipó Gelato in Carlton, Melbourne and walked down Lygon Street.
 - [[2026-05-22 - Spot to Visit (Shared Text)]]: Visited Pidapipó Gelato in Carlton and walked down Lygon Street in Melbourne.
+- [[2026-05-27 - Spot to Visit from Instagram (Bianca in Melbourne)]]: A list of 7 fun date night activities in Melbourne, including a new entertainment venue, cafes, and creative studios.
 - [[50 La Trobe St Melbourne]]: A test location note for geofencing testing located at 50 La Trobe St, Melbourne CBD.
 - [[570 Lygon St Melbourne]]: A test location note for geofencing testing located at 570 Lygon St, Carlton / Melbourne.
