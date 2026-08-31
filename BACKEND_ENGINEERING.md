@@ -1,81 +1,108 @@
-# ⚙️ Cortex: Backend Engineering
+# ⚙️ Cortex: Backend Engineering & API Reference
 
-The Cortex backend is a high-performance FastAPI server designed for heavy media processing and AI-driven synthesis.
+The Cortex backend is a modular, high-concurrency FastAPI engine engineered for media acquisition, local audio transcription, AI-driven synthesis, and vector search.
 
-## 🚀 Key Features
+---
 
-### 1. Non-Blocking Concurrency
-To prevent the server from freezing during long downloads or transcriptions, the backend uses a **Threaded Async Model**:
-- **Async Handlers**: FastAPI handles incoming requests (like status polls) asynchronously.
-- **Thread Offloading**: Heavy synchronous tasks (yt-dlp, Whisper, Gemini) are offloaded to a thread pool using `asyncio.to_thread()`.
-- **Live Progress**: This allows the server to serve `/api/status` updates while a 10-minute video is still being processed in the background.
+## 🏛️ Modular Backend Structure
 
-### 2. MD5 Content Fingerprinting
-Cortex doesn't just check URLs for duplicates—it checks the *content*:
-- Every file (audio or image) is hashed using the MD5 algorithm.
-- This hash is stored in `url_index.json`.
-- **Benefit**: If you share the same video from a different URL (e.g., a re-upload or a different platform), Cortex will identify the duplicate fingerprint and stop ingestion immediately.
+The backend has been modularized from a legacy monolith into domain-specific routes, decoupled service layers, and core utilities:
 
-### 3. RAG (Retrieval-Augmented Generation)
-Cortex uses a state-of-the-art RAG pipeline for the "Ask Your Brain" feature:
-- **Vector Storage**: Uses ChromaDB to store high-dimensional embeddings of your notes.
-- **Semantic Search**: When you ask a question, the system finds the most relevant "chunks" of your knowledge.
-- **Contextual Synthesis**: Relevant chunks are fed into the Gemini model as context, ensuring the AI only answers based on *your* data.
+```
+├── main.py                     # Thin application bootstrap (~87 lines)
+├── api/
+│   ├── models.py               # 13 Centralized Pydantic models
+│   ├── celery_app.py           # Celery broker configuration
+│   ├── tasks.py                # Asynchronous Celery background workers
+│   ├── routes/                 # 11 Modular APIRouters (47 endpoints)
+│   │   ├── system.py           # Health, status, config, sync, logs
+│   │   ├── ingest.py           # Multi-modal media ingestion (/ingest, /upload, /ingest_text)
+│   │   ├── note_actions.py     # Summarize, deep dive, extract tasks, append tasks, review, create
+│   │   ├── chat.py             # RAG conversational chat & session persistence
+│   │   ├── journal.py          # Daily journal append & event extraction
+│   │   ├── discovery.py        # Weekly brief, upcoming events, serendipity, graph, inbox counts
+│   │   ├── vault.py            # Tags, vault audit, compile inbox, synthesis, backlinks
+│   │   ├── integrations.py     # Analytics, Todoist sync, webhook, device tokens
+│   │   ├── auth.py             # Google OAuth flow
+│   │   ├── notes.py            # Vault note CRUD & location tagging
+│   │   └── geofence.py         # Geofencing & proximity queries
+│   └── services/               # Pure business logic services
+│       ├── ingestion.py        # Media processing, duplicate hashing, filename generation
+│       └── vault.py            # Index generation, master index, system config, task parser
+└── core/                       # Core engine abstractions
+    ├── db.py                   # Lazy singleton ChromaDB vector client
+    ├── processors.py           # yt-dlp, faster-whisper, Gemini AI fallback chain
+    ├── state.py                # OperationManager (Redis / in-memory task tracking)
+    ├── config.py               # Centralized configuration & environment loader
+    ├── utils.py                # Chunking, text cleaning, temp file lifecycle
+    ├── serendipity.py          # Weighted random knowledge surfacing
+    ├── synthesis_loop.py       # Automated weekly synthesis worker
+    └── retroactive_backlink.py # Vault-wide bidirectional link scanner
+```
 
-## 📡 API Endpoints
+---
 
-### Ingestion & Status
-- `POST /api/ingest`: Accepts a URL. Supports `X-Stream: true` for live status streaming.
-- `GET /api/status`: Returns current active tasks and their processing stage.
-- `GET /api/config`: Returns system-wide configuration (Model ID, Note Count).
+## 📡 API Endpoint Reference
 
-### Vault Management
-- `GET /api/notes`: Lists all notes with metadata (title, date, URL, content hash).
-- `GET /api/notes/{filename}`: Returns the raw Markdown content for viewing.
-- `POST /api/notes/{filename}/summarize`: Triggers a targeted AI summary of a specific note.
-- `POST /api/notes/{filename}/deep_dive`: Triggers a comprehensive AI analysis of a specific note.
+### 1. System & Operations (`api/routes/system.py`)
+- `GET /`: API welcome and status summary.
+- `GET /api/health`: Healthcheck endpoint for monitoring and container probes.
+- `GET /api/status`: Real-time operation tracker returning `active_tasks`, `recent_tasks`, and progress metrics.
+- `GET /api/logs`: Retrieves system error log history.
+- `POST /api/logs/clear`: Clears the error log database.
+- `GET /api/config`: Returns system configuration (active model, model chain, inbox mode).
+- `POST /api/config/inbox_mode`: Toggles raw clipping inbox mode.
+- `POST /api/sync`: Triggers automated Git push/pull synchronization on the local vault.
 
-### Knowledge Query
-- `POST /api/chat`: The RAG endpoint. Searches ChromaDB and returns an AI-synthesized answer.
-- `POST /api/save_answer`: Saves an AI chat response as a permanent note in the vault.
+### 2. Ingestion (`api/routes/ingest.py`)
+- `POST /api/ingest`: Ingests a URL (YouTube, Instagram, TikTok, Web). Supports `X-Stream: true` for SSE streaming or `X-Queue: true` for Celery background processing.
+- `POST /api/upload`: Multi-part document, audio, or image file ingestion.
+- `POST /api/ingest_text`: Ingests raw text clippings directly into the knowledge base.
 
-## 📂 Core Logic Modules
-- `main.py`: The entry point and API route definitions.
-- `core/processors.py`: The acquisition engine (yt-dlp, Instaloader, Whisper, Gemini).
-- `core/state.py`: Manages the global `OperationsManager` for task tracking.
-- `core/utils.py`: URL sanitization and platform detection.
+### 3. Note Actions (`api/routes/note_actions.py`)
+- `POST /api/notes/{filename}/summarize`: Generates a concise 3–5 bullet point executive summary.
+- `POST /api/notes/{filename}/deep_dive`: Generates an in-depth analytical breakdown with conceptual connections.
+- `POST /api/notes/{filename}/extract_tasks`: Extracts actionable checklist items in Obsidian Markdown syntax (`- [ ]`).
+- `POST /api/notes/{filename}/append_tasks`: Appends task items to a note and syncs with `_tasks.json`.
+- `POST /api/notes/reviewed`: Updates note metadata and frontmatter timestamp for spaced repetition review.
+- `POST /api/notes/create`: Manually creates a new structured note.
+- `POST /api/save_answer`: Synthesizes a chat answer into a permanent vault wiki article.
 
-## 2026-05-11 Backend Changes
+### 4. RAG Chat & History (`api/routes/chat.py`)
+- `POST /api/chat`: Contextual conversational RAG endpoint. Queries ChromaDB for top-5 semantic matches and synthesizes answers using Gemini. Accepts optional `session_id` and `note_context`.
+- `GET /api/chats`: Lists all saved chat sessions with titles and message counts.
+- `GET /api/chats/{session_id}`: Retrieves full message history for a specific chat session.
 
-### Transcript Generation and Persistence
-- `process_reel()` now returns `raw_transcript`, `transcript_status`, media size, and the model used for AI synthesis.
-- Saved Markdown notes include a `## Raw Transcript` section for video content.
-- Empty or silent media is recorded as an explicit transcript status instead of disappearing from the note.
-- ChromaDB indexing now combines formatted AI content, raw transcript text, and source captions.
+### 5. Daily Journal & Events (`api/routes/journal.py`)
+- `POST /api/journal/append`: Appends a scratchpad note or clipping to today's `YYYY-MM-DD - Daily Journal.md` file. Automatically parses prospective dates to create calendar reminders.
 
-### Operation State Model
-`OperationManager` now keeps active tasks plus a bounded recent-task history. `/api/status` returns:
-- `active_tasks`: tasks currently running.
-- `recent_tasks`: recently completed, duplicate, or failed tasks.
-- `task_count`: active task count.
+### 6. Discovery & Graph (`api/routes/discovery.py`)
+- `GET /api/weekly_brief`: Aggregates notes from the previous 7 days into a structured intelligence brief.
+- `GET /api/events/upcoming`: Retrieves upcoming events and deadlines extracted from vault frontmatter.
+- `GET /api/suggestions`: Returns random note suggestions to spark creative connections.
+- `GET /api/serendipity`: Algorithmically surfaces forgotten or high-value notes.
+- `GET /api/graph`: Returns 2D Force Graph nodes and links representing vault wiki-link connections.
+- `GET /api/inbox/pending`: Lists raw notes waiting in the inbox.
+- `GET /api/raw_count`: Returns total count of uncompiled raw inbox clippings.
 
-Each task can include `task_id`, `url`, `platform`, `status`, `state`, `progress`, `start_time`, `updated_at`, `finished_at`, and `error`.
+### 7. Vault Maintenance & Audits (`api/routes/vault.py`)
+- `GET /api/tags`: Returns all active hierarchical tags from `tags.txt`.
+- `PUT /api/tags/rename`: Vault-wide tag rename across all physical `.md` files.
+- `POST /api/audit`: Comprehensive vault audit. Detects ghost topics (uncreated notes referenced via `[[links]]`), contradictory claims, and coverage gaps.
+- `POST /api/synthesis/weekly`: Triggers automated weekly topic synthesis.
+- `POST /api/maintenance/backlink`: Runs retroactive link scanner across all notes.
+- `POST /api/compile`: Compiles, summarizes, and categorizes raw inbox notes into the main vault.
 
-### Instagram Carousel Pipeline
-- Instagram `/p/` posts are downloaded with a provider strategy: `yt-dlp` first, Instaloader fallback second.
-- Carousel image files are sent to Gemini vision.
-- Carousel video files are transcribed with Faster-Whisper and included in the analysis prompt.
-- Duplicate detection uses a composite MD5 over all downloaded carousel media files.
-- Metadata failures now include a clear remediation path: refresh `cookies.txt` or retry later if Instagram blocks GraphQL/media access.
+### 8. Integrations & Webhooks (`api/routes/integrations.py`)
+- `POST /api/analytics`: Ingests client usage telemetry into `analytics.json`.
+- `GET /api/tasks`: Returns all checklist tasks tracked in `_tasks.json`.
+- `POST /api/webhooks/todoist`: Secure HMAC-SHA256 webhook endpoint that marks tasks completed when checked off in Todoist.
+- `POST /api/device_token`: Registers mobile FCM device tokens for push notifications.
 
-### Gemini Fallbacks
-All Gemini calls now go through `generate_content_with_fallback()`:
-- Primary: `models/gemini-2.5-flash-lite`
-- Fallback: `models/gemini-2.5-flash`
-- Retry/fallback triggers: 429, 5xx, timeout, unavailable, overloaded, and resource exhaustion style errors.
-- Non-retryable errors, such as invalid auth or bad requests, still fail fast.
+---
 
-### Related Endpoint Changes
-- `GET /api/config` now returns `primary_model`, `fallback_model`, and `model_chain`.
-- `POST /api/ingest` streamed responses are newline-delimited JSON (`application/x-ndjson`).
-- Note summary, deep dive, RAG chat, text analysis, and image analysis all share the same Gemini fallback behavior.
+## 🔒 Security & Secrets Protocol
+
+- **Zero Hardcoded Secrets**: All API keys, secrets, and auth tokens are loaded exclusively from `.env` or system environment variables.
+- **HMAC Webhook Verification**: Todoist webhooks enforce cryptographic signature validation using `X-Todoist-Hmac-SHA256`.
+- **Sanitized Git Baseline**: Runtime assets (`chroma_db/`, `device_tokens.json`, `chat_history.json`, `error_log.json`, `system_config.json`, `firebase_credentials.json`) are ignored in `.gitignore`.

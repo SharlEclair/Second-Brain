@@ -1,58 +1,65 @@
-# 🖥️ Cortex: Frontend Exploration
+# 🖥️ Cortex: Frontend Architecture & Client Exploration
 
-Cortex provides two distinct interfaces for interacting with your knowledge: a high-power Web Dashboard for management and a streamlined Mobile App for capture.
-
-## 🕸️ Web Dashboard (React/Vite)
-
-The Web Dashboard is the "Mission Control" for your Second Brain.
-
-### Key Features:
-- **Vault Explorer**: A searchable sidebar that lists every note in your vault. Search is performed locally on titles for O(1) responsiveness.
-- **Note Viewer**: A high-fidelity Markdown renderer (via `react-markdown`) with support for custom styling (Georgia font for readability).
-- **Mission Control**: A specialized view for system health:
-    - **Active Operations**: See exactly what the backend is doing (Downloading, Transcribing, Analyzing).
-    - **Error Logs**: View and clear critical system errors with one-click retry functionality.
-- **Ingestion Bar**: A prominent, mono-spaced input field for pasting URLs. It features a "Glow" effect when active and shows live status breadcrumbs.
-- **Secure Node Sync**: A status indicator showing your vault is synced and the AI model is online.
+Cortex provides two intuitive, high-performance interfaces: a **React 19 Web Dashboard** for in-depth knowledge synthesis and a **Flutter Client** for cross-platform capture.
 
 ---
 
-## 📱 Mobile App (Flutter)
+## 🕸️ React 19 Web Dashboard
 
-The mobile app, named **Cortex**, is optimized for "On-the-Go" knowledge capture.
+The Web Dashboard has been re-architected from a 1,188-line monolith into a modular, hook-driven architecture where presentation components remain pure and state is decoupled into domain hooks.
 
-### 📥 "Share to Ingest" Workflow
-The most powerful feature of the mobile app is its native Android integration:
-1. **Discover**: You see a Reel or post you like in another app (Instagram, YouTube).
-2. **Share**: Tap the system "Share" button.
-3. **Select Cortex**: Choose the "Cortex" app from the share sheet.
-4. **Auto-Process**: The app automatically extracts the URL, sends it to the backend, and shows a "✓ Successfully Ingested" notification—all without you needing to copy/paste.
+```
+src/
+├── App.tsx                      # Declarative Root Orchestrator (~205 lines)
+├── types/                       # Centralized TypeScript Contracts (index.ts)
+├── services/                    # Typed API Client Layer (api.ts)
+├── hooks/                       # Custom Domain State Hooks
+│   ├── useNotes.ts              # Note selection, action execution, and search
+│   ├── useChat.ts               # RAG conversational stream and active note context
+│   ├── useIngest.ts             # URL SSE streaming, drag-and-drop, and voice recording
+│   └── useSystemStatus.ts       # Real-time task queue polling, sync, and theme toggle
+└── components/
+    ├── layout/                  # Core Layout Presentation Components
+    │   ├── VaultSidebar.tsx     # Stored knowledge explorer, search, and node sync status
+    │   ├── IngestionHeader.tsx  # Omni-ingestion input bar, upload/voice buttons, toast alerts
+    │   ├── NoteViewer.tsx       # Markdown reader, action toolbar, task appender, frontmatter tags
+    │   ├── EmptyWorkspace.tsx   # 2D Knowledge Graph, 4-column widget grid, activity heatmap
+    │   ├── ChatPanel.tsx        # Collapsible RAG terminal with active note context focus
+    │   └── ActiveQueueOverlay.tsx # Floating real-time background task progress cards
+    ├── SystemDashboard.tsx      # Mission Control operations monitor & log viewer
+    ├── VaultGraph.tsx           # Interactive 2D Force-Directed Knowledge Graph
+    ├── ActivityHeatmap.tsx      # Contribution & knowledge capture activity grid
+    ├── SerendipityWidget.tsx    # Spaced-repetition knowledge resurfacing
+    ├── EventsWidget.tsx         # Upcoming event deadlines widget
+    ├── SuggestionsWidget.tsx    # Random contextual note recommendations
+    ├── InboxCompileWidget.tsx   # Raw clippings batch compiler
+    └── LibraryDirectory.tsx     # Categorical folder tree browser
+```
 
-### Key Features:
-- **Dynamic Status Polling**: The "INGEST" button and "PROCESS ALL" queue buttons change text in real-time (e.g., "TRANSCRIBING...") based on the backend status.
-- **Queue Management**: If the server is unreachable (e.g., you're offline), links are saved to a local **Offline Queue**. You can batch-process them later with one tap.
-- **Debug Logs**: A hidden "Developer" view allows you to see raw Network and Error logs directly on the phone for troubleshooting.
-- **RAG Chat**: A full chat interface for talking to your brain while away from your desk.
+---
 
-## 🎨 Design Language
-Both platforms share a consistent "Dark/Tech" aesthetic:
-- **Primary Color**: Orange 500 (`#F97316`)
-- **Background**: Pure Black (`#050505`) / Panel Gray (`#111111`)
-- **Typography**: Inter (UI), JetBrains Mono (Tech), Georgia (Reading)
-- **Animations**: Subtle motion via `framer-motion` (Web) and native Flutter transitions (Mobile).
+## 🎣 Custom Domain Hooks
 
-## 2026-05-11 Frontend Changes
+| Hook | Responsibilities | Key Functions & State |
+| :--- | :--- | :--- |
+| **`useNotes`** | Manages note browsing, note viewing, and AI-assisted note actions. | `notes`, `selectedNote`, `noteContent`, `searchQuery`, `fetchNotes()`, `handleSelectNote()`, `handleAction('summarize' \| 'deep_dive' \| 'extract_tasks')`, `handleSaveTasks()`. |
+| **`useChat`** | Manages RAG conversation state, session history, and Wiki promotion. | `messages`, `chatInput`, `currentSessionId`, `isTyping`, `isChatMinimized`, `useActiveNoteContext`, `handleChat()`, `loadChatSession()`, `handlePromoteToWiki()`. |
+| **`useIngest`** | Manages multi-modal ingestion (SSE streams, file uploads, voice notes, drag-and-drop, global paste). | `url`, `loadingNote`, `ingestStatus`, `error`, `success`, `isDragging`, `isRecording`, `handleIngest()`, `uploadFileObj()`, `toggleRecording()`. |
+| **`useSystemStatus`** | Polls real-time Celery task queues, controls vault sync, and persists theme preferences. | `activeTasks`, `recentTasks`, `activeModel`, `isSyncing`, `showDashboard`, `theme`, `toggleTheme()`, `handleSync()`. |
 
-### Web Dashboard
-- The React app now polls `/api/status` globally, so active ingestion is visible even when started from the Flutter app or Android share sheet.
-- The header shows a compact active-operation indicator with stage and progress when ingestion is running.
-- Failed recent ingests remain visible as a header warning until a newer status replaces them.
-- Mission Control now renders recent completed or failed operations in addition to active tasks.
-- The "Sync Vault" button now calls the backend sync endpoint instead of only toggling local spinner state.
+---
 
-### Mobile App
-- Manual URL ingestion now tracks the matching backend task by URL and shows the current stage in the INGEST button.
-- Progress percentages from the backend are displayed where available.
-- Android "Share to Cortex" ingestions now poll `/api/status` while the long-running POST is active and surface stage updates through snackbars.
-- The mobile HTTP ingestion timeout was increased to 15 minutes so longer media has time to download, transcribe, analyze, save, and index.
-- `/api/status` polling now has its own timeout to avoid hanging the UI on weak networks.
+## 📱 Cross-Platform Flutter Client (`flutter_client/`)
+
+The mobile and desktop client, named **Cortex**, provides unified knowledge capture across **Android, iOS, Windows, macOS, Linux, and Web**.
+
+### 📥 Native "Share to Ingest" Workflow
+1. **Discover**: Ingest content from native social media apps (YouTube, Instagram, TikTok, Twitter/X) by tapping the OS **Share** button.
+2. **Select Cortex**: Choose the "Cortex" app from the native share sheet.
+3. **Auto-Process**: The app extracts the URL, submits it to the background Celery queue via `POST /api/ingest` with `X-Queue: true`, and surfaces real-time progress notifications.
+
+### Key Mobile Capabilities:
+- **Offline Ingestion Queue**: When disconnected from your home network, links and clippings are saved to an encrypted local queue and synced automatically upon reconnection.
+- **Proactive Geofencing**: Automatically notifies you when you are physically near a venue or restaurant saved in your "Spot to Visit" notes.
+- **Mobile RAG Terminal**: Full conversational chat interface to research your knowledge vault on mobile.
+- **Analytics & Mission Control**: Mobile dashboard tracking ingestion velocity, category distributions, and backend service health.

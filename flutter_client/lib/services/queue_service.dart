@@ -11,6 +11,7 @@ class QueueItem {
   final DateTime createdAt;
   int retryCount;
   bool isFailed;
+  String? error;
 
   QueueItem({
     required this.id,
@@ -20,6 +21,7 @@ class QueueItem {
     DateTime? createdAt,
     this.retryCount = 0,
     this.isFailed = false,
+    this.error,
   }) : createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
@@ -30,6 +32,7 @@ class QueueItem {
     'createdAt': createdAt.toIso8601String(),
     'retryCount': retryCount,
     'isFailed': isFailed,
+    'error': error,
   };
 
   factory QueueItem.fromJson(Map<String, dynamic> json) => QueueItem(
@@ -40,11 +43,13 @@ class QueueItem {
     createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
     retryCount: json['retryCount'] ?? 0,
     isFailed: json['isFailed'] ?? false,
+    error: json['error'],
   );
 }
 
 class QueueService {
   static const String _keyPendingItems = 'pending_queue_items';
+  static const String _keyFailedItems = 'failed_queue_items';
 
   /// Add a QueueItem to the local queue
   Future<void> addToQueue(QueueItem item) async {
@@ -82,15 +87,56 @@ class QueueService {
     await prefs.remove(_keyPendingItems);
   }
 
+  /// Get all failed queued items
+  Future<List<QueueItem>> getFailedQueue() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyFailedItems);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final List<dynamic> decoded = jsonDecode(raw);
+      return decoded.map((item) => QueueItem.fromJson(item)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Save the failed queue
+  Future<void> _saveFailedQueue(List<QueueItem> queue) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = jsonEncode(queue.map((item) => item.toJson()).toList());
+    await prefs.setString(_keyFailedItems, raw);
+  }
+
+  /// Remove a single item from the failed queue by ID or payload
+  Future<void> removeFromFailedQueue(String id) async {
+    final queue = await getFailedQueue();
+    queue.removeWhere((item) => item.id == id || item.payload == id);
+    await _saveFailedQueue(queue);
+  }
+
+  /// Clear the entire failed queue
+  Future<void> clearFailedQueue() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyFailedItems);
+  }
+
+  /// Move a link from the failed queue back into the active pending queue
+  Future<void> moveToPendingQueue(QueueItem item) async {
+    await removeFromFailedQueue(item.id);
+    item.isFailed = false;
+    item.retryCount = 0;
+    item.error = null;
+    await addToQueue(item);
+  }
+
   Future<QueueProcessResult> processQueue(ApiService api) async {
     final queue = await getQueue();
-    // Filter out items that are marked as failed permanently (retryCount >= 3)
-    final pendingItems = queue.where((item) => !item.isFailed).toList();
     
-    if (pendingItems.isEmpty) {
+    if (queue.isEmpty) {
       return QueueProcessResult(processed: 0, failed: 0, total: 0, errors: {}, failedPermanently: []);
     }
 
+    final pendingItems = queue;
     int processed = 0;
     int failed = 0;
     final total = pendingItems.length;
@@ -127,9 +173,21 @@ class QueueService {
         final idx = updatedQueue.indexWhere((element) => element.id == item.id);
         if (idx != -1) {
           updatedQueue[idx].retryCount++;
-          if (updatedQueue[idx].retryCount >= 3) {
+          updatedQueue[idx].error = errorMessage;
+          
+          if (updatedQueue[idx].retryCount >= 5) {
             updatedQueue[idx].isFailed = true;
             failedPermanently.add(item.payload);
+            
+            // Save to failed queue
+            final failedQueue = await getFailedQueue();
+            if (!failedQueue.any((element) => element.payload == item.payload)) {
+              failedQueue.add(updatedQueue[idx]);
+              await _saveFailedQueue(failedQueue);
+            }
+            
+            // Remove from updatedQueue (so it won't be saved in pending queue)
+            updatedQueue.removeAt(idx);
           }
         }
         

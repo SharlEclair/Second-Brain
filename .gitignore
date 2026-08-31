@@ -16,10 +16,11 @@ venv/
 temp/
 temp_*/
 
-# Database
+# Database / Vector store / Private Vault
 chroma_db/
 vector_db.json
 url_index.json
+vault/
 
 # Configuration / Credentials
 ngrok.yml
@@ -28,6 +29,19 @@ token.json
 celerybeat-schedule*
 serendipity_state.json
 
+# Runtime data files (contain user data or sensitive content)
+cookies.txt
+device_tokens.json
+chat_history.json
+error_log.json
+system_config.json
+firebase_credentials.json
+
+# Server app SQLite log (safe to delete entirely, tracked here in case folder returns)
+server_app/server_logs.db
+
+# Development scratch files
+scratch/
+
 # Portable JDK
 jdk-portable/
-

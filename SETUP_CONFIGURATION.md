@@ -1,102 +1,132 @@
-# 🛠️ Cortex: Setup & Configuration
+# 🛠️ Cortex: Setup & Configuration Guide
 
-This guide details how to configure, run, and maintain the Cortex system.
+This guide details how to configure, run, and maintain the Cortex Second Brain system on your local machine.
+
+---
 
 ## 🔑 Environment Variables (`.env`)
-Create a `.env` file in the root directory with the following keys:
 
-```env
-# AI Configuration
-GEMINI_API_KEY=your_google_ai_key
+Cortex ships with a safe template in [`.env.example`](file:///c:/Users/91704/Desktop/Second-Brain/.env.example). Create your local configuration file by copying it:
 
-# Vault Paths
-OBSIDIAN_INBOX_PATH=C:/path/to/Obsidian/Vault/Inbox
-PROJECT_VAULT_PATH=C:/path/to/Second-Brain/vault
+```powershell
+cp .env.example .env
 ```
 
-## 📂 Directory Structure
+Open `.env` and configure the following variables:
 
-```text
-/
-├── main.py              # FastAPI Entry Point
-├── core/                # Backend Modules
-│   ├── config.py        # Centralized Settings
-│   ├── processors.py    # Media/AI Engines
-│   └── state.py         # Task Management
-├── src/                 # React Web App Source
-├── flutter_client/      # Mobile App Source
-├── vault/               # Local Markdown Storage
-├── chroma_db/           # Vector Database Files
-├── url_index.json       # Metadata & MD5 Hashing Index
-└── error_log.json       # System Error History
+```ini
+# ── Required ──────────────────────────────────────────────────────────────────
+# Get your Gemini API key from: https://aistudio.google.com/app/apikey
+GEMINI_API_KEY="your_gemini_api_key_here"
+
+# ── Vault Paths ────────────────────────────────────────────────────────────────
+# Path to your Obsidian Vault's inbox directory
+OBSIDIAN_INBOX_PATH="C:/Users/YourUsername/Documents/Obsidian Vault/Inbox"
+
+# Path to the Second-Brain project vault directory (defaults to ./vault)
+PROJECT_VAULT_PATH="./vault"
+
+# ── Celery Task Queue ──────────────────────────────────────────────────────────
+# Redis connection URL for Celery background workers
+REDIS_URL="redis://localhost:6379/0"
+
+# ── Ngrok Tunnel (Remote Mobile & Web Access) ──────────────────────────────────
+# Your personal Ngrok authtoken (from https://dashboard.ngrok.com/get-started/your-authtoken)
+NGROK_AUTHTOKEN="your_ngrok_authtoken_here"
+
+# ── Optional Integrations ──────────────────────────────────────────────────────
+# Google Maps geocoding API key (for spot coordinates extraction)
+GOOGLE_MAPS_API_KEY="your_maps_api_key"
+
+# Todoist client secret for webhook signature verification
+TODOIST_CLIENT_SECRET="your_todoist_secret"
 ```
 
-## 🏃 Running the System
+---
 
-The project is managed via a root `package.json` for convenience:
+## 🌐 Ngrok Tunnel Integration
 
-### Start the Backend
-```bash
-npm run backend
+Cortex includes native support for exposing your local FastAPI server over a secure, public HTTPS tunnel using **Ngrok**.
+
+### How It Works:
+1. When `python run_services.py` runs, it loads `NGROK_AUTHTOKEN` from your `.env` file.
+2. The orchestrator injects this token into the subprocess environment and executes `npx ngrok` using [`ngrok.yml`](file:///c:/Users/91704/Desktop/Second-Brain/ngrok.yml).
+3. `ngrok.yml` automatically interpolates `${NGROK_AUTHTOKEN}` without requiring hardcoded secrets:
+   ```yaml
+   version: 3
+   agent:
+     authtoken: ${NGROK_AUTHTOKEN}
+   ```
+4. Ngrok creates a secure tunnel forwarding to `http://127.0.0.1:8000`. You can paste the resulting public URL into your Flutter mobile client to capture notes from anywhere.
+
+---
+
+## 🚀 Running the System
+
+### Automated Orchestration (`python run_services.py`)
+
+The simplest and recommended way to start Cortex is using the unified service orchestrator:
+
+```powershell
+python run_services.py
 ```
-*Note: This automatically uses the virtual environment (`./venv/Scripts/python`).*
 
-### Start the Web UI
-```bash
+This orchestrator automatically:
+1. **Validates Redis**: Checks if the `redis` Docker container is running; if not, starts or creates a new `redis:7-alpine` container on port `6379`.
+2. **Kills Zombie Processes**: Cleans up orphan ports (`8000`, `5173`, `5174`) and background processes.
+3. **Launches Frontend**: Starts the Vite React dashboard on `http://localhost:5173`.
+4. **Launches Backend**: Starts the FastAPI engine on `http://127.0.0.1:8000`.
+5. **Launches Ngrok**: Establishes the secure public tunnel.
+6. **Launches Celery**: Starts the background worker and periodic beat scheduler.
+
+Press `Ctrl+C` in the terminal to cleanly terminate all services simultaneously.
+
+---
+
+### Manual Service Execution (Optional)
+
+If you prefer to run services in separate terminals:
+
+**Terminal 1 (Backend API):**
+```powershell
+.\venv\Scripts\activate
+python main.py
+```
+
+**Terminal 2 (Frontend Web):**
+```powershell
 npm run dev
 ```
 
-### Build the Mobile App
-```bash
+**Terminal 3 (Celery Worker):**
+```powershell
+.\venv\Scripts\activate
+celery -A api.celery_app.celery_app worker --loglevel=info -P solo
+```
+
+**Terminal 4 (Celery Beat):**
+```powershell
+.\venv\Scripts\activate
+celery -A api.celery_app.celery_app beat --loglevel=info
+```
+
+**Terminal 5 (Ngrok Tunnel):**
+```powershell
+npx ngrok http 8000 --config=ngrok.yml
+```
+
+---
+
+## 📱 Mobile Client Setup (Flutter)
+
+To run the capture app on your Android or iOS device:
+
+```powershell
 cd flutter_client
-flutter build apk --release
+flutter pub get
+flutter run
 ```
 
-## 🔧 Maintenance & Ops
-
-### Cloudflare Tunnel
-For the mobile app to work outside your local network, use the provided Cloudflare tunnel command:
-```bash
-npx cloudflared tunnel --url http://127.0.0.1:8000
-```
-Update the "Backend URL" in the Mobile App settings with your custom `.trycloudflare.com` address.
-
-### Vault Sync
-The system includes a built-in Git sync mechanism. Ensure `PROJECT_VAULT_PATH` is a Git repository. Clicking "Sync Vault" on the dashboard will run:
-1. `git add .`
-2. `git commit -m "Auto-sync"`
-3. `git push`
-
-### Temporary Files
-Cortex creates temporary audio/image files during ingestion. The system automatically runs `cleanup_temp_files()` on startup, but you can manually delete any files starting with `temp_` if needed.
-
-## 2026-05-11 Configuration Notes
-
-### Gemini Model Chain
-The backend now uses a two-model Gemini chain:
-
-```text
-Primary:  models/gemini-2.5-flash-lite
-Fallback: models/gemini-2.5-flash
-```
-
-The fallback is only used after repeated busy or server-side failures from Google, such as rate limiting, temporary unavailability, overload, timeout, or 5xx responses.
-
-### Vault Paths
-`PROJECT_VAULT_PATH` is now read from `.env` and falls back to `./vault` when unset. `OBSIDIAN_INBOX_PATH` continues to support both `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_INBOX_PATH` for backwards compatibility.
-
-### Instagram Cookies
-Instagram carousel ingestion now tries `yt-dlp` first and Instaloader second. Both can use `cookies.txt` from the project root. If Instagram returns `403 Forbidden`, `Fetching Post metadata failed`, or login-required errors, refresh `cookies.txt` from an authenticated browser session and retry.
-
-### Status Monitoring
-Use `GET /api/status` to inspect live and recent operations. The response includes:
-
-```json
-{
-  "active_tasks": [],
-  "recent_tasks": [],
-  "task_count": 0
-}
-```
-
-Tasks include stage, progress, state, timestamps, URL, platform, and error fields. This endpoint powers Mission Control, the web header operation indicator, and mobile ingestion status.
+In the app's settings screen:
+1. Set the **Backend URL** to your local network address (e.g. `http://192.168.1.50:8000`) or your public **Ngrok HTTPS URL**.
+2. Tap "Test Connection" to confirm communication.

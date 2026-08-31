@@ -20,7 +20,7 @@ class _IngestSpinnerDialogState extends State<IngestSpinnerDialog> {
   String _statusMessage = "Preparing knowledge ingestion...";
   double _progress = 0.0;
   Timer? _timer;
-  bool _finished = false;
+  final bool _finished = false;
 
   @override
   void initState() {

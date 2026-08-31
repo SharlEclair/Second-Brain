@@ -107,7 +107,8 @@ tags: ["#weekly-digest", "#synthesis"]
             
         # 4. Index the summary inside ChromaDB vector store
         try:
-            from main import vault_collection
+            from core.db import get_vault_collection
+            vault_collection = get_vault_collection()
             relative_filename = os.path.join("synthesis", synthesis_filename).replace("\\", "/")
             new_url = f"local://{relative_filename}"
             

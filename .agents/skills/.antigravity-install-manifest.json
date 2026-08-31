@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-05-26T13:36:00.000Z",
+  "updatedAt": "2026-06-18T06:16:00.000Z",
   "entries": [
     "agenttrace-session-audit",
     "android-remoteviews",
@@ -9,7 +9,9 @@
     "bug-hunter",
     "codebase-audit-pre-push",
     "design-taste-frontend",
+    "desktop-flutter-native",
     "docs",
+    "fastapi-backend-patterns",
     "flutter-animations",
     "flutter-haptics",
     "frontend-api-integration-patterns",
@@ -20,6 +22,7 @@
     "gpt-taste",
     "high-end-visual-design",
     "industrial-brutalist-ui",
+    "infrastructure-monitoring",
     "jq",
     "logic-lens",
     "minimalist-ui",
@@ -28,11 +31,13 @@
     "performance-optimizer",
     "rayden-code",
     "redesign-existing-projects",
+    "redis-celery-orchestration",
     "skill-check",
     "squirrel",
     "stitch-design-taste",
     "swiftui-widgets",
     "technical-change-tracker",
-    "tmux"
+    "tmux",
+    "windows-desktop-fluent"
   ]
 }

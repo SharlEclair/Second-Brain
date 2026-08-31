@@ -1,0 +1,5 @@
+0000000000000000000000000000000000000000 a0e511955d6bd92306e0b084570f8bf39b16616f SharlEclair <ashwinrajesh.pillai@gmail.com> 1779380219 +1000	branch: Created from HEAD
+a0e511955d6bd92306e0b084570f8bf39b16616f d89f361a38409720f91901c794f9823a7f6477aa SharlEclair <ashwinrajesh.pillai@gmail.com> 1779380236 +1000	commit: feat(release): build APK and implement Phase 8 features (headless sharing, scratchpad screen, geocoding & nearby map screen)
+d89f361a38409720f91901c794f9823a7f6477aa 688f36e6feddae7417e2fca60da6d336959cdd64 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779382277 +1000	commit: fix(android): resolve Google Maps native crash on swipe-up and add API key
+688f36e6feddae7417e2fca60da6d336959cdd64 55a3c648569206b5ee2aaa4ab2b2f6d315798a7c SharlEclair <ashwinrajesh.pillai@gmail.com> 1779759477 +1000	commit: Auto-sync 2026-05-26T11:37:57.571640
+55a3c648569206b5ee2aaa4ab2b2f6d315798a7c d25911c14d8ef2ddd88b93adaff7d39e582d51ed SharlEclair <ashwinrajesh.pillai@gmail.com> 1779760970 +1000	commit: Auto-sync 2026-05-26T12:02:49.930686

@@ -70,6 +70,9 @@ def _build_ytdlp_opts(outtmpl, quiet=True):
         "no_warnings": quiet,
         "retries": 2,
         "fragment_retries": 2,
+        "extractor_retries": 3,
+        "socket_timeout": 30,
+        "nocheckcertificate": True,
         "windowsfilenames": True,
     }
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -535,8 +538,8 @@ async def process_image_post(url: str, task_id: str = None, status_callback=None
         ops_manager.update_task(task_id, "Downloading Instagram carousel media", progress=20)
 
     # Extract shortcode from Instagram URL - handles both with and without trailing slash
-    # e.g. /p/DYcOwEZCGCX/ or /p/DYcOwEZCGCX
-    shortcode_match = re.search(r'/p/([A-Za-z0-9_-]+)', url)
+    # e.g. /p/DYcOwEZCGCX/, /reel/..., /reels/..., /share/reel/...
+    shortcode_match = re.search(r'/(?:p|reel|reels|tv|share/reel)/([A-Za-z0-9_-]+)', url)
     post_shortcode = shortcode_match.group(1) if shortcode_match else url.split("/")[-1]
     download_path = f"temp_{post_shortcode}_{uuid.uuid4().hex[:8]}"
 
@@ -625,7 +628,7 @@ async def _async_fetch_twitter_thread(url):
 def _sync_fetch_web_article(url):
     import requests
     from bs4 import BeautifulSoup
-    response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+    response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=25)
     response.raise_for_status()
 
     try:

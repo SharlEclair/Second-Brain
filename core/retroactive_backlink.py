@@ -15,11 +15,12 @@ def run_retroactive_scan():
     """
     print("[Backlink Engine] Starting retroactive backlink scan...")
     
-    # 1. Load ChromaDB collection from main
+    # 1. Load ChromaDB collection from core.db
     try:
-        from main import vault_collection
+        from core.db import get_vault_collection
+        vault_collection = get_vault_collection()
     except Exception as e:
-        print(f"[Backlink Engine] Error importing vault_collection: {e}")
+        print(f"[Backlink Engine] Error loading ChromaDB vault_collection: {e}")
         return {"status": "error", "message": "Failed to connect to ChromaDB"}
 
     # 2. Segment notes into new (<= 7 days) and old (> 7 days)

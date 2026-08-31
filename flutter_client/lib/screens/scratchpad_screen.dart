@@ -77,9 +77,9 @@ class _ScratchpadScreenState extends ConsumerState<ScratchpadScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
     // Premium gradient background for depth
-    final bgColor1 = Theme.of(context).colorScheme.background;
+    final bgColor1 = Theme.of(context).colorScheme.surface;
     final bgColor2 = Theme.of(context).colorScheme.surface;
-    final textColor = Theme.of(context).colorScheme.onBackground;
+    final textColor = Theme.of(context).colorScheme.onSurface;
     final hintColor = isDark ? Colors.white30 : Colors.black38;
 
     return WillPopScope(

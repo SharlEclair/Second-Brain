@@ -216,8 +216,8 @@ class _NotesBrowserScreenState extends State<NotesBrowserScreen> {
             );
           },
           backgroundColor: Theme.of(context).colorScheme.primary,
-          child: const Icon(Icons.location_on),
           tooltip: 'Find Nearby',
+          child: const Icon(Icons.location_on),
         ),
         body: TabBarView(
           children: [

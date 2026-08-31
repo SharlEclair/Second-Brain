@@ -8,8 +8,8 @@ def ingest_url_task(url: str, task_id: str):
     # Set the state to active in Redis/in-memory
     ops_manager.update_task(task_id, "Processing from Celery queue", state="active")
     
-    # Import main ingestion logic dynamically to avoid circular imports
-    from main import _run_ingestion_logic
+    # Import ingestion logic from service layer (clean decoupling from main.py)
+    from api.services.ingestion import _run_ingestion_logic
     
     # Run the async ingestion logic inside an event loop
     try:

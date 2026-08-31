@@ -1,0 +1,5 @@
+0000000000000000000000000000000000000000 9a3efd77daa24f5b8df4b3e79c0905bff5b663c0 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779803721 +1000	branch: Created from HEAD
+9a3efd77daa24f5b8df4b3e79c0905bff5b663c0 983a5a82fa7de931b5347bfdb5ecfd02783fa478 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779803737 +1000	commit: feat: Phase 9 Global UX/UI Overhaul - Ambient & Neon-Minimalism style
+983a5a82fa7de931b5347bfdb5ecfd02783fa478 7866786916fcc5b69e34e754e015ac511c8186f6 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779806493 +1000	commit: chore: route root route (/) to the new HomeScreen
+7866786916fcc5b69e34e754e015ac511c8186f6 eb99e64807691261418a381bf8e09ae5c7fc5414 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779806926 +1000	commit: feat: add settings and search buttons to the HomeScreen header for quick navigation
+eb99e64807691261418a381bf8e09ae5c7fc5414 86255e5582c30f1ba61cf57b0de8fdb4db507d64 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779814951 +1000	commit: feat: retrofit entire app with global ambient background and glassmorphism

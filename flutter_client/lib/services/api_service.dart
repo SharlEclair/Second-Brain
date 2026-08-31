@@ -97,9 +97,12 @@ class ApiService {
       DebugLogger.log('POST $apiUrl URL: $url', type: 'NETWORK');
       response = await http.post(
         Uri.parse(apiUrl),
-        headers: _getHeaders(custom: {'Content-Type': 'application/json'}),
+        headers: _getHeaders(custom: {
+          'Content-Type': 'application/json',
+          'X-Queue': 'true',
+        }),
         body: jsonEncode({'url': url}),
-      ).timeout(const Duration(seconds: 900));
+      ).timeout(const Duration(seconds: 30));
       DebugLogger.log('Ingest response: ${response.statusCode}', type: 'NETWORK');
     } on SocketException catch (e) {
       DebugLogger.log('SocketException: $e', type: 'ERROR');

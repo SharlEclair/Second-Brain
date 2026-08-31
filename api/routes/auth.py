@@ -80,7 +80,7 @@ async def oauth_callback(code: str, state: str = None):
             'grant_type': 'authorization_code'
         }
         
-        response = requests.post(token_url, data=payload)
+        response = requests.post(token_url, data=payload, timeout=25)
         token_data = response.json()
         
         if 'error' in token_data:

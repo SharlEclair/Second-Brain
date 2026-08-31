@@ -1,8 +1,8 @@
 # Job-Career Index
 
-Navigate the dynamic world of employment with strategies for job hunting, skill development, and career advancement, from mastering LinkedIn to securing internships and understanding evolving industry roles.
+Navigate the professional landscape with strategies from landing internships and crafting effective outreach to understanding career paths and even humorously faking it 'til you make it.
 
-This folder contains 12 articles related to Job-Career.
+This folder contains 13 articles related to Job-Career.
 
 ## Articles
 - [[2026-05-20 - Job-Career from Instagram (Dom)]]: This YouTube video humorously outlines strategies for "LARPing" (Live Action Role Playing) on LinkedIn to appear more successful than one might actually be, offering sarcastic advice on posting job announcements, "humble failure" posts, spamming endorsements, using the open-to-work banner, and inflating job titles.
@@ -17,3 +17,4 @@ This folder contains 12 articles related to Job-Career.
 - [[2026-08-31 - Job-Career from Instagram (Elijah Butler)]]: DataCamp is offering over 700 data analysis and AI courses for free this week only (August 24-30), including certifications and career tracks. Focus on one track like SQL, Python, Power BI, Tableau, Excel, or AI Fundamentals.
 - [[2026-08-31 - Job-Career from Instagram (jad)]]: This content describes the creation of a free, open-source tool that automates job searching and resume tailoring, contrasting it with expensive paid alternatives. The tool allows users to input job title and location to find similar postings, tailor resumes, apply directly, and track application status.
 - [[2026-08-31 - Job-Career from Instagram (Rana Zaky)]]: This content provides a blueprint for sending effective cold emails to secure internships and job opportunities, focusing on identifying shared identities and crafting a compelling message.
+- [[2026-08-31 - Job-Career from Instagram (Vibha 🧠 AI · Careers · Marketing)]]: This content provides a 4-step AI-powered process using Claude to optimize your resume and interview preparation by focusing on prompt engineering, ATS parsing, the Google XYZ formula, and mock interviews with AI evaluation.

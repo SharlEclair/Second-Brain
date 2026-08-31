@@ -58,3 +58,50 @@ def test_celery_ingest_mocked(monkeypatch):
     assert response.json()["status"] == "queued"
     assert len(called) == 1
     assert called[0][0] == "https://example.com/mock-task-test"
+
+
+def test_sync_vault_no_git(monkeypatch):
+    """Test sync fails with 400 when .git folder does not exist."""
+    monkeypatch.setattr("os.path.exists", lambda path: False if ".git" in str(path) else True)
+    response = client.post("/api/sync")
+    assert response.status_code == 400
+    assert "Vault is not initialized as a Git repository" in response.json()["detail"]
+
+
+def test_sync_vault_success(monkeypatch):
+    """Test sync succeeds with 200 when git operations succeed."""
+    monkeypatch.setattr("os.path.exists", lambda path: True)
+    import subprocess
+    def mock_run(args, **kwargs):
+        class MockCompletedProcess:
+            stdout = "Everything up-to-date"
+            stderr = ""
+            returncode = 0
+        return MockCompletedProcess()
+    monkeypatch.setattr("subprocess.run", mock_run)
+    response = client.post("/api/sync")
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+
+
+def test_sync_vault_failure(monkeypatch):
+    """Test sync returns 500 when git push raises CalledProcessError."""
+    monkeypatch.setattr("os.path.exists", lambda path: True)
+    import subprocess
+    def mock_run(args, **kwargs):
+        if "push" in args:
+            raise subprocess.CalledProcessError(
+                returncode=1,
+                cmd=args,
+                stderr="fatal: remote error: authentication failed"
+            )
+        class MockCompletedProcess:
+            stdout = ""
+            stderr = ""
+            returncode = 0
+        return MockCompletedProcess()
+    monkeypatch.setattr("subprocess.run", mock_run)
+    response = client.post("/api/sync")
+    assert response.status_code == 500
+    assert "authentication failed" in response.json()["detail"]
+

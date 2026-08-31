@@ -1,6 +1,0 @@
-{
-  "name": "Second Brain AI",
-  "description": "An AI-powered knowledge management system that ingests media from URLs, transcribes audio, synthesizes insights, and organizes them in a searchable vault.",
-  "requestFramePermissions": [],
-  "majorCapabilities": []
-}

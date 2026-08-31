@@ -452,7 +452,7 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
                 child: Card(
                   color: Colors.black87,
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -464,8 +464,8 @@ class _NearbyMapScreenState extends State<NearbyMapScreen> {
                             color: Theme.of(context).colorScheme.primary,
                           ),
                         ),
-                        SizedBox(width: 12),
-                        Text(
+                        const SizedBox(width: 12),
+                        const Text(
                           "Updating nearby spots...",
                           style: TextStyle(color: Colors.white, fontSize: 12),
                         ),

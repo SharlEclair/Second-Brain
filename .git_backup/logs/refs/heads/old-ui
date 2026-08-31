@@ -1,0 +1,13 @@
+0000000000000000000000000000000000000000 86255e5582c30f1ba61cf57b0de8fdb4db507d64 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779818709 +1000	branch: Created from HEAD
+86255e5582c30f1ba61cf57b0de8fdb4db507d64 dfa07dde43d96aa4e453fcccf441504492368d4e SharlEclair <ashwinrajesh.pillai@gmail.com> 1779818717 +1000	commit: Backup current changes
+dfa07dde43d96aa4e453fcccf441504492368d4e 09c923e4620aa781af861501f9fd42d4672eca59 SharlEclair <ashwinrajesh.pillai@gmail.com> 1780641573 +1000	commit: Configure iOS build pipeline for sideloading on old-ui branch
+09c923e4620aa781af861501f9fd42d4672eca59 e6921c97561b48748fd9b3d750f3e039fef24394 SharlEclair <ashwinrajesh.pillai@gmail.com> 1780641942 +1000	commit: Add iOS Podfile with platform 14.0 to fix workmanager minimum deployment target error
+e6921c97561b48748fd9b3d750f3e039fef24394 af97217f964f3e8c5a1ce2621fe835ca162767a2 SharlEclair <ashwinrajesh.pillai@gmail.com> 1780642202 +1000	commit: Fix Podfile eval syntax for .flutter-plugins-dependencies
+af97217f964f3e8c5a1ce2621fe835ca162767a2 d53c73ebda5c6143c938c846cbf5e8d9ec8a51b8 SharlEclair <ashwinrajesh.pillai@gmail.com> 1780642504 +1000	commit: Require podhelper.rb in Podfile to define Flutter helper methods
+d53c73ebda5c6143c938c846cbf5e8d9ec8a51b8 3ae4d10eee2996bf72328d1835821819d9d03c9f SharlEclair <ashwinrajesh.pillai@gmail.com> 1780642791 +1000	commit: Fix relative path to podhelper.rb inside Podfile
+3ae4d10eee2996bf72328d1835821819d9d03c9f 42adfcd69a28e022f2505aa32a4932e5452dce16 SharlEclair <ashwinrajesh.pillai@gmail.com> 1780643155 +1000	commit: Add missing podhelper.rb file to ios/Flutter directory
+42adfcd69a28e022f2505aa32a4932e5452dce16 645dda85f12a085101bd3710c4053646b8912802 SharlEclair <ashwinrajesh.pillai@gmail.com> 1780643489 +1000	commit: Use standard modern flutter_install_all_ios_pods from podhelper.rb without custom override
+645dda85f12a085101bd3710c4053646b8912802 1c45ce5cef69c9b09bdf30e5854094a0455a2523 SharlEclair <ashwinrajesh.pillai@gmail.com> 1780643872 +1000	commit: Load podhelper.rb dynamically from Flutter SDK root
+1c45ce5cef69c9b09bdf30e5854094a0455a2523 a97c5122f5238394a82607acb1ea52d0a2a27864 SharlEclair <ashwinrajesh.pillai@gmail.com> 1780644321 +1000	commit: Bump minimum iOS deployment target to 15.0 to support Firebase SPM packages
+a97c5122f5238394a82607acb1ea52d0a2a27864 f21c26dc268735fe6687fa670d5b8160deb6fdd8 SharlEclair <ashwinrajesh.pillai@gmail.com> 1780644834 +1000	commit: Add custom Swift widgets and Live Activity files to compilation targets in project.pbxproj
+f21c26dc268735fe6687fa670d5b8160deb6fdd8 34a57f41765e69864d3e4fdf53f5ddff42819cd0 SharlEclair <ashwinrajesh.pillai@gmail.com> 1780645319 +1000	commit: Annotate CortexLiveActivity and IngestionAttributes with iOS 16.1 availability

@@ -1,0 +1,5 @@
+0000000000000000000000000000000000000000 007ba4d34cf6e9425a6533e917d7ae9fe000eed7 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779342226 +1000	branch: Created from HEAD
+007ba4d34cf6e9425a6533e917d7ae9fe000eed7 591f8fd614c243c001787b8a99ace58a8bf33e96 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779342245 +1000	commit: chore: release Phase 7 verified APK and apply UI/backend refactorings
+591f8fd614c243c001787b8a99ace58a8bf33e96 f5dfad2d79bf6ba6e0ae93abc2af38e8d3f9086a SharlEclair <ashwinrajesh.pillai@gmail.com> 1779343621 +1000	commit: fix: handle silent media files without audio tracks during transcription
+f5dfad2d79bf6ba6e0ae93abc2af38e8d3f9086a 143ecf405bc5f646a05483a345fff2b7f0a5cc6e SharlEclair <ashwinrajesh.pillai@gmail.com> 1779344730 +1000	commit: chore: enable hot-reloading for backend uvicorn server
+143ecf405bc5f646a05483a345fff2b7f0a5cc6e a0e511955d6bd92306e0b084570f8bf39b16616f SharlEclair <ashwinrajesh.pillai@gmail.com> 1779346074 +1000	commit: Hardening context lifecycles, consolidating duplicate nearby endpoints, and updating release APK binary

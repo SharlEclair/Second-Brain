@@ -1,8 +1,11 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_acrylic/flutter_acrylic.dart' as flutter_acrylic;
+import 'package:window_manager/window_manager.dart';
 import 'theme/app_theme.dart';
 import 'router/app_router.dart';
 import 'providers/providers.dart';
@@ -32,16 +35,53 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
   
+  // Custom Window dressing for desktop targets
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    try {
+      await flutter_acrylic.Window.initialize();
+    } catch (e) {
+      debugPrint("Failed to initialize flutter_acrylic: $e");
+    }
+
+    try {
+      await windowManager.ensureInitialized();
+      WindowOptions windowOptions = const WindowOptions(
+        size: Size(1200, 800),
+        minimumSize: Size(800, 600),
+        center: true,
+        backgroundColor: Colors.transparent,
+        skipTaskbar: false,
+        titleBarStyle: TitleBarStyle.hidden,
+      );
+      await windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.show();
+        await windowManager.focus();
+        if (Platform.isWindows) {
+          await flutter_acrylic.Window.setEffect(
+            effect: flutter_acrylic.WindowEffect.mica,
+            color: const Color(0x00000000),
+          );
+        }
+      });
+    } catch (e) {
+      debugPrint("Failed to initialize window_manager: $e");
+    }
+  }
+
   final prefs = await SharedPreferences.getInstance();
   
   try {
-    await NotificationService().initialize(rootNavigatorKey);
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      await NotificationService().initialize(rootNavigatorKey);
+    }
   } catch (e) {
     debugPrint("Failed to initialize NotificationService: $e");
   }
   
   try {
-    await WidgetSyncService.initialize();
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      await WidgetSyncService.initialize();
+    }
   } catch (e) {
     debugPrint("Failed to initialize WidgetSyncService: $e");
   }
@@ -74,35 +114,37 @@ class _SecondBrainAppState extends ConsumerState<SecondBrainApp> with WidgetsBin
 
     final apiService = ref.read(apiServiceProvider);
 
-    // Set up MethodChannel listener for widget actions
-    _channel.setMethodCallHandler((call) async {
-      if (call.method == 'triggerAction') {
-        final String? action = call.arguments as String?;
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      // Set up MethodChannel listener for widget actions
+      _channel.setMethodCallHandler((call) async {
+        if (call.method == 'triggerAction') {
+          final String? action = call.arguments as String?;
+          if (action != null) {
+            _handleWidgetAction(action);
+          }
+        }
+      });
+
+      // Check for any action that launched the app on startup
+      _channel.invokeMethod<String>('getPendingAction').then((action) {
         if (action != null) {
           _handleWidgetAction(action);
         }
-      }
-    });
+      });
 
-    // Check for any action that launched the app on startup
-    _channel.invokeMethod<String>('getPendingAction').then((action) {
-      if (action != null) {
-        _handleWidgetAction(action);
-      }
-    });
+      // Sync all widgets on startup
+      WidgetService.syncAllWidgets(apiService);
 
-    // Sync all widgets on startup
-    WidgetService.syncAllWidgets(apiService);
+      // Initialize ShareService and BackgroundShareService
+      ShareService.initialize(
+        navigatorKey: rootNavigatorKey,
+        scaffoldMessengerKey: _scaffoldMessengerKey,
+      );
+      BackgroundShareService.initialize();
 
-    // Initialize ShareService and BackgroundShareService
-    ShareService.initialize(
-      navigatorKey: rootNavigatorKey,
-      scaffoldMessengerKey: _scaffoldMessengerKey,
-    );
-    BackgroundShareService.initialize();
-
-    // Check geofences on startup
-    GeofenceService.checkGeofences(apiService);
+      // Check geofences on startup
+      GeofenceService.checkGeofences(apiService);
+    }
 
     // Initialize connectivity listener for offline queues
     OfflineQueueService.initialize();
@@ -111,7 +153,9 @@ class _SecondBrainAppState extends ConsumerState<SecondBrainApp> with WidgetsBin
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    ShareService.dispose();
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      ShareService.dispose();
+    }
     OfflineQueueService.dispose();
     super.dispose();
   }
@@ -119,8 +163,10 @@ class _SecondBrainAppState extends ConsumerState<SecondBrainApp> with WidgetsBin
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ClipboardService.checkClipboardForIngest(context);
-      GeofenceService.checkGeofences(ref.read(apiServiceProvider));
+      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+        ClipboardService.checkClipboardForIngest(context);
+        GeofenceService.checkGeofences(ref.read(apiServiceProvider));
+      }
     }
   }
 

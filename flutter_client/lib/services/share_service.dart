@@ -116,7 +116,8 @@ class ShareService {
     final match = urlRegExp.firstMatch(sharedText);
     
     if (match != null) {
-      final url = match.group(0)!;
+      String url = match.group(0)!;
+      url = url.replaceAll(RegExp(r'[.,;!?)>\]]+$'), '');
       _showToast("⏳ Ingesting URL: $url");
       
       final isShareAct = await isShareActivity();
@@ -158,6 +159,8 @@ class ShareService {
           await HapticFeedbackManager.mediumImpact();
           if (result['status'] == 'existing') {
             _showToast("✓ Already in your Brain Vault.");
+          } else if (result['status'] == 'queued') {
+            _showToast("✓ Ingestion queued in background!");
           } else {
             _showToast("✓ Successfully ingested!");
           }

@@ -3,13 +3,32 @@ import os
 import shutil
 
 def get_platform_from_url(url: str) -> str:
-    if "tiktok.com" in url: return "tiktok"
-    if "youtube.com" in url or "youtu.be" in url: return "youtube"
-    if "instagram.com" in url: return "instagram"
+    url_lower = url.lower()
+    if "tiktok.com" in url_lower:
+        return "tiktok"
+    if "youtube.com" in url_lower or "youtu.be" in url_lower:
+        return "youtube"
+    if "instagram.com" in url_lower or "instagr.am" in url_lower:
+        return "instagram"
+    if "twitter.com" in url_lower or "x.com" in url_lower:
+        return "twitter"
     return "web"
 
 def clean_url(url: str) -> str:
-    if "?" in url: url = url.split("?")[0]
+    if not url:
+        return ""
+    # Extract first HTTP/HTTPS URL if embedded within surrounding caption/text
+    match = re.search(r'(https?://[^\s]+)', url)
+    if match:
+        url = match.group(1)
+    # Strip trailing punctuation often appended by share intents (e.g. ., ), ], >, etc.)
+    url = re.sub(r'[.,;!?)>\]]+$', '', url)
+    # Strip query parameters (tracking params like ?igsh=..., ?utm_source=..., etc.)
+    if "?" in url:
+        url = url.split("?")[0]
+    # Strip URL fragments
+    if "#" in url:
+        url = url.split("#")[0]
     return url.rstrip("/")
 
 def chunk_text(text: str, chunk_size: int = 1500, overlap: int = 200) -> list[str]:

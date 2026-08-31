@@ -227,7 +227,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 value: _isLightTheme,
                 onChanged: _toggleTheme,
-                activeColor: primaryColor,
+                activeThumbColor: primaryColor,
               ),
             ),
             const SizedBox(height: 32),

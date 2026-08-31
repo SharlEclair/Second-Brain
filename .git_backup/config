@@ -1,0 +1,52 @@
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = false
+	logallrefupdates = true
+	symlinks = false
+	ignorecase = true
+[remote "origin"]
+	url = https://github.com/SharlEclair/Second-Brain.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "main"]
+	remote = origin
+	merge = refs/heads/main
+	vscode-merge-base = origin/main
+[branch "widgets"]
+	vscode-merge-base = origin/main
+	remote = origin
+	merge = refs/heads/widgets
+[branch "feat/librarian-rag"]
+	vscode-merge-base = origin/widgets
+	remote = origin
+	merge = refs/heads/feat/librarian-rag
+[branch "feat/phase-4-5"]
+	vscode-merge-base = origin/feat/librarian-rag
+[branch "feat/cortex-production-upgrades"]
+	vscode-merge-base = origin/main
+[branch "feature/cortex-production-migration"]
+	vscode-merge-base = origin/main
+	remote = origin
+	merge = refs/heads/feature/cortex-production-migration
+[branch "feature/cortex-production-migration-complete"]
+	remote = origin
+	merge = refs/heads/feature/cortex-production-migration-complete
+	vscode-merge-base = origin/feature/cortex-production-migration
+[branch "feature/phase7-refinement"]
+	vscode-merge-base = origin/feature/cortex-production-migration-complete
+[branch "release/phase7-apk"]
+	vscode-merge-base = origin/main
+[branch "release/phase8-apk"]
+	vscode-merge-base = origin/main
+	remote = origin
+	merge = refs/heads/release/phase8-apk
+[branch "feature/ux-bugfixes-and-apk"]
+	vscode-merge-base = origin/release/phase8-apk
+[branch "feature/ambient-ux-overhaul"]
+	vscode-merge-base = origin/main
+	remote = origin
+	merge = refs/heads/feature/ambient-ux-overhaul
+[branch "old-ui"]
+	vscode-merge-base = origin/feature/ambient-ux-overhaul
+	remote = origin
+	merge = refs/heads/old-ui

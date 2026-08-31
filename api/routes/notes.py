@@ -2,21 +2,12 @@ import os
 import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel
 from core.state import get_url_index, save_url_index
 from core.config import OBSIDIAN_INBOX_PATH, PROJECT_VAULT_PATH
 from api.utils.markdown_parser import update_markdown_frontmatter_fields, update_markdown_frontmatter_coordinates
+from api.models import LocationOverrideRequest, HideLocationRequest
 
 router = APIRouter()
-
-class LocationOverrideRequest(BaseModel):
-    latitude: float
-    longitude: float
-
-class HideLocationRequest(BaseModel):
-    name: str = None
-    lat: float = None
-    lng: float = None
 
 @router.get("/api/notes")
 async def get_notes():

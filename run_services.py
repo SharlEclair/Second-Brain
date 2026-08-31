@@ -3,6 +3,23 @@ import sys
 import threading
 import time
 import os
+import json
+from dotenv import load_dotenv, dotenv_values
+
+# Load and merge local environment variables from .env
+load_dotenv()
+env_vars = os.environ.copy()
+env_vars.update({k: v for k, v in dotenv_values().items() if v is not None})
+env_vars["PYTHONUNBUFFERED"] = "1"
+for k, v in env_vars.items():
+    os.environ[k] = v
+
+# Ensure stdout and stderr use UTF-8 encoding to prevent Unicode errors on special characters (e.g. Vite arrow)
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+except AttributeError:
+    pass
 
 # Colors for terminal output
 COLOR_BLUE = "\033[94m"
@@ -16,16 +33,103 @@ def stream_output(process, prefix, color):
     """Streams output from a process's stdout/stderr and prints it with a prefix."""
     try:
         # Read stdout line by line
-        for line in iter(process.stdout.readline, b''):
-            decoded_line = line.decode('utf-8', errors='replace').rstrip()
-            print(f"{color}{prefix}{COLOR_RESET} {decoded_line}")
+        for line in iter(process.stdout.readline, ''):
+            print(f"{color}{prefix}{COLOR_RESET} {line.rstrip()}", flush=True)
     except Exception as e:
-        print(f"{COLOR_RED}[Error reading {prefix}]{COLOR_RESET} {e}")
+        print(f"{COLOR_RED}[Error reading {prefix}]{COLOR_RESET} {e}", flush=True)
 
-def run():
-    print(f"{COLOR_CYAN}==================================================")
-    print("          CORTEX SERVICE ORCHESTRATOR             ")
-    print(f"=================================================={COLOR_RESET}\n")
+def ensure_redis():
+    """Ensures Redis Docker container is running before other services start."""
+    print(f"{COLOR_YELLOW}[Orchestrator] Checking Redis Docker container...{COLOR_RESET}")
+    try:
+        # Check if docker is available
+        result = subprocess.run(["docker", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            print(f"{COLOR_RED}[Orchestrator] Docker is not available. Please ensure Redis is running manually.{COLOR_RESET}")
+            return
+    except FileNotFoundError:
+        print(f"{COLOR_RED}[Orchestrator] Docker command not found. Please ensure Redis is running manually.{COLOR_RESET}")
+        return
+
+    try:
+        # Check state of existing redis container using docker inspect
+        inspect_result = subprocess.run(["docker", "inspect", "redis"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if inspect_result.returncode == 0:
+            # Parse the JSON output
+            data = json.loads(inspect_result.stdout)
+            if data and isinstance(data, list):
+                is_running = data[0].get("State", {}).get("Running", False)
+                if is_running:
+                    print(f"{COLOR_GREEN}[Orchestrator] Redis container is already running.{COLOR_RESET}")
+                else:
+                    print(f"{COLOR_YELLOW}[Orchestrator] Redis container exists but is stopped. Starting it...{COLOR_RESET}")
+                    start_result = subprocess.run(["docker", "start", "redis"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    if start_result.returncode == 0:
+                        print(f"{COLOR_GREEN}[Orchestrator] Redis container started successfully.{COLOR_RESET}")
+                    else:
+                        print(f"{COLOR_RED}[Orchestrator] Failed to start existing Redis container.{COLOR_RESET}")
+            return
+
+        # If it doesn't exist, create and run it
+        print(f"{COLOR_YELLOW}[Orchestrator] Redis container does not exist. Creating and running a new one...{COLOR_RESET}")
+        run_result = subprocess.run(
+            ["docker", "run", "-d", "--name", "redis", "-p", "6379:6379", "redis:7-alpine"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if run_result.returncode == 0:
+            print(f"{COLOR_GREEN}[Orchestrator] Redis container created and started on port 6379.{COLOR_RESET}")
+        else:
+            print(f"{COLOR_RED}[Orchestrator] Failed to run Redis container: {run_result.stderr.strip()}{COLOR_RESET}")
+    except Exception as e:
+        print(f"{COLOR_RED}[Orchestrator] Error managing Redis container: {e}{COLOR_RESET}")
+
+def kill_process_by_port(port):
+    """Kills any process listening on the specified port on Windows."""
+    try:
+        cmd = f"netstat -ano | findstr :{port}"
+        output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
+        lines = output.strip().split('\n')
+        pids = set()
+        for line in lines:
+            parts = line.strip().split()
+            if len(parts) >= 5 and "LISTENING" in parts:
+                pids.add(parts[-1])
+        for pid in pids:
+            try:
+                subprocess.run(f"taskkill /F /PID {pid}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+def kill_zombie_processes():
+    """Kills orphan celery and ngrok processes."""
+    print(f"{COLOR_YELLOW}[Orchestrator] Cleaning up duplicate Celery and Ngrok processes...{COLOR_RESET}")
+    for proc_name in ["celery.exe", "ngrok.exe"]:
+        try:
+            subprocess.run(f"taskkill /F /IM {proc_name} /T", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
+def main():
+    print("=" * 50)
+    print("          CORTEX SERVICE ORCHESTRATOR")
+    print("=" * 50)
+    print()
+
+    # Step 0: Ensure Redis container is running
+    ensure_redis()
+    print()
+    
+    # Clean up duplicate processes & ports
+    kill_zombie_processes()
+    kill_process_by_port(8000) # Backend API
+    kill_process_by_port(5173) # Frontend React (Vite)
+    kill_process_by_port(5174) # Secondary Frontend port
+    print()
+    
     print("Starting services (Press Ctrl+C to stop all)...")
 
     processes = []
@@ -37,13 +141,16 @@ def run():
             ["npm.cmd", "run", "dev"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            bufsize=1
+            bufsize=1,
+            text=True,
+            encoding='utf-8',
+            env=env_vars
         )
         processes.append((fe_process, "Frontend", COLOR_BLUE))
     except Exception as e:
         print(f"{COLOR_RED}[Orchestrator] Failed to start Frontend: {e}{COLOR_RESET}")
 
-    # 2. Start Backend
+    # 2. Start Backend (with unbuffered stdout/stderr)
     try:
         print(f"{COLOR_GREEN}[Orchestrator] Starting Backend (Python API)...{COLOR_RESET}")
         # Resolve Python path relative to virtual environment
@@ -53,23 +160,36 @@ def run():
             python_exe = "python"
         
         be_process = subprocess.Popen(
-            [python_exe, "main.py"],
+            [python_exe, "-u", "main.py"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            bufsize=1
+            bufsize=1,
+            text=True,
+            encoding='utf-8',
+            env=env_vars
         )
         processes.append((be_process, "Backend ", COLOR_GREEN))
     except Exception as e:
         print(f"{COLOR_RED}[Orchestrator] Failed to start Backend: {e}{COLOR_RESET}")
 
-    # 3. Start Ngrok Tunnel
+    # 3. Start Ngrok Tunnel (direct authtoken CLI argument)
     try:
         print(f"{COLOR_YELLOW}[Orchestrator] Starting Ngrok Tunnel...{COLOR_RESET}")
+        ngrok_token = env_vars.get("NGROK_AUTHTOKEN", "").strip()
+        ngrok_cmd = ["npx.cmd", "ngrok", "http", "8000", "--url=why-waffle-pentagon.ngrok-free.dev"]
+        if ngrok_token and ngrok_token != "${NGROK_AUTHTOKEN}":
+            ngrok_cmd.extend(["--authtoken", ngrok_token])
+        else:
+            ngrok_cmd.append("--config=ngrok.yml")
+
         ngrok_process = subprocess.Popen(
-            ["npx.cmd", "ngrok", "http", "8000", "--config=ngrok.yml", "--url=why-waffle-pentagon.ngrok-free.dev"],
+            ngrok_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            bufsize=1
+            bufsize=1,
+            text=True,
+            encoding='utf-8',
+            env=env_vars
         )
         processes.append((ngrok_process, "Ngrok   ", COLOR_YELLOW))
     except Exception as e:
@@ -86,7 +206,10 @@ def run():
             [celery_exe, "-A", "api.celery_app.celery_app", "worker", "--loglevel=info", "-P", "solo"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            bufsize=1
+            bufsize=1,
+            text=True,
+            encoding='utf-8',
+            env=env_vars
         )
         processes.append((celery_worker_process, "CeleryW ", COLOR_CYAN))
     except Exception as e:
@@ -103,7 +226,10 @@ def run():
             [celery_exe, "-A", "api.celery_app.celery_app", "beat", "--loglevel=info"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            bufsize=1
+            bufsize=1,
+            text=True,
+            encoding='utf-8',
+            env=env_vars
         )
         processes.append((celery_beat_process, "CeleryB ", COLOR_BLUE))
     except Exception as e:
@@ -116,34 +242,36 @@ def run():
         t.start()
         threads.append(t)
 
-    print(f"\n{COLOR_CYAN}[Orchestrator] All services started. Streaming logs...{COLOR_RESET}\n")
-
-    # Keep main thread alive and monitor for exit
+    # Monitor processes
     try:
         while True:
-            # Check if any process has exited unexpectedly
-            for proc, prefix, color in processes:
+            for proc, prefix, _ in processes:
                 poll = proc.poll()
                 if poll is not None:
                     print(f"{COLOR_RED}[Orchestrator] {prefix} exited unexpectedly with code {poll}{COLOR_RESET}")
-            time.sleep(2)
+                    # If any process dies, trigger shutdown
+                    raise KeyboardInterrupt
+            time.sleep(1)
     except KeyboardInterrupt:
-        print(f"\n\n{COLOR_RED}[Orchestrator] Ctrl+C detected. Stopping all services...{COLOR_RESET}")
+        print(f"\n{COLOR_YELLOW}[Orchestrator] Shutdown requested. Stopping all services...{COLOR_RESET}")
         
-        # Terminate all processes
-        for proc, prefix, color in processes:
-            if proc.poll() is None:
-                print(f"Stopping {prefix}...")
+        # Give processes a chance to terminate gracefully
+        for proc, prefix, _ in processes:
+            print(f"Stopping {prefix}...")
+            try:
                 proc.terminate()
-        
-        # Wait a moment for processes to exit gracefully, then force kill if needed
-        time.sleep(2)
-        for proc, prefix, color in processes:
-            if proc.poll() is None:
-                print(f"Force-killing {prefix}...")
-                proc.kill()
+            except Exception:
+                pass
                 
+        # Speed up cleanup on Windows by killing process trees immediately
+        print(f"{COLOR_YELLOW}[Orchestrator] Speeding up cleanup...{COLOR_RESET}")
+        kill_zombie_processes()
+        kill_process_by_port(8000)
+        kill_process_by_port(5173)
+        kill_process_by_port(5174)
+        
         print(f"{COLOR_GREEN}[Orchestrator] Cleanup complete.{COLOR_RESET}")
+        sys.exit(0)
 
 if __name__ == "__main__":
-    run()
+    main()

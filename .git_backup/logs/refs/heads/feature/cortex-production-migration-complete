@@ -1,0 +1,6 @@
+0000000000000000000000000000000000000000 377374688674fc320b66414a8b55cb4471117b74 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779279461 +1000	branch: Created from HEAD
+377374688674fc320b66414a8b55cb4471117b74 fe0c548c8185aa9bf3fef9697d080b638746b389 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779279473 +1000	commit: feat: complete cortex production upgrades with offline queue model and dependency pinning
+fe0c548c8185aa9bf3fef9697d080b638746b389 4d2f07b9afa711e5fb9fecb2465e87e662d30187 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779331755 +1000	commit: refactor: clean up unused variables, update markdown package, and fix android subproject build SDK version to 36
+4d2f07b9afa711e5fb9fecb2465e87e662d30187 8a38229fff9bfc35d7753f922b3f01f07e5ca30a SharlEclair <ashwinrajesh.pillai@gmail.com> 1779332002 +1000	commit: test: add geofenced note for 570 Lygon St Melbourne and update vault indexes
+8a38229fff9bfc35d7753f922b3f01f07e5ca30a 4aabcfeb5c51cf3c18f148dd0c9c0ed2b87ca1d4 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779332507 +1000	commit: test: add geofenced note for 50 La Trobe St Melbourne
+4aabcfeb5c51cf3c18f148dd0c9c0ed2b87ca1d4 681b08167faedf5fa51bf2c17b3dcb9499d3a069 SharlEclair <ashwinrajesh.pillai@gmail.com> 1779333125 +1000	commit: fix: remove unused background geolocation dependency causing license validation failure in release build
