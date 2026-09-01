@@ -1,47 +1,59 @@
+# ── Node / Frontend ──────────────────────────────────────────────
 node_modules/
-build/
 dist/
+build/
 coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
+.vite/
 
-# Python
+# ── Python ───────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
 venv/
 .venv/
+.pytest_cache/
+*.egg-info/
+
+# ── Environment & Secrets ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+cookies.txt
+firebase_credentials.json
+credentials.json
+token.json
+ngrok.yml
+
+# ── Operating System / System Junk ───────────────────────────────
+.DS_Store
+Thumbs.db
+*.log
+
+# ── Infrastructure, Docker & Databases ───────────────────────────
 temp/
 temp_*/
-
-# Database / Vector store / Private Vault
+vault/
+cortex-redis/
+redis_data/
+cortex-neo4j/
+neo4j_data/
 chroma_db/
 vector_db.json
 url_index.json
-vault/
-
-# Configuration / Credentials
-ngrok.yml
-credentials.json
-token.json
-celerybeat-schedule*
-serendipity_state.json
-
-# Runtime data files (contain user data or sensitive content)
-cookies.txt
-device_tokens.json
 chat_history.json
 error_log.json
 system_config.json
-firebase_credentials.json
+device_tokens.json
+serendipity_state.json
+celerybeat-schedule*
 
-# Server app SQLite log (safe to delete entirely, tracked here in case folder returns)
-server_app/server_logs.db
+# ── Flutter / Mobile App Build Artifacts ─────────────────────────
+.dart_tool/
+flutter_client/build/
+flutter_client/.dart_tool/
+flutter_client/.flutter-plugins
+flutter_client/.flutter-plugins-dependencies
 
-# Development scratch files
+# ── Development Scratch & Local Utilities ────────────────────────
 scratch/
-
-# Portable JDK
 jdk-portable/

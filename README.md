@@ -1,198 +1,232 @@
-# 🧠 Second Brain (Cortex): AI-Powered Personal Knowledge Vault
+# 🧠 Cortex Second Brain: Autonomous Knowledge Graph & Hybrid GraphRAG
 
-Second Brain is a modern, production-ready personal knowledge management and intelligence system. It automatically captures, transcribes, categorizes, and indexes multi-modal content (social media URLs from Instagram, YouTube, TikTok, plus PDFs, audio recordings, images, and text clippings) into a structured, bidirectional-linked Obsidian Markdown vault. It features a RAG-enabled (Retrieval-Augmented Generation) chat engine, automated background synthesis, proactive knowledge graph exploration, and cross-platform capture clients.
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React 19](https://img.shields.io/badge/React-19.0-61DAFB.svg?logo=react&logoColor=black)](https://react.dev)
+[![Flutter](https://img.shields.io/badge/Flutter-3.0%2B-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev)
+[![Neo4j](https://img.shields.io/badge/Neo4j-5.0-008CC1.svg?logo=neo4j&logoColor=white)](https://neo4j.com)
+[![ChromaDB](https://img.shields.io/badge/ChromaDB-VectorStore-orange.svg)](https://www.trychroma.com)
+[![Celery](https://img.shields.io/badge/Celery-Task%20Queue-37814A.svg?logo=celery&logoColor=white)](https://docs.celeryq.dev)
+[![Gemini 2.5](https://img.shields.io/badge/Google%20Gemini-2.5%20Flash-4285F4.svg?logo=google&logoColor=white)](https://aistudio.google.com)
 
----
-
-## 🚀 Key Features
-
-- **Omni-Ingestion Pipeline**: Ingest URLs (YouTube, Instagram Reels & Carousels, TikTok, Web articles), local documents (PDF, TXT, MD), audio recordings (WAV, MP3, M4A), and image files.
-- **High-Performance Audio Transcription**: Local, fast transcription powered by `faster-whisper` (`large-v3-turbo` with `int8`/`float16` acceleration).
-- **AI Synthesis & Auto-Classification**: Uses Google Gemini 2.5 (`gemini-2.5-flash-lite` primary with automatic fallback to `gemini-2.5-flash`) to categorize content into Recipes, Spots to Visit, Tech Guides, Career, and more with Obsidian frontmatter and wiki-links (`[[Note Title]]`).
-- **RAG Terminal & Contextual Chat**: Chat with your entire knowledge vault using ChromaDB vector embeddings. Support for targeting active note context and one-click "Promote to Wiki Article" generation.
-- **Background Intelligence Loops**: Celery + Redis worker queues power automated Weekly Synthesis briefs, daily Serendipity resurfacing, and retroactive link analysis.
-- **Vault Auditing & Ghost Topics**: Detect conflicting information, coverage gaps, and uncreated notes referenced via wiki-links (`[[Ghost Notes]]`).
-- **Cross-Platform Capture**:
-  - **Web Dashboard**: Modern, responsive React 19 + Vite dashboard with interactive 2D Force Graph, Activity Heatmaps, and real-time task queue overlays.
-  - **Flutter Client**: Cross-platform application supporting **Android, iOS, Windows, macOS, Linux, and Web** with native system Share Sheet integration for one-tap ingestion.
-- **One-Click Orchestration**: A unified service runner (`python run_services.py`) that manages Docker Redis, Celery workers, Celery Beat, FastAPI, Vite dev server, and Ngrok tunnels simultaneously.
+**Cortex Second Brain** is an autonomous, self-organizing personal intelligence operating system. It ingests unstructured multi-modal content (social media URLs, YouTube videos, PDFs, images, voice notes, and text clippings) and synthesizes them into an interconnected, bidirectional Markdown vault powered by **Hybrid GraphRAG (Neo4j Graph Database + ChromaDB Vector Store + Google Gemini 2.5)**.
 
 ---
 
-## 🛠️ Architecture Overview
+## 🌟 Core Architectural Features
+
+### 1. 🕸️ Hybrid GraphRAG Engine
+- **Dual Retrieval Pipeline**: Combines dense vector similarity search (ChromaDB `vault_embeddings`) with graph relationship traversal (Neo4j 1–2 hop subgraph traversal).
+- **Automated Knowledge Graph Extraction**: During ingestion, Gemini extracts domain entities (Frameworks, Concepts, Languages, Tools, People) and semantic relations (`WRITTEN_IN`, `USES`, `INTEGRATES_WITH`) into Neo4j.
+- **Relational Context Synthesis**: `/api/chat` grounds its answers in both contextual text chunks and graph relationship statements with Obsidian-style wiki links (`[[Concept Name]]`).
+
+### 2. 🤖 Autonomous Nightly Librarian
+- **Nightly Synthesizer (02:00 AM UTC)**: Scans the vault, finds semantically similar notes via ChromaDB, and appends a safe **Semantic Footer** (`## Related Notes` & `## Suggested Links`).
+- **Tag Merging & Dynamic Maps of Content (02:30 AM UTC)**: Uses Gemini to cluster synonyms, sub-topics, and duplicate tags into standardized umbrella categories, updating note frontmatters and generating dynamic **Maps of Content (MOCs)** in `vault/Maps/<Category>_Index.md`.
+- **Weekly Synthesis & Serendipity Loops**: Proactive automated weekly briefing digests and spaced-repetition knowledge resurfacing.
+
+### 3. 📥 Omni-Channel Ingestion
+- **Desktop Dropzone Daemon (`scripts/desktop_dropzone.py`)**: Watches `~/Desktop/CortexDrop` using `watchdog`. Files dragged into the folder (PDFs, Markdown, Images, Audio) are automatically uploaded to `POST /api/ingest/file` and archived into `Processed/`.
+- **PDF & Document Processing**: Fast, resilient text extraction via `pypdf` (with `pymupdf` fallback).
+- **Audio & Video Processing**: Local Whisper transcription (`faster-whisper` `large-v3-turbo` with `int8`/`float16` acceleration).
+- **Vision Ingestion**: Gemini 2.5 Flash visual reasoning for image carousels and infographic extractions.
+- **Social Media Support**: URL ingestion for Instagram Reels & Carousels, YouTube Videos & Shorts, TikTok, and Web articles.
+
+### 4. 📱 Cross-Platform Clients
+- **React 19 Web Dashboard**: Modern responsive UI with 2D Force-Directed Graph visualization, real-time ingestion status overlays, and RAG chat.
+- **Flutter Mobile & Desktop App**: Native application for Android, iOS, Windows, macOS, Linux, and Web with system Share Sheet integration for one-tap URL ingestion outside local networks via Ngrok.
+
+### 5. 🔒 Private Vault Architecture & Git Isolation
+- **Repository Isolation**: The `vault/` directory is an isolated Git repository separate from the parent codebase, guaranteeing private notes never leak into the main codebase repo.
+- **Automated Cloud Backup**: `POST /api/sync` runs automated `git commit` and `git push` on the private vault repository.
+
+---
+
+## 🏗️ System Architecture
 
 ```
-                          ┌────────────────────────┐
-                          │   Cross-Platform Apps  │
-                          │ React Web / Flutter App│
-                          └───────────┬────────────┘
-                                      │
-                                      ▼
-                      ┌───────────────────────────────┐
-                      │    FastAPI Gateway (8000)     │
-                      │       (api/routes/*)          │
-                      └───────┬───────────────┬───────┘
-                              │               │
-             Direct Sync / SSE│               │ Queue Tasks (X-Queue)
-                              ▼               ▼
-                   ┌─────────────────┐ ┌──────────────┐
-                   │  api/services/  │ │ Redis Broker │
-                   │  ingestion.py   │ └──────┬───────┘
-                   │    vault.py     │        │
-                   └────────┬────────┘        ▼
-                            │        ┌─────────────────┐
-                            │        │  Celery Worker  │
-                            │        │  (api/tasks.py) │
-                            │        └────────┬────────┘
-                            ▼                 ▼
-          ┌────────────────────────────────────────────────────────┐
-          │                      core/ Engine                      │
-          │  processors.py  •  db.py (ChromaDB)  •  config.py     │
-          └───────────────────────────┬────────────────────────────┘
-                                      │
-                                      ▼
-                      ┌───────────────────────────────┐
-                      │         Storage Layer         │
-                      │  Obsidian Vault / ChromaDB /  │
-                      │         url_index.json        │
-                      └───────────────────────────────┘
+                               ┌──────────────────────────────────────────────┐
+                               │             Capture Frontends                │
+                               │  React 19 Web  •  Flutter Mobile  • Dropzone │
+                               └──────────────────────┬───────────────────────┘
+                                                      │
+                                                      ▼
+                                       ┌──────────────────────────────┐
+                                       │    FastAPI Gateway (:8000)   │
+                                       │        (api/routes/*)        │
+                                       └──────────────┬───────────────┘
+                                                      │
+                                  ┌───────────────────┴───────────────────┐
+                                  │ (Sync SSE / POST)                     │ (Async X-Queue)
+                                  ▼                                       ▼
+                       ┌────────────────────┐                   ┌───────────────────┐
+                       │   api/services/    │                   │   Redis Broker    │
+                       │   ingestion.py     │                   │    (port 6379)    │
+                       │     chat.py        │                   └─────────┬─────────┘
+                       └──────────┬─────────┘                             │
+                                  │                                       ▼
+                                  │                             ┌───────────────────┐
+                                  │                             │   Celery Worker   │
+                                  │                             │  (api/tasks.py)   │
+                                  │                             └─────────┬─────────┘
+                                  ▼                                       ▼
+             ┌─────────────────────────────────────────────────────────────────────────────┐
+             │                                core/ Engine                                 │
+             │     processors.py  •  graph_rag.py  •  synthesis.py  •  taxonomy.py         │
+             └──────┬───────────────────────┬──────────────────────────────┬───────────────┘
+                    │                       │                              │
+                    ▼                       ▼                              ▼
+         ┌─────────────────────┐ ┌──────────────────────┐ ┌────────────────────────────────┐
+         │  ChromaDB (Vector)  │ │   Neo4j (Graph DB)   │ │      Private Git Vault         │
+         │  vault_embeddings   │ │  Entity & Note Graph │ │  Markdown Notes + MOC Indexes  │
+         └─────────────────────┘ └──────────────────────┘ └────────────────────────────────┘
 ```
 
 ---
 
-## 📥 Quick Start
+## ⚡ Tech Stack
+
+| Component | Technologies |
+| :--- | :--- |
+| **Backend API** | FastAPI, Uvicorn, Python 3.10+, Pydantic v2 |
+| **Task Orchestration** | Celery 5.x, Redis 7.x, Celery Beat |
+| **Graph Database** | Neo4j 5.x Community (Bolt `:7687`, Browser `:7474`) |
+| **Vector Database** | ChromaDB (Local Persistent Vector Index) |
+| **AI Models** | Google Gemini 2.5 Flash Lite (Primary), Gemini 2.5 Flash (Fallback), Faster-Whisper |
+| **Web Frontend** | React 19, Vite, Lucide Icons, HTML5 Canvas 2D Graph |
+| **Mobile App** | Flutter (Dart), WorkManager, HomeWidget, Cupertino |
+| **Desktop Daemon** | Python `watchdog`, `pypdf`, `requests` |
+| **Infrastructure** | Docker Compose (`cortex-redis`, `cortex-neo4j`), Ngrok Tunnel |
+
+---
+
+## 🚀 Quick Start Guide
 
 ### Prerequisites
-- **Python 3.10+** (with virtual environment recommended)
+- **Python 3.10+**
 - **Node.js 18+** & **npm**
-- **FFmpeg** (installed and added to system `PATH` for media processing)
-- **Docker Desktop** (optional, for Redis container orchestration)
-- **Flutter SDK** (optional, for building the mobile/desktop client)
+- **Docker Desktop** (for Redis & Neo4j orchestration)
+- **FFmpeg** (installed and added to system `PATH` for media transcription)
 
 ---
 
-### Step 1: Clone & Configure Environment
+### Step 1: Clone Repository & Setup Environment
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/SharlEclair/Second-Brain.git
-   cd Second-Brain
-   ```
-
-2. Create your `.env` file from the provided template:
-   ```bash
-   cp .env.example .env
-   ```
-
-3. Open `.env` and fill in your keys:
-   ```ini
-   # Required: Get from https://aistudio.google.com/app/apikey
-   GEMINI_API_KEY="your_google_gemini_api_key"
-
-   # Vault Storage Paths
-   OBSIDIAN_INBOX_PATH="C:/Path/To/Your/Obsidian/Vault/Inbox"
-   PROJECT_VAULT_PATH="./vault"
-
-   # Celery Redis Broker URL
-   REDIS_URL="redis://localhost:6379/0"
-
-   # Ngrok Authtoken (for remote tunnel access)
-   NGROK_AUTHTOKEN="your_ngrok_authtoken_here"
-   ```
-
----
-
-### Step 2: Install Dependencies
-
-**Backend Python Packages:**
 ```bash
+# Clone repository
+git clone https://github.com/SharlEclair/Second-Brain.git
+cd Second-Brain
+
+# Create virtual environment
 python -m venv venv
 .\venv\Scripts\activate      # Windows
-# source venv/bin/activate   # macOS / Linux
-pip install -r requirements.txt
-```
+source venv/bin/activate       # macOS / Linux
 
-**Frontend Node Packages:**
-```bash
+# Install dependencies
+pip install -r requirements.txt
 npm install
 ```
 
 ---
 
-### Step 3: Run the Complete Stack
+### Step 2: Configure Environment Variables
 
-Launch all services with the unified service orchestrator:
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your API keys:
+```ini
+# Required: Google AI Studio Gemini API Key
+GEMINI_API_KEY="your_gemini_api_key_here"
+
+# Vault Paths
+PROJECT_VAULT_PATH="./vault"
+OBSIDIAN_INBOX_PATH="C:/Path/To/Your/Obsidian/Vault/Inbox"
+
+# Infrastructure URLs
+REDIS_URL="redis://localhost:6379/0"
+NEO4J_URI="bolt://localhost:7687"
+NEO4J_USER="neo4j"
+NEO4J_PASSWORD="cortexpassword123"
+
+# Optional: Ngrok Authtoken for mobile access
+NGROK_AUTHTOKEN="your_ngrok_token_here"
+```
+
+---
+
+### Step 3: Run Full Stack Orchestrator
+
+Start all services simultaneously with the unified runner:
 ```bash
 python run_services.py
 ```
 
-This single command starts:
-1. **Redis**: Starts or initializes the Docker container on port `6379`.
-2. **Backend**: FastAPI REST API server on `http://127.0.0.1:8000`.
-3. **Frontend**: Vite React web dashboard on `http://localhost:5173`.
-4. **Celery Worker**: Background ingestion task processor.
-5. **Celery Beat**: Periodic cron scheduler for weekly briefs and maintenance.
-6. **Ngrok Tunnel**: Secure public HTTPS endpoint for remote capture.
+`run_services.py` automatically:
+1. Boots **Redis** and **Neo4j** containers via `docker compose up -d`.
+2. Starts the **FastAPI Backend** on `http://localhost:8000`.
+3. Starts the **Vite React Frontend** on `http://localhost:5173`.
+4. Starts the **Celery Worker** and **Celery Beat** scheduler.
+5. Launches the **Ngrok Secure Tunnel** for remote access.
 
 ---
 
-## 📱 Cross-Platform Client (Flutter)
+### Step 4: Run Desktop Dropzone Daemon (Optional)
 
-The `flutter_client/` directory contains the multi-platform client:
-
+In a separate terminal, launch the folder watcher:
 ```bash
-cd flutter_client
-flutter pub get
-
-# Run on your preferred connected target:
-flutter run -d chrome     # Web
-flutter run -d windows    # Windows Desktop
-flutter run -d android    # Android Device
-flutter run -d macos      # macOS Desktop
-flutter run -d ios        # iOS Simulator / Device
+python scripts/desktop_dropzone.py
 ```
-
-In the app settings, set your **Backend URL** to your local network address (`http://192.168.x.x:8000`) or your public Ngrok tunnel URL.
+- Drag and drop any **PDF**, **Markdown**, **Text**, **Image**, or **Audio** file into `~/Desktop/CortexDrop`.
+- The daemon automatically uploads the file to `POST /api/ingest/file` and moves it to `~/Desktop/CortexDrop/Processed/`.
 
 ---
 
-## 📂 Repository Structure
+## 🧪 Testing
 
-```text
-├── main.py                  # Lightweight FastAPI bootstrap (~87 lines)
-├── run_services.py          # Unified multi-service orchestrator
-├── api/
-│   ├── models.py            # Centralized Pydantic request & response models
-│   ├── celery_app.py        # Celery broker & task configuration
-│   ├── tasks.py             # Asynchronous worker task definitions
-│   ├── routes/              # Modular APIRouter controllers
-│   │   ├── system.py        # Health, status, config, sync, logs
-│   │   ├── ingest.py        # URL, File upload, and Text ingestion
-│   │   ├── note_actions.py  # Summarize, Deep dive, Extract tasks, Review, Create
-│   │   ├── chat.py          # RAG chat endpoint & session management
-│   │   ├── journal.py       # Daily journal append & event extraction
-│   │   ├── discovery.py     # Weekly brief, upcoming events, serendipity, graph
-│   │   ├── vault.py         # Tags, audit, compile, synthesis, backlinks
-│   │   ├── integrations.py  # Analytics, Todoist task sync, device tokens
-│   │   ├── auth.py          # Google OAuth authentication flow
-│   │   ├── notes.py         # Vault note CRUD & location tagging
-│   │   └── geofence.py      # Geofencing & proximity queries
-│   └── services/            # Business logic services
-│       ├── ingestion.py     # Multi-modal media processing & duplicate hashing
-│       └── vault.py         # Index generation, config persistence, task parser
-├── core/
-│   ├── config.py            # Centralized settings & model fallback chains
-│   ├── db.py                # Lazy singleton ChromaDB vector database client
-│   ├── processors.py        # yt-dlp, Faster-Whisper, Gemini AI engines
-│   ├── state.py             # In-memory / Redis task operation state manager
-│   ├── utils.py             # Chunking, text cleaning, temp file lifecycle
-│   ├── serendipity.py       # Random note surfacing algorithms
-│   ├── synthesis_loop.py    # Automated weekly topic clustering & synthesis
-│   └── retroactive_backlink.py # Wiki backlink scanning & injection
-├── src/                     # React 19 Web Dashboard
-│   ├── hooks/               # Custom domain state hooks (useNotes, useChat, useIngest)
-│   ├── services/            # Pure typed API clients (notesApi, ingestApi, chatApi)
-│   ├── components/layout/   # Layout components (VaultSidebar, NoteViewer, ChatPanel)
-│   └── types/               # TypeScript interface contracts
-└── flutter_client/          # Cross-platform Flutter capture application
+Execute the comprehensive automated test suite:
+```bash
+python -m pytest api/tests/ -v
 ```
+
+**Test Suite Coverage (25 Unit Tests):**
+- Ingestion API & Queuing (`test_routes.py`, `test_dropzone_and_file_ingest.py`)
+- Nightly Synthesizer & Footers (`test_synthesis.py`)
+- Tag Clustering & Maps of Content (`test_taxonomy.py`)
+- Knowledge Graph Extraction, Neo4j Upsertion & Hybrid Chat (`test_graph_rag.py`)
+
+---
+
+## 📁 Repository Structure
+
+```
+Second-Brain/
+├── api/
+│   ├── routes/             # FastAPI modular endpoints (chat, ingest, notes, system)
+│   ├── services/           # Business logic (chat, ingestion, vault)
+│   ├── tests/              # Pytest unit & integration test suites
+│   ├── celery_app.py       # Celery configuration & beat schedule
+│   └── tasks.py            # Celery background tasks
+├── core/
+│   ├── config.py           # Centralized configuration & environment loader
+│   ├── db.py               # ChromaDB singleton
+│   ├── graph_db.py         # Neo4j driver singleton & schema constraints
+│   ├── graph_rag.py        # Knowledge Graph extraction, upsert & traversal
+│   ├── processors.py       # Multi-modal media & file processors
+│   ├── synthesis.py        # Semantic footers & unlinked mentions engine
+│   ├── taxonomy.py         # Tag clustering & Maps of Content generator
+│   └── state.py            # Operations manager & task status tracker
+├── flutter_client/         # Cross-platform Flutter mobile/desktop app
+├── scripts/
+│   └── desktop_dropzone.py # Local folder watcher daemon
+├── src/                    # React 19 + Vite Web application
+├── docker-compose.yml      # Redis & Neo4j orchestration
+├── run_services.py         # Unified multi-service runner
+└── requirements.txt        # Python backend dependencies
+```
+
+---
+
+## 📜 License
+MIT License. Built with ❤️ for intelligent personal knowledge management.

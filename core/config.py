@@ -10,6 +10,12 @@ URL_INDEX_FILE = "url_index.json"
 TAGS_FILE = "tags.txt"
 PROJECT_VAULT_PATH = os.getenv("PROJECT_VAULT_PATH") or "vault"
 
+# Neo4j Graph Database Configuration
+NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "cortexpassword123")
+
+
 # AI Configuration
 AI_MODEL_PRIMARY = "models/gemini-2.5-flash-lite"
 AI_MODEL_FALLBACK = "models/gemini-2.5-flash"

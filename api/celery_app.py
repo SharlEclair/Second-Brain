@@ -38,5 +38,15 @@ celery_app.conf.beat_schedule = {
         "task": "api.tasks.retroactive_backlink_task",
         "schedule": crontab(hour=2, minute=0, day_of_week=0),  # Sunday at 02:00
     },
+    "nightly-vault-synthesis": {
+        "task": "api.tasks.nightly_vault_synthesis_task",
+        "schedule": crontab(hour=2, minute=0),  # Daily at 02:00 AM
+    },
+    "nightly-taxonomy-sync": {
+        "task": "api.tasks.nightly_taxonomy_task",
+        "schedule": crontab(hour=2, minute=30),  # Daily at 02:30 AM
+    },
 }
+
+
 

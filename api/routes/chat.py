@@ -38,56 +38,20 @@ async def chat(request: AskRequest):
         chat_history_db = load_chat_history()
         session_history = chat_history_db.get(session_id, [])
 
-        # Build context from previous messages (up to 5 recent)
-        history_context = ""
-        if session_history:
-            history_context = "Previous conversation:\n"
-            for msg in session_history[-5:]:
-                history_context += f"User: {msg['query']}\nAI: {msg['response']}\n"
-            history_context += "\n"
-
-        note_context_text = ""
-        if request.note_context:
-            paths = [
-                os.path.join(OBSIDIAN_INBOX_PATH, request.note_context),
-                os.path.join(PROJECT_VAULT_PATH, request.note_context),
-            ]
-            for p in paths:
-                if os.path.exists(p):
-                    try:
-                        with open(p, "r", encoding="utf-8") as f:
-                            note_content = f.read()
-                            note_context_text = (
-                                f"Context from active note ({request.note_context}):\n"
-                                f"{note_content}\n\n"
-                            )
-                    except Exception:
-                        pass
-                    break
-
-        results = get_vault_collection().query(query_texts=[request.message], n_results=5)
-        ctx = (
-            "\n".join(results['documents'][0])
-            if results['documents'] and results['documents'][0]
-            else ""
-        )
-
-        prompt = (
-            f"Answer based on these notes:\n\n{note_context_text}{ctx}\n\n"
-            f"{history_context}Question: {request.message}\n\n"
-            "IMPORTANT INSTRUCTION: When referencing important concepts, people, or topics in your answer, "
-            "wrap them in Obsidian-style wiki links like [[Concept Name]]."
-        )
-        response, model_used = generate_content_with_fallback(
-            prompt, purpose="rag_chat"
+        from api.services.chat import run_hybrid_chat
+        result = run_hybrid_chat(
+            message=request.message,
+            session_id=session_id,
+            note_context_file=request.note_context,
+            history=session_history,
         )
 
         # Save to history
         chat_entry = {
             "timestamp": datetime.datetime.now().isoformat(),
             "query": request.message,
-            "response": response.text,
-            "model_used": model_used,
+            "response": result["response"],
+            "model_used": result["model"],
         }
         if session_id not in chat_history_db:
             chat_history_db[session_id] = []
@@ -95,9 +59,9 @@ async def chat(request: AskRequest):
         save_chat_history(chat_history_db)
 
         return {
-            "response": response.text,
-            "model": model_used,
-            "session_id": session_id,
+            "response": result["response"],
+            "model": result["model"],
+            "session_id": result["session_id"],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

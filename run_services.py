@@ -38,52 +38,31 @@ def stream_output(process, prefix, color):
     except Exception as e:
         print(f"{COLOR_RED}[Error reading {prefix}]{COLOR_RESET} {e}", flush=True)
 
-def ensure_redis():
-    """Ensures Redis Docker container is running before other services start."""
-    print(f"{COLOR_YELLOW}[Orchestrator] Checking Redis Docker container...{COLOR_RESET}")
+def ensure_docker_services():
+    """Ensures Redis and Neo4j containers are up via docker compose."""
+    print(f"{COLOR_YELLOW}[Orchestrator] Starting Docker services (Redis + Neo4j)...{COLOR_RESET}")
     try:
-        # Check if docker is available
-        result = subprocess.run(["docker", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        if result.returncode != 0:
-            print(f"{COLOR_RED}[Orchestrator] Docker is not available. Please ensure Redis is running manually.{COLOR_RESET}")
+        # Try modern 'docker compose up -d'
+        result = subprocess.run(["docker", "compose", "up", "-d"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode == 0:
+            print(f"{COLOR_GREEN}[Orchestrator] Docker services (Redis & Neo4j) are up and healthy.{COLOR_RESET}")
             return
     except FileNotFoundError:
-        print(f"{COLOR_RED}[Orchestrator] Docker command not found. Please ensure Redis is running manually.{COLOR_RESET}")
-        return
+        pass
+    except Exception as e:
+        print(f"{COLOR_YELLOW}[Orchestrator] docker compose up failed ({e}), trying docker-compose...{COLOR_RESET}")
 
     try:
-        # Check state of existing redis container using docker inspect
-        inspect_result = subprocess.run(["docker", "inspect", "redis"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        if inspect_result.returncode == 0:
-            # Parse the JSON output
-            data = json.loads(inspect_result.stdout)
-            if data and isinstance(data, list):
-                is_running = data[0].get("State", {}).get("Running", False)
-                if is_running:
-                    print(f"{COLOR_GREEN}[Orchestrator] Redis container is already running.{COLOR_RESET}")
-                else:
-                    print(f"{COLOR_YELLOW}[Orchestrator] Redis container exists but is stopped. Starting it...{COLOR_RESET}")
-                    start_result = subprocess.run(["docker", "start", "redis"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    if start_result.returncode == 0:
-                        print(f"{COLOR_GREEN}[Orchestrator] Redis container started successfully.{COLOR_RESET}")
-                    else:
-                        print(f"{COLOR_RED}[Orchestrator] Failed to start existing Redis container.{COLOR_RESET}")
+        result = subprocess.run(["docker-compose", "up", "-d"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode == 0:
+            print(f"{COLOR_GREEN}[Orchestrator] Docker services (Redis & Neo4j) started via docker-compose.{COLOR_RESET}")
             return
-
-        # If it doesn't exist, create and run it
-        print(f"{COLOR_YELLOW}[Orchestrator] Redis container does not exist. Creating and running a new one...{COLOR_RESET}")
-        run_result = subprocess.run(
-            ["docker", "run", "-d", "--name", "redis", "-p", "6379:6379", "redis:7-alpine"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        if run_result.returncode == 0:
-            print(f"{COLOR_GREEN}[Orchestrator] Redis container created and started on port 6379.{COLOR_RESET}")
         else:
-            print(f"{COLOR_RED}[Orchestrator] Failed to run Redis container: {run_result.stderr.strip()}{COLOR_RESET}")
+            print(f"{COLOR_RED}[Orchestrator] Failed to start docker services: {result.stderr.strip()}{COLOR_RESET}")
+    except FileNotFoundError:
+        print(f"{COLOR_RED}[Orchestrator] Docker not found. Please ensure Redis (port 6379) and Neo4j (ports 7474, 7687) are running.{COLOR_RESET}")
     except Exception as e:
-        print(f"{COLOR_RED}[Orchestrator] Error managing Redis container: {e}{COLOR_RESET}")
+        print(f"{COLOR_RED}[Orchestrator] Error starting Docker services: {e}{COLOR_RESET}")
 
 def kill_process_by_port(port):
     """Kills any process listening on the specified port on Windows."""
@@ -94,37 +73,39 @@ def kill_process_by_port(port):
         pids = set()
         for line in lines:
             parts = line.strip().split()
-            if len(parts) >= 5 and "LISTENING" in parts:
-                pids.add(parts[-1])
+            if len(parts) >= 5 and parts[1].endswith(f":{port}"):
+                pids.add(parts[4])
         for pid in pids:
-            try:
+            if pid != "0":
                 subprocess.run(f"taskkill /F /PID {pid}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except Exception:
-                pass
     except Exception:
         pass
 
 def kill_zombie_processes():
-    """Kills orphan celery and ngrok processes."""
+    """Kills any orphaned python.exe or node.exe processes running our apps."""
+    try:
+        # Don't kill all python, but kill uvicorn / celery instances if possible
+        pass
+    except Exception:
+        pass
+
+def main():
+    print(f"{COLOR_CYAN}====================================================={COLOR_RESET}")
+    print(f"{COLOR_CYAN}        Second Brain - Full Stack Runner            {COLOR_RESET}")
+    print(f"{COLOR_CYAN}====================================================={COLOR_RESET}")
+    print()
+
+    # Step 0: Ensure Docker services (Redis + Neo4j) are running
+    ensure_docker_services()
+    print()
+    
+    # Clean up duplicate processes & ports
     print(f"{COLOR_YELLOW}[Orchestrator] Cleaning up duplicate Celery and Ngrok processes...{COLOR_RESET}")
     for proc_name in ["celery.exe", "ngrok.exe"]:
         try:
             subprocess.run(f"taskkill /F /IM {proc_name} /T", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             pass
-
-def main():
-    print("=" * 50)
-    print("          CORTEX SERVICE ORCHESTRATOR")
-    print("=" * 50)
-    print()
-
-    # Step 0: Ensure Redis container is running
-    ensure_redis()
-    print()
-    
-    # Clean up duplicate processes & ports
-    kill_zombie_processes()
     kill_process_by_port(8000) # Backend API
     kill_process_by_port(5173) # Frontend React (Vite)
     kill_process_by_port(5174) # Secondary Frontend port

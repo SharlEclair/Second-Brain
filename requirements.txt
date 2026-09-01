@@ -19,3 +19,6 @@ google-auth-oauthlib
 googlemaps
 celery
 redis
+neo4j
+watchdog
+pypdf

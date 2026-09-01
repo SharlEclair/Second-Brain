@@ -1008,3 +1008,230 @@ async def process_uploaded_image(filepath: str, original_filename: str, task_id:
     except Exception:
         raise
 
+
+def _sync_extract_pdf_pypdf(filepath: str) -> dict:
+    """Extracts text content and metadata from a PDF using pypdf (with pymupdf fallback)."""
+    text = ""
+    title = os.path.basename(filepath)
+    author = "Local PDF Document"
+
+    try:
+        import pypdf
+        reader = pypdf.PdfReader(filepath)
+        for page in reader.pages:
+            t = page.extract_text()
+            if t:
+                text += t + "\n"
+        if reader.metadata:
+            if reader.metadata.title:
+                title = str(reader.metadata.title)
+            if reader.metadata.author:
+                author = str(reader.metadata.author)
+    except Exception as e:
+        print(f"[PDF Extractor] pypdf extraction warning: {e}, attempting pymupdf fallback...")
+        try:
+            import fitz
+            doc = fitz.open(filepath)
+            for page in doc:
+                text += page.get_text() + "\n"
+            if doc.metadata:
+                if doc.metadata.get("title"):
+                    title = doc.metadata.get("title")
+                if doc.metadata.get("author"):
+                    author = doc.metadata.get("author")
+        except Exception as e2:
+            print(f"[PDF Extractor] pymupdf fallback failed: {e2}")
+
+    return {
+        "text": text.strip(),
+        "title": title,
+        "author": author,
+    }
+
+
+async def process_local_file(file_path: str, filename: str, task_id: str = None, status_callback=None) -> dict:
+    """
+    Processes a local file (PDF, TXT, MD, Image, Audio) dragged into the dropzone
+    or uploaded via API:
+    1. Extracts text / visual content based on extension.
+    2. Runs Gemini AI analysis (summary, tags, category).
+    3. Saves structured note to PROJECT_VAULT_PATH and OBSIDIAN_INBOX_PATH.
+    4. Indexes into ChromaDB vector database.
+    5. Extracts and upserts knowledge graph triples into Neo4j.
+    6. Updates AI Librarian hierarchical indexes.
+    """
+    import datetime
+    from .config import PROJECT_VAULT_PATH, OBSIDIAN_INBOX_PATH, AI_MODEL
+    from .utils import chunk_text
+    from .db import get_vault_collection
+
+    async def _update_status(msg: str, progress: int = None):
+        if status_callback:
+            if asyncio.iscoroutinefunction(status_callback):
+                await status_callback(msg)
+            else:
+                status_callback(msg)
+        if task_id and progress is not None:
+            ops_manager.update_task(task_id, msg, progress=progress)
+
+    filename_lower = filename.lower()
+    IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+    AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".ogg", ".aac")
+    TEXT_EXTS = (".txt", ".md")
+
+    await _update_status("Reading file content", progress=20)
+
+    # 1. Content Extraction
+    if filename_lower.endswith(".pdf"):
+        pdf_data = await asyncio.to_thread(_sync_extract_pdf_pypdf, file_path)
+        raw_text = pdf_data["text"]
+        title = pdf_data["title"] or filename
+        author = pdf_data["author"]
+        doc_type = "pdf-document"
+        processor_name = "pypdf"
+    elif any(filename_lower.endswith(ext) for ext in IMAGE_EXTS):
+        await _update_status("Analyzing image with Gemini Vision", progress=50)
+        ai_data = await asyncio.to_thread(_sync_analyze_images, [file_path], filename)
+        raw_text = ""
+        title = filename
+        author = "Local Image Drop"
+        doc_type = "image-document"
+        processor_name = "gemini-vision"
+    elif any(filename_lower.endswith(ext) for ext in AUDIO_EXTS):
+        await _update_status("Transcribing audio", progress=40)
+        raw_text = await asyncio.to_thread(_sync_transcribe, file_path)
+        title = filename
+        author = "Local Audio Drop"
+        doc_type = "audio-document"
+        processor_name = "whisper-transcriber"
+    else:  # .txt, .md or other text files
+        file_data = await asyncio.to_thread(_sync_extract_text_file_content, file_path)
+        raw_text = file_data["text"]
+        title = file_data["title"] or filename
+        author = "Local Document Drop"
+        doc_type = "text-document"
+        processor_name = "text-reader"
+
+    # 2. AI Content Analysis (if not already analyzed via image vision)
+    if doc_type != "image-document":
+        await _update_status("AI analyzing document content", progress=60)
+        ai_data = await asyncio.to_thread(_sync_analyze_text, raw_text or title, title)
+
+    content_hash = calculate_md5(file_path) if os.path.exists(file_path) else hashlib.md5(filename.encode('utf-8')).hexdigest()
+
+    # 3. Save to Vaults
+    await _update_status("Saving to vaults", progress=80)
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    raw_category = ai_data.get('category', 'Document')
+    safe_category = re.sub(r'[\/*?:"<>|]', "-", raw_category)
+    stem = os.path.splitext(filename)[0]
+    safe_stem = re.sub(r'[\/*?:"<>|]', "-", stem)
+
+    # Collision-free filename
+    candidate = f"{date_str} - {safe_category} ({safe_stem}).md"
+    counter = 2
+    while True:
+        p_path = os.path.join(PROJECT_VAULT_PATH, safe_category, candidate)
+        o_path = os.path.join(OBSIDIAN_INBOX_PATH, safe_category, candidate)
+        if os.path.exists(p_path) or os.path.exists(o_path):
+            candidate = f"{date_str} - {safe_category} ({safe_stem} {counter}).md"
+            counter += 1
+        else:
+            break
+    final_filename = candidate
+
+    project_cat_dir = os.path.join(PROJECT_VAULT_PATH, safe_category)
+    obsidian_cat_dir = os.path.join(OBSIDIAN_INBOX_PATH, safe_category)
+    os.makedirs(project_cat_dir, exist_ok=True)
+    os.makedirs(obsidian_cat_dir, exist_ok=True)
+
+    project_filepath = os.path.join(project_cat_dir, final_filename)
+    obsidian_filepath = os.path.join(obsidian_cat_dir, final_filename)
+
+    raw_transcript_sec = f"\n\n## Extracted Text / Transcript\n{raw_text}" if raw_text else ""
+    markdown_content = f"""---
+type: {doc_type}
+date: {date_str}
+author: {author}
+url: file://{filename}
+category: {raw_category}
+tags: {ai_data.get('tags', [])}
+content_hash: {content_hash}
+ai_model: {ai_data.get('_model_used', AI_MODEL)}
+processor: {processor_name}
+---
+# {raw_category} - {ai_data.get('title', safe_stem)}
+
+> **AI Summary:** {ai_data.get('summary', '')}
+
+## Extracted Content
+{ai_data.get('formatted_content', '')}{raw_transcript_sec}
+"""
+    with open(project_filepath, "w", encoding="utf-8") as f:
+        f.write(markdown_content)
+    with open(obsidian_filepath, "w", encoding="utf-8") as f:
+        f.write(markdown_content)
+
+    relative_filename = os.path.join(safe_category, final_filename).replace("\\", "/")
+    note_data = {
+        "title": final_filename.replace(".md", ""),
+        "fileName": relative_filename,
+        "date": datetime.datetime.now().isoformat(),
+        "url": f"file://{filename}",
+        "content_hash": content_hash,
+        "platform": "local",
+        "type": doc_type,
+        "ai_model": ai_data.get('_model_used', AI_MODEL),
+        "category": raw_category,
+    }
+
+    # 4. ChromaDB Vector Indexing
+    await _update_status("Updating vector index", progress=90)
+    index_text = "\n\n".join([ai_data.get('formatted_content', ''), raw_text or ''])
+    chunks = [chunk for chunk in chunk_text(index_text) if chunk.strip()]
+    if chunks:
+        try:
+            get_vault_collection().add(
+                documents=chunks,
+                metadatas=[
+                    {
+                        "filename": relative_filename,
+                        "url": f"file://{filename}",
+                        "content_hash": content_hash,
+                    }
+                    for _ in chunks
+                ],
+                ids=[
+                    f"{content_hash}_chunk_{i}"
+                    for i in range(len(chunks))
+                ],
+            )
+        except Exception as e:
+            print(f"[Local Ingestion] ChromaDB indexing warning: {e}")
+
+    # 5. Neo4j Knowledge Graph Upsert
+    try:
+        from core.graph_rag import extract_knowledge_graph, upsert_note_graph
+        kg_data = extract_knowledge_graph(index_text)
+        if kg_data.get("entities") or kg_data.get("relationships"):
+            upsert_note_graph(
+                note_title=note_data["title"],
+                entities=kg_data.get("entities", []),
+                relationships=kg_data.get("relationships", []),
+            )
+    except Exception as e:
+        print(f"[Local Ingestion] Neo4j graph upsert warning: {e}")
+
+    # 6. Update Hierarchical Indexes
+    try:
+        from api.services.vault import update_hierarchical_indexes
+        update_hierarchical_indexes()
+    except Exception as e:
+        print(f"[Local Ingestion] Index update warning: {e}")
+
+    if task_id:
+        ops_manager.end_task(task_id, "Completed", state="completed")
+
+    return {"status": "success", "task_id": task_id, "note": note_data}
+
+

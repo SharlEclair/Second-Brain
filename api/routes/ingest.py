@@ -104,8 +104,47 @@ async def ingest_url(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/api/ingest/file")
+async def ingest_file(file: UploadFile = File(...)):
+    """
+    Accepts raw file drops/uploads, saves to temporary storage,
+    enqueues an async ingestion Celery task (ingest_file_task),
+    and returns the task_id.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename missing")
+
+    temp_dir = os.path.join(os.getcwd(), "temp")
+    os.makedirs(temp_dir, exist_ok=True)
+
+    safe_filename = os.path.basename(file.filename)
+    temp_file_path = os.path.join(temp_dir, f"drop_{uuid.uuid4().hex}_{safe_filename}")
+
+    try:
+        with open(temp_file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save temp file: {e}")
+
+    task_id = f"task_{uuid.uuid4().hex[:8]}"
+    ops_manager.start_task(
+        task_id, file.filename, "Queued", platform="local", progress=0, state="queued"
+    )
+
+    from api.tasks import ingest_file_task
+    ingest_file_task.delay(temp_file_path, file.filename, task_id)
+
+    return {
+        "status": "queued",
+        "task_id": task_id,
+        "filename": file.filename,
+        "message": "File queued for background processing",
+    }
+
+
 @router.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
+
     filename_lower = file.filename.lower()
     IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
     AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".ogg", ".aac")
